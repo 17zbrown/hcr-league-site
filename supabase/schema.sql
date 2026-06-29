@@ -198,6 +198,15 @@ create index if not exists idx_laps_result           on laps(result_id);
 --  Everyone (anon) can READ the public site.
 --  Only signed-in admins (Supabase Auth) can WRITE.
 -- ----------------------------------------------------------------------------
+-- Admin allowlist: only these emails may write, even if signup is enabled.
+create table if not exists admin_emails ( email text primary key );
+alter table admin_emails enable row level security;
+drop policy if exists "admins read allowlist" on admin_emails;
+create policy "admins read allowlist" on admin_emails for select to authenticated using (true);
+grant select on admin_emails to authenticated;
+-- >>> add the email(s) of your admin(s) here:
+-- insert into admin_emails (email) values ('you@example.com') on conflict do nothing;
+
 do $$
 declare t text;
 begin
@@ -211,10 +220,9 @@ begin
     execute format('create policy "public read" on %I for select using (true);', t);
 
     execute format('drop policy if exists "admin write" on %I;', t);
-    execute format($f$create policy "admin write" on %I
-        for all to authenticated
-        using (auth.uid() is not null)
-        with check (auth.uid() is not null);$f$, t);
+    execute format($f$create policy "admin write" on %I for all to authenticated
+        using ((auth.jwt() ->> 'email') in (select email from admin_emails))
+        with check ((auth.jwt() ->> 'email') in (select email from admin_emails));$f$, t);
   end loop;
 end $$;
 
