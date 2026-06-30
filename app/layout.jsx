@@ -1,8 +1,23 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "HCR League",
-  description: "iRacing endurance league hub — schedule, standings, results and records.",
+  metadataBase: new URL("https://hcrleague.netlify.app"),
+  title: { default: "HCR League — iRacing Endurance Championship", template: "%s · HCR League" },
+  description: "The official hub for HCR League: schedule, live standings, race results, records, teams and drivers for our iRacing multi-class (GTP / LMP2 / GTD) endurance championship.",
+  applicationName: "HCR League",
+  keywords: ["HCR League", "iRacing", "endurance racing", "GTP", "LMP2", "GTD", "sim racing", "championship", "IMSA"],
+  openGraph: {
+    title: "HCR League — iRacing Endurance Championship",
+    description: "Schedule, live standings, results and records for the HCR League endurance championship.",
+    url: "/",
+    siteName: "HCR League",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "HCR League — iRacing Endurance Championship",
+    description: "Schedule, standings, results and records for the HCR League endurance championship.",
+  },
 };
 
 export const viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#0B0E14" };

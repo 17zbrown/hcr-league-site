@@ -177,7 +177,7 @@ async function loadAdminData(sb, seasonId) {
     timeMult: ev.time_mult ?? 1, pointsMult: ev.points_mult ?? 1, minDrivers: ev.min_drivers ?? "",
     maxDrivers: ev.max_drivers ?? "", notes: ev.notes || "",
     sessions: (sBy[ev.id] || []).map((s) => ({ id: s.id, type: s.type || "", start: s.start || "", durMin: s.dur_min ?? "", sort: s.sort ?? 0 })),
-    weather: (wBy[ev.id] || []).map((w) => ({ id: w.id, atHour: w.at_hour ?? "", air: w.air_f ?? "", sky: w.sky || "", precip: w.precip ?? "", wind: w.wind_mph ?? "", humidity: w.humidity ?? "", sort: w.sort ?? 0 })),
+    weather: (wBy[ev.id] || []).map((w) => ({ id: w.id, atHour: w.at_hour ?? "", air: w.air_f ?? "", clouds: w.clouds ?? "", sky: w.sky || "", precip: w.precip ?? "", wind: w.wind_mph ?? "", humidity: w.humidity ?? "", sort: w.sort ?? 0 })),
     results: (rBy[ev.id] || []).map((r) => {
       const t = teamOf(r);
       return { id: r.id, team_id: r.team_id, cls: r.class_id || (t && t.class_id) || "", num: r.number ?? (t ? t.number : ""), drivers: (t && teamDriverNames(t.id)) || r.drivers_text || "", car: (t && t.car) || "", pos: r.pos ?? "", clsPos: r.cls_pos ?? "", grid: r.grid ?? "", laps: r.laps ?? "", best: r.best_lap || "", inc: r.inc ?? "", status: r.status || "", points: r.points ?? "", adjust: r.adjust ?? "", qpos: r.quali_pos ?? "", qpts: Number(r.quali_points) || 0 };
@@ -204,61 +204,6 @@ async function loadAdminData(sb, seasonId) {
     classes, teams, tracks, drivers, driverRows,
     events: shapedEvents,
   };
-}
-
-/* ------------------------------ PDF import ------------------------------- */
-function ImportDrop({ supabase, eventId, seasonId, autoAdd, onDone }) {
-  const [stage, setStage] = useState("idle"); // idle | parsing | done | err
-  const [over, setOver] = useState(false);
-  const [msg, setMsg] = useState("");
-  const inputRef = useRef(null);
-
-  const handleFile = async (file) => {
-    if (!file) return;
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) { setStage("err"); setMsg("That doesn't look like a PDF."); return; }
-    if (file.size > 8 * 1024 * 1024) { setStage("err"); setMsg("That PDF is over 8 MB — export a smaller sheet."); return; }
-    setStage("parsing"); setMsg("");
-    try {
-      const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = () => rej(new Error("read failed")); r.readAsDataURL(file); });
-      const { data: sess } = await supabase.auth.getSession();
-      const token = sess?.session?.access_token;
-      const resp = await fetch("/api/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pdf: b64, eventId, seasonId, token, autoAddDrivers: autoAdd }) });
-      const out = await resp.json();
-      if (!resp.ok || out.error) { setStage("err"); setMsg(out.error || "Import failed."); return; }
-      const bits = [];
-      if (out.inserted) bits.push(out.inserted + " added");
-      if (out.updated) bits.push(out.updated + " updated");
-      if (out.createdDrivers) bits.push(out.createdDrivers + " new driver" + (out.createdDrivers === 1 ? "" : "s"));
-      if (out.noCar) bits.push(out.noCar + " unmatched");
-      setStage("done"); setMsg("Imported " + out.total + " cars" + (bits.length ? " · " + bits.join(", ") : "") + ".");
-      if (onDone) onDone();
-    } catch (e) { setStage("err"); setMsg("Import failed: " + (e?.message || String(e))); }
-  };
-
-  return (
-    <div className="aes-edit-sub">
-      <div className="aes-edit-sub-head"><b>Import results from PDF</b>
-        {(stage === "done" || stage === "err") && <button className="aes-btn ghost xs" onClick={() => { setStage("idle"); setMsg(""); }}><Upload size={12} /> Again</button>}
-      </div>
-      {stage === "parsing" ? (
-        <div className="aes-drop"><Loader2 size={24} className="aes-spin" /><div className="aes-drop-title">Deciphering results…</div><div className="aes-drop-sub">Reading the classification and assigning points</div></div>
-      ) : stage === "done" ? (
-        <div className="aes-import-done"><CheckCircle2 size={15} /> {msg} Standings updated.</div>
-      ) : (
-        <>
-          <div className={"aes-drop" + (over ? " over" : "")} onClick={() => inputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
-            onDrop={(e) => { e.preventDefault(); setOver(false); handleFile(e.dataTransfer.files?.[0]); }}>
-            <FileText size={26} />
-            <div className="aes-drop-title">Drop the race-control results PDF here</div>
-            <div className="aes-drop-sub">or click to choose — I read the classification, match each car, and assign points</div>
-            <input ref={inputRef} type="file" accept="application/pdf" hidden onChange={(e) => handleFile(e.target.files?.[0])} />
-          </div>
-          {stage === "err" && <div className="aes-import-err"><AlertTriangle size={14} /> {msg}</div>}
-        </>
-      )}
-    </div>
-  );
 }
 
 /* ---------------------------- results editor ----------------------------- */
@@ -350,7 +295,7 @@ function ResultsBlock({ supabase, d, ev, reload }) {
 }
 
 /* ------------------------------ event card ------------------------------- */
-function EventCard({ supabase, d, ev, reload, autoAdd }) {
+function EventCard({ supabase, d, ev, reload }) {
   const [open, setOpen] = useState(false);
   const patchEvent = async (patch) => { await supabase.from("events").update(patch).eq("id", ev.id); reload(); };
   const setField = async (col, val) => { await supabase.from("events").update({ [col]: val }).eq("id", ev.id); };
@@ -358,7 +303,7 @@ function EventCard({ supabase, d, ev, reload, autoAdd }) {
   const addSession = async () => { await supabase.from("sessions").insert({ event_id: ev.id, type: "Practice", dur_min: 60, sort: ev.sessions.length }); reload(); };
   const delSession = async (s) => { await supabase.from("sessions").delete().eq("id", s.id); reload(); };
   const setSession = async (s, patch) => { await supabase.from("sessions").update(patch).eq("id", s.id); };
-  const addWx = async () => { await supabase.from("weather").insert({ event_id: ev.id, at_hour: 0, air_f: 68, sky: "Clear", precip: 0, wind_mph: 6, humidity: 55, sort: ev.weather.length }); reload(); };
+  const addWx = async () => { await supabase.from("weather").insert({ event_id: ev.id, at_hour: 0, air_f: 68, clouds: 20, precip: 0, sort: ev.weather.length }); reload(); };
   const delWx = async (w) => { await supabase.from("weather").delete().eq("id", w.id); reload(); };
   const setWx = async (w, patch) => { await supabase.from("weather").update(patch).eq("id", w.id); };
   const num = (v) => (v === "" ? null : Number(v));
@@ -421,23 +366,18 @@ function EventCard({ supabase, d, ev, reload, autoAdd }) {
 
           <div className="aes-edit-sub">
             <div className="aes-edit-sub-head"><b>Weather points</b><button className="aes-btn ghost xs" onClick={addWx}><Plus size={12} /> Add</button></div>
-            <div className="aes-wx-edit-head"><span>Race hour</span><span>Air °F</span><span>Sky</span><span>Rain %</span><span>Wind</span><span>Humidity</span><span /></div>
+            <div className="aes-wx-edit-head"><span>Race hour</span><span>Air °F</span><span>Cloud %</span><span>Rain %</span><span /></div>
             {ev.weather.map((w) => (
               <div key={w.id} className="aes-edit-wrow">
                 <NumInput defaultValue={w.atHour} onBlur={(e) => setWx(w, { at_hour: num(e.target.value) })} />
                 <NumInput defaultValue={w.air} onBlur={(e) => setWx(w, { air_f: num(e.target.value) })} />
-                <select className="aes-input" defaultValue={w.sky} onChange={(e) => setWx(w, { sky: e.target.value })}>
-                  <option>Clear</option><option>Partly Cloudy</option><option>Cloudy</option><option>Light Rain</option><option>Rain</option>
-                </select>
+                <NumInput defaultValue={w.clouds} onBlur={(e) => setWx(w, { clouds: num(e.target.value) })} />
                 <NumInput defaultValue={w.precip} onBlur={(e) => setWx(w, { precip: num(e.target.value) })} />
-                <NumInput defaultValue={w.wind} onBlur={(e) => setWx(w, { wind_mph: num(e.target.value) })} />
-                <NumInput defaultValue={w.humidity} onBlur={(e) => setWx(w, { humidity: num(e.target.value) })} />
                 <button className="aes-icon-btn danger" onClick={() => delWx(w)}><Trash2 size={14} /></button>
               </div>
             ))}
           </div>
 
-          <ImportDrop supabase={supabase} eventId={ev.id} seasonId={d.seasonId} autoAdd={autoAdd} onDone={reload} />
           <ResultsBlock supabase={supabase} d={d} ev={ev} reload={reload} />
         </div>
       )}
@@ -597,7 +537,6 @@ function Shell({ supabase, session }) {
   const [editSeason, setEditSeason] = useState("");
   const [d, setD] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [autoAdd, setAutoAdd] = useState(true);
 
   const reload = useCallback(async () => {
     const next = await loadAdminData(supabase, editSeason || undefined);
@@ -637,10 +576,9 @@ function Shell({ supabase, session }) {
           <>
             <div className="aes-admin-addbar">
               <button className="aes-btn primary sm" onClick={addEvent}><Plus size={14} /> Add event</button>
-              <label className="aes-mini-check"><input type="checkbox" checked={autoAdd} onChange={(e) => setAutoAdd(e.target.checked)} /> auto-add new drivers on PDF import</label>
             </div>
             {d.events.length === 0 && <div className="aes-empty">No rounds yet. Click “Add event”, open it, and pick a track.</div>}
-            {d.events.map((ev) => <EventCard key={ev.id} supabase={supabase} d={d} ev={ev} reload={reload} autoAdd={autoAdd} />)}
+            {d.events.map((ev) => <EventCard key={ev.id} supabase={supabase} d={d} ev={ev} reload={reload} />)}
           </>
         )}
         {tab === "drivers" && <DriversTab supabase={supabase} d={d} reload={reload} />}
@@ -761,8 +699,8 @@ textarea.aes-input{ resize:vertical; font-family:var(--body); }
 .aes-edit-sub{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:13px; }
 .aes-edit-sub-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:11px; font-size:13px; }
 .aes-edit-srow{ display:grid; grid-template-columns:130px 1fr 90px 36px; gap:8px; margin-bottom:8px; align-items:center; }
-.aes-edit-wrow{ display:grid; grid-template-columns:repeat(2,1fr) 1.5fr repeat(3,1fr) 36px; gap:6px; margin-bottom:7px; align-items:center; }
-.aes-wx-edit-head{ display:grid; grid-template-columns:repeat(2,1fr) 1.5fr repeat(3,1fr) 36px; gap:6px; font-size:11px; color:var(--mist); font-weight:600; margin-bottom:7px; padding:0 2px; }
+.aes-edit-wrow{ display:grid; grid-template-columns:repeat(4,1fr) 36px; gap:6px; margin-bottom:7px; align-items:center; }
+.aes-wx-edit-head{ display:grid; grid-template-columns:repeat(4,1fr) 36px; gap:6px; font-size:11px; color:var(--mist); font-weight:600; margin-bottom:7px; padding:0 2px; }
 .aes-chip{ font-family:var(--mono); font-size:10px; letter-spacing:.05em; padding:3px 8px; border-radius:5px; border:1px solid var(--line); color:var(--mist); }
 .aes-chip.complete{ color:var(--green); border-color:var(--green); } .aes-chip.next{ color:var(--signal); border-color:var(--signal); }
 

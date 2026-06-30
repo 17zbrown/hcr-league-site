@@ -362,20 +362,34 @@ function DayNightBar({ ev, compact }) {
 }
 
 /* ============================== Weather strip ============================= */
+function skyToClouds(sky) { return ({ "Clear": 5, "Partly Cloudy": 35, "Cloudy": 70, "Light Rain": 85, "Rain": 95 })[sky]; }
+function skyMeta(w) {
+  let clouds = (w.clouds != null && w.clouds !== "") ? Number(w.clouds) : skyToClouds(w.sky);
+  if (clouds == null || isNaN(clouds)) clouds = 20;
+  const precip = Number(w.precip) || 0;
+  let label, Icon;
+  if (precip >= 60) { label = "Rain"; Icon = CloudRain; }
+  else if (precip >= 35) { label = "Light Rain"; Icon = CloudRain; }
+  else if (clouds >= 85) { label = "Overcast"; Icon = Cloud; }
+  else if (clouds >= 50) { label = "Cloudy"; Icon = Cloud; }
+  else if (clouds >= 15) { label = "Partly Cloudy"; Icon = CloudSun; }
+  else { label = "Clear"; Icon = Sun; }
+  return { clouds, label, Icon };
+}
 function WeatherCell({ w }) {
-  const Icon = SKY_ICON[w.sky] || Cloud;
-  const wet = w.precip >= 40;
+  const { clouds, label, Icon } = skyMeta(w);
+  const wet = (Number(w.precip) || 0) >= 40;
   return (
     <div className="aes-wx">
       <div className="aes-wx-top">
         <Icon size={20} style={{ color: wet ? "var(--accent2)" : "var(--amber)" }} />
         <span className="aes-wx-hr mono">+{w.atHour}h</span>
       </div>
-      <div className="aes-wx-sky">{w.sky}</div>
+      <div className="aes-wx-sky">{label}</div>
       <div className="aes-wx-rows">
         <span><Thermometer size={12} /> {w.air}°F air</span>
+        <span><Cloud size={12} /> {clouds}% cloud</span>
         <span><Droplets size={12} /> {w.precip}% rain</span>
-        <span><Wind size={12} /> {w.wind} mph</span>
       </div>
     </div>
   );
@@ -703,22 +717,60 @@ function EventDetail({ data, ev, back, openDriver, openTeam }) {
         </section>
       )}
 
-      {ev.results && ev.results.length > 0 && (
+      {ev.results && ev.results.length > 0 && (() => {
+        let hc = null;
+        data.classes.forEach((c) => {
+          const inC = ev.results.filter((r) => r.cls === c.id);
+          const gs = [...inC].filter((r) => Number(r.grid) > 0).sort((a, b) => Number(a.grid) - Number(b.grid));
+          const gr = {}; gs.forEach((r, idx) => { gr[r.num] = idx + 1; });
+          inC.forEach((r) => { const g = gr[r.num]; if (g && r.clsPos) { const gained = g - r.clsPos; if (gained > 0 && (!hc || gained > hc.gained)) hc = { num: r.num, name: r.drivers, gained }; } });
+        });
+        return (
         <section className="aes-card">
-          <div className="aes-card-head"><h2><Flag size={16} /> Race results</h2></div>
+          <div className="aes-card-head"><h2><Flag size={16} /> Race results</h2>
+            {hc && <span className="aes-hardcharger" title="Most class positions gained">⚡ Hard charger · #{hc.num} {hc.name} +{hc.gained}</span>}
+          </div>
           {data.classes.map((c) => {
-            const inCls = ev.results.filter((r) => r.cls === c.id).sort((a, b) => a.pos - b.pos);
+            const inCls = ev.results.filter((r) => r.cls === c.id).sort((a, b) => (a.clsPos || a.pos) - (b.clsPos || b.pos));
             if (!inCls.length) return null;
+            const gs = [...inCls].filter((r) => Number(r.grid) > 0).sort((a, b) => Number(a.grid) - Number(b.grid));
+            const gridRank = {}; gs.forEach((r, idx) => { gridRank[r.num] = idx + 1; });
+            let flSec = null, flNum = null;
+            inCls.forEach((r) => { const s = lapToSeconds(r.best); if (s != null && (flSec == null || s < flSec)) { flSec = s; flNum = r.num; } });
+            const podium = inCls.slice(0, 3);
             return (
               <div key={c.id} className="aes-cr-block">
                 <div className="aes-cr-clshead"><span className="aes-cls-pill" style={{ color: c.color, borderColor: c.color }}>{c.name}</span></div>
+                {podium.length > 0 && (
+                  <div className="aes-podium">
+                    {[1, 0, 2].map((slot) => {
+                      const r = podium[slot];
+                      if (!r) return <div key={slot} className="aes-pod-col empty" />;
+                      const team = data.teams.find((t) => String(t.number) === String(r.num) && t.cls === r.cls);
+                      const place = slot + 1;
+                      return (
+                        <div key={slot} className={"aes-pod-col p" + place}>
+                          <div className="aes-pod-place mono">P{place}</div>
+                          <div className="aes-pod-step" style={{ borderColor: c.color }}>
+                            <div className="aes-pod-num mono" style={{ color: c.color }}>#{r.num}</div>
+                            <button className="aes-pod-name aes-link-driver" onClick={() => { const m = data.drivers.find((d) => String(d.num) === String(r.num) && d.cls === r.cls); if (m && openDriver) openDriver(m.id); }}>{r.drivers}</button>
+                            {team && <div className="aes-pod-team">{team.name}</div>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 <div className="aes-rt-wrap">
                   <table className="aes-results-table">
-                    <thead><tr><th>Pos</th><th>#</th><th>Driver</th><th>Team</th><th>Car</th><th>Grid</th><th>Laps</th><th>Best</th><th>Gap</th><th>Inc</th><th>Status</th><th>Pts</th></tr></thead>
+                    <thead><tr><th>Pos</th><th>#</th><th>Driver</th><th>Team</th><th>Car</th><th>Grid</th><th title="Class positions gained / lost">+/−</th><th>Laps</th><th>Best</th><th>Gap</th><th>Inc</th><th>Status</th><th>Pts</th></tr></thead>
                     <tbody>
                       {inCls.map((r, i) => {
                         const match = data.drivers.find((d) => String(d.num) === String(r.num) && d.cls === r.cls);
                         const team = data.teams.find((t) => String(t.number) === String(r.num) && t.cls === r.cls);
+                        const g = gridRank[r.num];
+                        const gained = (g && r.clsPos) ? g - r.clsPos : null;
+                        const isFL = flNum != null && r.num === flNum;
                         return (
                           <tr key={i}>
                             <td className="aes-results-pos">{r.clsPos || i + 1}</td>
@@ -731,8 +783,9 @@ function EventDetail({ data, ev, back, openDriver, openTeam }) {
                               : "—"}</td>
                             <td className="dim aes-rt-car">{r.car || "—"}</td>
                             <td className="mono dim">{r.grid !== "" && r.grid != null ? r.grid : "—"}</td>
+                            <td className="mono">{gained == null ? <span className="dim">—</span> : gained > 0 ? <span className="aes-gain-up">▲{gained}</span> : gained < 0 ? <span className="aes-gain-dn">▼{-gained}</span> : <span className="dim">—</span>}</td>
                             <td className="mono dim">{r.laps !== "" && r.laps != null ? r.laps : "—"}</td>
-                            <td className="mono dim">{r.best || "—"}</td>
+                            <td className={"mono " + (isFL ? "aes-fl" : "dim")}>{r.best || "—"}{isFL ? <span className="aes-fl-tag" title="Fastest lap in class">FL</span> : null}</td>
                             <td className="mono dim">{r.gap || "—"}</td>
                             <td className="mono dim">{r.inc !== "" && r.inc != null ? r.inc : "—"}</td>
                             <td className="mono dim">{r.status || "—"}</td>
@@ -747,7 +800,8 @@ function EventDetail({ data, ev, back, openDriver, openTeam }) {
             );
           })}
         </section>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -769,6 +823,12 @@ function DriverProfile({ data, driver, back, openEvent, openTeam }) {
   }, [data, driver]);
 
   const totalPts = driverPoints(driver, data.events);
+  const classField = data.drivers.filter((d) => d.cls === driver.cls)
+    .map((d) => ({ id: d.id, pts: driverPoints(d, data.events) }))
+    .sort((a, b) => b.pts - a.pts);
+  const champRank = classField.findIndex((x) => x.id === driver.id) + 1;
+  const champLeaderPts = classField[0] ? classField[0].pts : 0;
+  const champBehind = champLeaderPts - totalPts;
   const finishes = races.map((x) => x.r.clsPos).filter((n) => n != null && n !== "");
   const bestFinish = finishes.length ? Math.min(...finishes) : null;
   const incTotal = races.reduce((a, x) => a + (Number(x.r.inc) || 0), 0);
@@ -816,6 +876,15 @@ function DriverProfile({ data, driver, back, openEvent, openTeam }) {
           </div>
         </div>
       </div>
+
+      {champRank > 0 && totalPts > 0 && (
+        <div className="aes-champ-ctx">
+          <Trophy size={14} />
+          {champRank === 1
+            ? <span><b>{cls?.name || driver.cls} championship leader</b></span>
+            : <span><b>P{champRank}</b> in {cls?.name || driver.cls} · <b>{champBehind}</b> pt{champBehind === 1 ? "" : "s"} behind the leader</span>}
+        </div>
+      )}
 
       <div className="aes-prof-stats">
         <div className="aes-stat"><span className="aes-stat-v mono">{totalPts}</span><span className="aes-stat-k">Points</span></div>
@@ -907,7 +976,7 @@ function DriverProfile({ data, driver, back, openEvent, openTeam }) {
 }
 
 /* =============================== Standings ================================ */
-function TeamProfile({ data, team, back, openEvent, openDriver }) {
+function TeamProfile({ data, team, back, openEvent, openDriver, openTeam }) {
   const cls = data.classes.find((c) => c.id === team.cls);
   const drivers = data.drivers.filter((d) => d.teamId === team.id);
 
@@ -922,6 +991,13 @@ function TeamProfile({ data, team, back, openEvent, openDriver }) {
   }, [data, team]);
 
   const totalPts = races.reduce((a, x) => a + (Number(x.r.points) || 0) + (Number(x.r.adjust) || 0), 0);
+  const teamPts = (tm) => data.events.reduce((a, ev) => a + (ev.results || []).filter((r) => String(r.num) === String(tm.number) && r.cls === tm.cls).reduce((b, r) => b + (Number(r.points) || 0) + (Number(r.adjust) || 0), 0), 0);
+  const classTeams = data.teams.filter((tm) => tm.cls === team.cls).map((tm) => ({ tm, pts: teamPts(tm) })).sort((a, b) => b.pts - a.pts);
+  const champRank = classTeams.findIndex((x) => x.tm.id === team.id) + 1;
+  const champLeaderPts = classTeams[0] ? classTeams[0].pts : 0;
+  const champBehind = champLeaderPts - totalPts;
+  const rivalAhead = champRank > 1 ? classTeams[champRank - 2] : null;
+  const rivalBehind = champRank >= 1 && champRank < classTeams.length ? classTeams[champRank] : null;
   const finishes = races.map((x) => x.r.clsPos).filter((n) => n != null && n !== "");
   const bestFinish = finishes.length ? Math.min(...finishes) : null;
   const avgFinish = finishes.length ? finishes.reduce((a, b) => a + b, 0) / finishes.length : null;
@@ -963,6 +1039,39 @@ function TeamProfile({ data, team, back, openEvent, openDriver }) {
           </div>
         </div>
       </div>
+
+      {champRank > 0 && totalPts > 0 && (
+        <div className="aes-champ-ctx">
+          <Trophy size={14} />
+          {champRank === 1
+            ? <span><b>{cls?.name || team.cls} championship leader</b></span>
+            : <span><b>P{champRank}</b> in {cls?.name || team.cls} · <b>{champBehind}</b> pt{champBehind === 1 ? "" : "s"} behind the leader</span>}
+        </div>
+      )}
+
+      {(rivalAhead || rivalBehind) && (
+        <div className="aes-h2h">
+          <div className="aes-h2h-side">
+            {rivalAhead ? (
+              <>
+                <span className="aes-h2h-label">▲ Chasing</span>
+                <button className="aes-link-driver aes-h2h-name" onClick={() => openTeam(rivalAhead.tm.id)}>{rivalAhead.tm.name}</button>
+                <span className="aes-h2h-gap mono">+{rivalAhead.pts - totalPts} pts ahead</span>
+              </>
+            ) : <span className="aes-h2h-label">Class leader — nobody ahead</span>}
+          </div>
+          <div className="aes-h2h-mid mono">P{champRank}</div>
+          <div className="aes-h2h-side right">
+            {rivalBehind ? (
+              <>
+                <span className="aes-h2h-label">Holding off ▼</span>
+                <button className="aes-link-driver aes-h2h-name" onClick={() => openTeam(rivalBehind.tm.id)}>{rivalBehind.tm.name}</button>
+                <span className="aes-h2h-gap mono">+{totalPts - rivalBehind.pts} pts clear</span>
+              </>
+            ) : <span className="aes-h2h-label">Last in class</span>}
+          </div>
+        </div>
+      )}
 
       {drivers.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 14px", alignItems: "center", margin: "0 0 18px" }}>
@@ -1041,9 +1150,19 @@ function Standings({ data, openDriver, openTeam }) {
   const completedRounds = data.events.filter((e) => e.status === "complete");
 
   const driverRows = useMemo(() => {
+    const completed = data.events.filter((e) => e.status === "complete").sort((a, b) => a.round - b.round);
+    const prevRounds = completed.slice(0, -1);
     let rows = data.drivers.map((d) => ({ ...d, pts: driverPoints(d, data.events), team: data.teams.find((t) => t.id === d.teamId) }));
     if (clsFilter !== "ALL") rows = rows.filter((r) => r.cls === clsFilter);
-    return rows.sort((a, b) => b.pts - a.pts);
+    rows.sort((a, b) => b.pts - a.pts);
+    if (prevRounds.length > 0) {
+      const prev = rows.map((d) => ({ id: d.id, p: prevRounds.reduce((a, ev) => a + roundPoints(d, ev), 0) })).sort((a, b) => b.p - a.p);
+      const prevRank = {}; prev.forEach((x, i) => { prevRank[x.id] = i + 1; });
+      rows = rows.map((d, i) => ({ ...d, mv: prevRank[d.id] != null ? prevRank[d.id] - (i + 1) : null }));
+    } else {
+      rows = rows.map((d) => ({ ...d, mv: null }));
+    }
+    return rows;
   }, [data, clsFilter]);
 
   const teamRows = useMemo(() => {
@@ -1145,7 +1264,7 @@ function Standings({ data, openDriver, openTeam }) {
             <tbody>
               {driverRows.map((d, i) => (
                 <tr key={d.id}>
-                  <td className="num mono">{i + 1}</td>
+                  <td className="num mono">{i + 1}{d.mv != null && d.mv !== 0 ? (d.mv > 0 ? <span className="aes-mv-up" title={"Up " + d.mv + " since last round"}> ▲</span> : <span className="aes-mv-dn" title={"Down " + (-d.mv) + " since last round"}> ▼</span>) : null}</td>
                   <td className="aes-td-driver">
                     <div className="aes-driver-line"><span className="aes-flag">{d.country}</span> <span className="aes-num-badge mono">{d.num}</span> <button className="aes-link-driver" onClick={() => openDriver && openDriver(d.id)}>{d.name}</button></div>
                     {d.car && <div className="aes-driver-car">{d.car}</div>}
@@ -2356,7 +2475,7 @@ export default function LeagueApp({ initialData }) {
         {view === "records" && <Records data={data} openDriver={openDriver} openEvent={openEvent} />}
         {view === "roster" && <Roster data={data} openDriver={openDriver} openTeam={openTeam} />}
         {view === "driver" && currentDriver && <DriverProfile data={data} driver={currentDriver} back={() => go("standings")} openEvent={openEvent} openTeam={openTeam} />}
-        {view === "team" && currentTeam && <TeamProfile data={data} team={currentTeam} back={() => go("standings")} openEvent={openEvent} openDriver={openDriver} />}
+        {view === "team" && currentTeam && <TeamProfile data={data} team={currentTeam} back={() => go("standings")} openEvent={openEvent} openDriver={openDriver} openTeam={openTeam} />}
         {view === "info" && <Info data={data} />}
       </main>
 
@@ -2739,6 +2858,41 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
   padding:3px 8px; border-radius:6px; cursor:pointer; }
 .aes-rec-rd:hover{ color:var(--signal); border-color:var(--signal); }
 .aes-pen{ color:var(--amber); font-size:11px; font-weight:600; }
+
+/* event results extras */
+.aes-hardcharger{ font-family:var(--mono); font-size:11px; letter-spacing:.03em; color:var(--carbon); background:var(--signal);
+  padding:4px 9px; border-radius:20px; font-weight:700; white-space:nowrap; }
+.aes-gain-up{ color:var(--green); font-weight:700; }
+.aes-gain-dn{ color:#F2596B; font-weight:700; }
+.aes-fl{ color:#C77DFF !important; font-weight:700; }
+.aes-fl-tag{ display:inline-block; margin-left:5px; font-size:9px; font-weight:800; letter-spacing:.05em; color:#0B0E14;
+  background:#C77DFF; padding:1px 4px; border-radius:4px; vertical-align:middle; }
+.aes-podium{ display:flex; align-items:flex-end; justify-content:center; gap:10px; margin:6px 0 16px; }
+.aes-pod-col{ display:flex; flex-direction:column; align-items:center; gap:6px; flex:1; max-width:200px; }
+.aes-pod-col.empty{ visibility:hidden; }
+.aes-pod-place{ font-size:11px; color:var(--mist); }
+.aes-pod-step{ width:100%; background:var(--steel); border:1px solid var(--line); border-top:3px solid; border-radius:8px;
+  padding:10px 8px; text-align:center; display:flex; flex-direction:column; gap:2px; }
+.aes-pod-col.p1 .aes-pod-step{ padding-bottom:26px; }
+.aes-pod-col.p2 .aes-pod-step{ padding-bottom:16px; }
+.aes-pod-num{ font-size:15px; font-weight:800; }
+.aes-pod-name{ font-size:13px; color:var(--chalk); font-weight:600; line-height:1.15; }
+.aes-pod-team{ font-size:11px; color:var(--mist); }
+.aes-mv-up{ color:var(--green); font-size:10px; }
+.aes-mv-dn{ color:#F2596B; font-size:10px; }
+.aes-champ-ctx{ display:flex; align-items:center; gap:8px; margin:0 0 16px; padding:10px 14px; border-radius:10px;
+  background:linear-gradient(90deg, rgba(245,238,48,.10), rgba(245,238,48,.02)); border:1px solid var(--line); color:var(--chalk); font-size:14px; }
+.aes-champ-ctx svg{ color:var(--signal); flex:0 0 auto; }
+.aes-champ-ctx b{ color:var(--signal); }
+.aes-h2h{ display:flex; align-items:stretch; gap:10px; margin:0 0 22px; }
+.aes-h2h-side{ flex:1; display:flex; flex-direction:column; gap:3px; background:var(--graphite); border:1px solid var(--line);
+  border-radius:10px; padding:11px 14px; }
+.aes-h2h-side.right{ text-align:right; align-items:flex-end; }
+.aes-h2h-label{ font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--mist); }
+.aes-h2h-name{ font-size:14px; font-weight:600; }
+.aes-h2h-gap{ font-size:12px; color:var(--mist); }
+.aes-h2h-mid{ display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:800; color:var(--signal);
+  background:var(--steel); border:1px solid var(--line); border-radius:10px; padding:0 14px; }
 
 /* roster / directory */
 .aes-roster-count{ font-family:var(--mono); font-size:11px; color:var(--mist); }
