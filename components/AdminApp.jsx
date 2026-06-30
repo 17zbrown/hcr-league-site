@@ -62,7 +62,7 @@ async function loadAdminData(sb, seasonId) {
 
   const shapedEvents = events.map((ev) => ({
     id: ev.id, round: ev.round, track_id: ev.track_id, season_id: ev.season_id, date: ev.date || "",
-    status: ev.status || "upcoming", durationH: ev.duration_h ?? "", simStartHour: ev.sim_start_hour ?? "",
+    status: ev.status || "upcoming", durationH: ev.duration_h ?? "", durationMin: ev.duration_min ?? (ev.duration_h != null ? Math.round(ev.duration_h * 60) : ""), simStartHour: ev.sim_start_hour ?? "",
     timeMult: ev.time_mult ?? 1, pointsMult: ev.points_mult ?? 1, minDrivers: ev.min_drivers ?? "",
     maxDrivers: ev.max_drivers ?? "", notes: ev.notes || "",
     sessions: (sBy[ev.id] || []).map((s) => ({ id: s.id, type: s.type || "", start: s.start || "", durMin: s.dur_min ?? "", sort: s.sort ?? 0 })),
@@ -279,7 +279,7 @@ function EventCard({ supabase, d, ev, reload, autoAdd }) {
                 {d.tracks.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </Field>
-            <Field label="Duration (hours)"><NumInput step="0.5" defaultValue={ev.durationH} onBlur={(e) => setField("duration_h", num(e.target.value))} /></Field>
+            <Field label="Duration (minutes)"><NumInput step="5" defaultValue={ev.durationMin} onBlur={(e) => { const mins = num(e.target.value); setField("duration_min", mins); patchEvent({ duration_h: mins != null ? mins / 60 : null }); }} /></Field>
             <Field label="Race date/time"><TextInput type="datetime-local" defaultValue={(ev.date || "").slice(0, 16)} onBlur={(e) => setField("date", e.target.value ? e.target.value + ":00" : null)} /></Field>
             <Field label="Status">
               <select className="aes-input" value={ev.status} onChange={(e) => patchEvent({ status: e.target.value })}>
@@ -496,7 +496,7 @@ function Shell({ supabase, session }) {
 
   const addEvent = async () => {
     const round = (d?.events.length || 0) + 1;
-    await supabase.from("events").insert({ season_id: d.seasonId, round, status: "upcoming", duration_h: 6, sim_start_hour: 12, time_mult: 1, points_mult: 1 });
+    await supabase.from("events").insert({ season_id: d.seasonId, round, status: "upcoming", duration_min: 360, duration_h: 6, sim_start_hour: 12, time_mult: 1, points_mult: 1 });
     reload();
   };
 

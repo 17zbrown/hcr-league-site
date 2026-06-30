@@ -270,6 +270,14 @@ function skyColor(hour) {
   const mix = (i) => Math.round(a.c[i] + (b.c[i] - a.c[i]) * t);
   return `rgb(${mix(0)},${mix(1)},${mix(2)})`;
 }
+function durMins(ev) { return ev?.durationMin != null ? ev.durationMin : Math.round((ev?.durationH || 0) * 60); }
+function fmtDur(mins) {
+  const m = Math.round(Number(mins) || 0);
+  if (m <= 0) return "0 min";
+  if (m % 60 === 0) return (m / 60) + "h";
+  if (m < 60) return m + " min";
+  return Math.floor(m / 60) + "h " + (m % 60) + "m";
+}
 function dayNightGradient(simStart, durationH, mult = 1) {
   const stops = [];
   const steps = Math.min(60, Math.max(12, Math.round(durationH * 2)));
@@ -342,7 +350,7 @@ function DayNightBar({ ev, compact }) {
       </div>
       <div className="aes-dn-ends">
         <span className="mono">{simClock(ev.simStartHour)} <em>start</em></span>
-        <span className="aes-dn-mid">{ev.durationH}h</span>
+        <span className="aes-dn-mid">{fmtDur(durMins(ev))}</span>
         <span className="mono"><em>finish</em> {simClock(endHour)}</span>
       </div>
       {!compact && (
@@ -467,7 +475,7 @@ function Dashboard({ data, openEvent, go }) {
             <div className="aes-hero-round mono">R{next.round}</div>
             <h1 className="aes-hero-track">{next.track}</h1>
             <div className="aes-hero-sub">
-              <span><Timer size={14} /> {next.durationH} Hours</span>
+              <span><Timer size={14} /> {fmtDur(durMins(next))}</span>
               <span><Calendar size={14} /> {fmtFullDate(next.date)}</span>
               <span><Clock size={14} /> {fmtTime(raceSession?.start)} {data.league.timezone}</span>
             </div>
@@ -589,7 +597,7 @@ function Schedule({ data, openEvent }) {
                 <div className="aes-tl-loc"><MapPin size={12} /> {e.location}</div>
               </div>
               <div className="aes-tl-meta">
-                <span className="mono"><Timer size={13} /> {e.durationH}h</span>
+                <span className="mono"><Timer size={13} /> {fmtDur(durMins(e))}</span>
                 <span className="mono"><Calendar size={13} /> {fmtDate(e.date)}</span>
                 <span className="mono"><Clock size={13} /> {fmtTime(race?.start)}</span>
               </div>
@@ -619,7 +627,7 @@ function EventDetail({ data, ev, back, openDriver }) {
         <h1 className="aes-hero-track">{ev.track}</h1>
         <div className="aes-hero-sub">
           <span><MapPin size={14} /> {ev.location}</span>
-          <span><Timer size={14} /> {ev.durationH} Hours</span>
+          <span><Timer size={14} /> {fmtDur(durMins(ev))}</span>
           <span><Calendar size={14} /> {fmtFullDate(ev.date)}</span>
           <span><Users size={14} /> {ev.entries} entries</span>
         </div>
@@ -1286,7 +1294,7 @@ function AdminPanel({ data, setData, save, persisted, onClose, resetSample }) {
   const updateEvent = (id, patch) => commit({ ...data, events: data.events.map((e) => e.id === id ? { ...e, ...patch } : e) });
   const addEvent = () => {
     const round = data.events.length + 1;
-    const ne = { id: uid(), round, track: "New Circuit", location: "TBD", durationH: 6,
+    const ne = { id: uid(), round, track: "New Circuit", location: "TBD", durationH: 6, durationMin: 360,
       date: new Date().toISOString().slice(0, 19), status: "upcoming", simStartHour: 12, timeMult: 1,
       entries: 0, minDrivers: 2, maxDrivers: 4,
       sessions: [{ type: "Race", start: new Date().toISOString().slice(0, 19), durMin: 360 }],
@@ -1975,7 +1983,7 @@ function EventEditor({ ev, data, classes, onChange, onImport, onDelete }) {
             <Field label="Round #"><NumInput value={ev.round} onChange={(e) => onChange({ round: +e.target.value })} /></Field>
             <Field label="Track"><TextInput value={ev.track} onChange={(e) => onChange({ track: e.target.value })} /></Field>
             <Field label="Location"><TextInput value={ev.location} onChange={(e) => onChange({ location: e.target.value })} /></Field>
-            <Field label="Duration (hours)"><NumInput value={ev.durationH} onChange={(e) => onChange({ durationH: +e.target.value })} /></Field>
+            <Field label="Duration (minutes)"><NumInput value={Math.round((ev.durationH || 0) * 60)} onChange={(e) => onChange({ durationH: (+e.target.value) / 60, durationMin: +e.target.value })} /></Field>
             <Field label="Race date/time"><TextInput type="datetime-local" value={ev.date.slice(0, 16)} onChange={(e) => onChange({ date: e.target.value + ":00" })} /></Field>
             <Field label="Status">
               <select className="aes-input" value={ev.status} onChange={(e) => onChange({ status: e.target.value })}>
@@ -2180,7 +2188,7 @@ function ResultsArchive({ data, openEvent }) {
               <span className="aes-arch-rd mono">R{ev.round}</span>
               <span className="aes-arch-main">
                 <span className="aes-arch-track">{ev.track}</span>
-                <span className="aes-arch-meta">{ev.location} · {fmtDate(ev.date)} · {ev.durationH}h</span>
+                <span className="aes-arch-meta">{ev.location} · {fmtDate(ev.date)} · {fmtDur(durMins(ev))}</span>
               </span>
               <span className="aes-arch-win">
                 {data.classes.map((c) => (ev.winners && ev.winners[c.id]) ? (
