@@ -10,6 +10,7 @@ import {
   ArrowLeft, CheckCircle2, CircleDot, Eye, FileText, Loader2, AlertTriangle, Search, Menu,
 } from "lucide-react";
 import { CARS } from "@/lib/cars";
+import { COUNTRIES, flagOf, flagFor } from "@/lib/countries";
 
 /* ============================================================
    APEX ENDURANCE SERIES — League Hub + Admin
@@ -1167,70 +1168,6 @@ function CarSelect({ cls, value, onChange }) {
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
-// Country list for the flag typeahead. Flags are derived from ISO codes,
-// except where an explicit `flag` is given (England/Scotland/Wales).
-const COUNTRIES = [
-  { name: "Argentina", code: "AR" }, { name: "Australia", code: "AU" },
-  { name: "Austria", code: "AT" }, { name: "Belgium", code: "BE" },
-  { name: "Bolivia", code: "BO" }, { name: "Brazil", code: "BR" },
-  { name: "Bulgaria", code: "BG" }, { name: "Canada", code: "CA" },
-  { name: "Chile", code: "CL" }, { name: "China", code: "CN" },
-  { name: "Colombia", code: "CO" }, { name: "Costa Rica", code: "CR" },
-  { name: "Croatia", code: "HR" }, { name: "Cyprus", code: "CY" },
-  { name: "Czechia", code: "CZ" }, { name: "Denmark", code: "DK" },
-  { name: "Ecuador", code: "EC" }, { name: "Egypt", code: "EG" },
-  { name: "England", code: "GB-ENG", flag: "\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}" },
-  { name: "Estonia", code: "EE" }, { name: "Finland", code: "FI" },
-  { name: "France", code: "FR" }, { name: "Germany", code: "DE" },
-  { name: "Greece", code: "GR" }, { name: "Hong Kong", code: "HK" },
-  { name: "Hungary", code: "HU" }, { name: "Iceland", code: "IS" },
-  { name: "India", code: "IN" }, { name: "Indonesia", code: "ID" },
-  { name: "Ireland", code: "IE" }, { name: "Israel", code: "IL" },
-  { name: "Italy", code: "IT" }, { name: "Japan", code: "JP" },
-  { name: "Latvia", code: "LV" }, { name: "Lithuania", code: "LT" },
-  { name: "Luxembourg", code: "LU" }, { name: "Malaysia", code: "MY" },
-  { name: "Malta", code: "MT" }, { name: "Mexico", code: "MX" },
-  { name: "Monaco", code: "MC" }, { name: "Morocco", code: "MA" },
-  { name: "Netherlands", code: "NL" }, { name: "New Zealand", code: "NZ" },
-  { name: "Norway", code: "NO" }, { name: "Peru", code: "PE" },
-  { name: "Philippines", code: "PH" }, { name: "Poland", code: "PL" },
-  { name: "Portugal", code: "PT" }, { name: "Qatar", code: "QA" },
-  { name: "Romania", code: "RO" }, { name: "Russia", code: "RU" },
-  { name: "Saudi Arabia", code: "SA" }, { name: "Scotland", code: "GB-SCT", flag: "\u{1F3F4}\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}" },
-  { name: "Singapore", code: "SG" }, { name: "Slovakia", code: "SK" },
-  { name: "Slovenia", code: "SI" }, { name: "South Africa", code: "ZA" },
-  { name: "South Korea", code: "KR" }, { name: "Spain", code: "ES" },
-  { name: "Sweden", code: "SE" }, { name: "Switzerland", code: "CH" },
-  { name: "Taiwan", code: "TW" }, { name: "Thailand", code: "TH" },
-  { name: "Turkey", code: "TR" }, { name: "Ukraine", code: "UA" },
-  { name: "United Arab Emirates", code: "AE" }, { name: "United Kingdom", code: "GB" },
-  { name: "United States", code: "US" }, { name: "Uruguay", code: "UY" },
-  { name: "Venezuela", code: "VE" }, { name: "Vietnam", code: "VN" },
-  { name: "Albania", code: "AL" }, { name: "Algeria", code: "DZ" },
-  { name: "Andorra", code: "AD" }, { name: "Armenia", code: "AM" },
-  { name: "Azerbaijan", code: "AZ" }, { name: "Bahrain", code: "BH" },
-  { name: "Bangladesh", code: "BD" }, { name: "Belarus", code: "BY" },
-  { name: "Bosnia and Herzegovina", code: "BA" }, { name: "Cambodia", code: "KH" },
-  { name: "Cuba", code: "CU" }, { name: "Dominican Republic", code: "DO" },
-  { name: "Georgia", code: "GE" }, { name: "Ghana", code: "GH" },
-  { name: "Guatemala", code: "GT" }, { name: "Iran", code: "IR" },
-  { name: "Iraq", code: "IQ" }, { name: "Jamaica", code: "JM" },
-  { name: "Jordan", code: "JO" }, { name: "Kazakhstan", code: "KZ" },
-  { name: "Kenya", code: "KE" }, { name: "Kuwait", code: "KW" },
-  { name: "Lebanon", code: "LB" }, { name: "Liechtenstein", code: "LI" },
-  { name: "Nigeria", code: "NG" }, { name: "North Macedonia", code: "MK" },
-  { name: "Pakistan", code: "PK" }, { name: "Panama", code: "PA" },
-  { name: "Paraguay", code: "PY" }, { name: "Puerto Rico", code: "PR" },
-  { name: "Serbia", code: "RS" }, { name: "Sri Lanka", code: "LK" },
-  { name: "Tunisia", code: "TN" },
-  { name: "Wales", code: "GB-WLS", flag: "\u{1F3F4}\u{E0067}\u{E0062}\u{E0077}\u{E006C}\u{E0073}\u{E007F}" },
-];
-
-const flagOf = (code) =>
-  code.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase()
-    .replace(/./g, (ch) => String.fromCodePoint(127397 + ch.charCodeAt(0)));
-
-const flagFor = (c) => c.flag || flagOf(c.code);
 
 function CountrySelect({ value, onChange }) {
   const [q, setQ] = useState("");

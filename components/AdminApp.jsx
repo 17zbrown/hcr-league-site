@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { CARS } from "@/lib/cars";
+import { COUNTRIES, flagOf, flagFor } from "@/lib/countries";
 import {
   Lock, Settings, Eye, LogOut, Plus, Trash2, Loader2, ChevronRight, Search,
   Upload, FileText, AlertTriangle, CheckCircle2, Gauge,
@@ -63,6 +64,46 @@ function LinkOrFile({ label, hint, value, storageKey, supabase, onSave }) {
       )}
       {hint && <span className="aes-mini-label">{hint}</span>}
       {err && <span className="aes-import-err">{err}</span>}
+    </div>
+  );
+}
+
+/* country flag typeahead — type a nationality, pick it, store the flag emoji */
+function CountrySelect({ value, onSave }) {
+  const [cur, setCur] = useState(value || "");
+  useEffect(() => { setCur(value || ""); }, [value]);
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const t = q.trim().toLowerCase();
+  const matches = !t ? [] : COUNTRIES
+    .filter((c) => c.name.toLowerCase().includes(t))
+    .sort((a, b) => {
+      const as = a.name.toLowerCase().startsWith(t) ? 0 : 1;
+      const bs = b.name.toLowerCase().startsWith(t) ? 0 : 1;
+      return as - bs || a.name.localeCompare(b.name);
+    })
+    .slice(0, 8);
+  const pick = (c) => { const f = flagFor(c); setCur(f); onSave(f); setQ(""); setOpen(false); };
+  const clear = () => { setCur(""); onSave(""); setQ(""); };
+  return (
+    <div className="aes-cs">
+      <div className="aes-cs-field">
+        <span className="aes-cs-flag">{cur || "\uD83C\uDFF3\uFE0F"}</span>
+        <input className="aes-cs-input" value={q} placeholder={cur ? "change…" : "country…"}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)} />
+        {cur && <button type="button" className="aes-cs-clear" title="Clear" onMouseDown={(e) => { e.preventDefault(); clear(); }}>×</button>}
+      </div>
+      {open && matches.length > 0 && (
+        <div className="aes-cs-menu">
+          {matches.map((c) => (
+            <button key={c.code} type="button" className="aes-cs-opt" onMouseDown={(e) => { e.preventDefault(); pick(c); }}>
+              <span className="aes-cs-flag">{flagFor(c)}</span> {c.name}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -429,7 +470,7 @@ function DriversTab({ supabase, d, reload }) {
           <div key={x.id} className="aes-edit-row driver">
             <span className="aes-ro mono">{x.num || "—"}</span>
             <TextInput defaultValue={x.name} onBlur={(e) => setDriver(x, { name: e.target.value })} placeholder="Driver name" />
-            <TextInput defaultValue={x.country} onBlur={(e) => setDriver(x, { country: e.target.value })} placeholder="🏳️" />
+            <CountrySelect value={x.country} onSave={(v) => setDriver(x, { country: v })} />
             <select className="aes-input" defaultValue={x.teamId || ""} onChange={(e) => setDriver(x, { team_id: e.target.value || null })}><option value="">— No team —</option>{d.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
             <span className="aes-ro">{x.cls ? className(x.cls) : "—"}</span>
             <span className="aes-ro mono">{x.car || "—"}</span>
@@ -765,6 +806,19 @@ textarea.aes-input{ resize:vertical; font-family:var(--body); }
 .aes-lf-drop.drag{ border-color:var(--signal); background:rgba(245,238,48,.07); color:var(--chalk); }
 .aes-lf-current{ display:inline-flex; align-items:center; gap:6px; margin-top:8px; color:var(--accent2); font-size:12.5px; text-decoration:none; word-break:break-all; }
 .aes-lf-current:hover{ text-decoration:underline; }
+.aes-cs{ position:relative; width:100%; }
+.aes-cs-field{ display:flex; align-items:center; gap:5px; background:var(--carbon); border:1px solid var(--line); border-radius:7px; padding:4px 6px; }
+.aes-cs-field:focus-within{ border-color:var(--signal); }
+.aes-cs-flag{ font-size:16px; line-height:1; flex:0 0 auto; }
+.aes-cs-input{ flex:1 1 auto; min-width:0; background:transparent; border:0; outline:none; color:var(--chalk); font-family:var(--body); font-size:13px; }
+.aes-cs-input::placeholder{ color:var(--mist); }
+.aes-cs-clear{ flex:0 0 auto; background:transparent; border:0; color:var(--mist); cursor:pointer; font-size:15px; line-height:1; padding:0 2px; }
+.aes-cs-clear:hover{ color:var(--signal); }
+.aes-cs-menu{ position:absolute; z-index:50; top:calc(100% + 4px); left:0; min-width:190px; max-height:240px; overflow:auto;
+  background:var(--panel); border:1px solid var(--line); border-radius:8px; box-shadow:0 12px 28px rgba(0,0,0,.5); padding:4px; }
+.aes-cs-opt{ display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:transparent; border:0; color:var(--chalk);
+  font-family:var(--body); font-size:13px; padding:7px 9px; border-radius:6px; cursor:pointer; }
+.aes-cs-opt:hover{ background:var(--steel); }
 .aes-points-hint{ font-size:11.5px; color:var(--mist2); line-height:1.45; }
 @media (max-width:820px){
   .aes-edit-row.driver{ grid-template-columns:1fr 1fr; }
