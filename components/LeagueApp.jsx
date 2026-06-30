@@ -9,6 +9,7 @@ import {
   Save, Download, Upload, RotateCcw, MapPin, Users, Timer, Moon, Radio,
   ArrowLeft, CheckCircle2, CircleDot, Eye, FileText, Loader2, AlertTriangle, Search, Menu,
 } from "lucide-react";
+import { CARS } from "@/lib/cars";
 
 /* ============================================================
    APEX ENDURANCE SERIES — League Hub + Admin
@@ -17,11 +18,6 @@ import {
    ============================================================ */
 
 const STORE_KEY = "apex:league:v9";
-const CARS = {
-  GTP: ["Acura ARX-06", "BMW M Hybrid V8", "Cadillac V-Series.R", "Ferrari 499P", "Porsche 963"],
-  LMP2: ["Dallara P217"],
-  GTD: ["Acura NSX GT3 EVO 22", "Aston Martin Vantage GT3 EVO", "BMW M4 GT3 EVO", "Chevrolet Corvette Z06 GT3.R", "Ferrari 296 GT3 EVO", "Ford Mustang GT3", "Lamborghini Huracán GT3 EVO", "McLaren 720S GT3 EVO", "Mercedes-AMG GT3 EVO", "Porsche 911 GT3 R (992)"],
-};
 
 /* Distinct high-contrast palette for chart lines (so same-class drivers don't share a color) */
 const LINE_COLORS = ["#37C2F0", "#FFB627", "#FF6B6B", "#5BD6A0", "#C792EA", "#F5EE30", "#7AA2FF", "#FF8FCF", "#8AE234", "#FF9E64"];

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
+import { CARS } from "@/lib/cars";
 import {
   Lock, Settings, Eye, LogOut, Plus, Trash2, Loader2, ChevronRight, Search,
   Upload, FileText, AlertTriangle, CheckCircle2, Gauge,
@@ -11,6 +12,75 @@ import {
 const TextInput = (p) => <input className="aes-input" {...p} />;
 const NumInput = (p) => <input type="number" className="aes-input" {...p} />;
 const Field = ({ label, children }) => (<label className="aes-field"><span>{label}</span>{children}</label>);
+
+/* a setting that can be either a pasted link or an uploaded PDF (hosted in Supabase Storage) */
+function LinkOrFile({ label, hint, value, storageKey, supabase, onSave }) {
+  const isStored = (value || "").includes("/storage/v1/object/public/docs/");
+  const [mode, setMode] = useState(isStored ? "pdf" : "link");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [drag, setDrag] = useState(false);
+  const inputRef = useRef(null);
+
+  const upload = async (file) => {
+    if (!file) return;
+    if (file.type !== "application/pdf") { setErr("That's not a PDF — drop a .pdf file."); return; }
+    if (file.size > 50 * 1024 * 1024) { setErr("PDF is over the 50 MB limit."); return; }
+    setErr(""); setBusy(true);
+    try {
+      const path = `${storageKey}-${Date.now()}.pdf`;
+      const { error } = await supabase.storage.from("docs").upload(path, file, { upsert: true, contentType: "application/pdf" });
+      if (error) throw error;
+      const { data } = supabase.storage.from("docs").getPublicUrl(path);
+      onSave(data.publicUrl);
+    } catch (e) {
+      setErr((e?.message || "Upload failed") + (/(row-level|policy|jwt)/i.test(e?.message || "") ? " — try reloading /admin to refresh your session." : ""));
+    }
+    setBusy(false);
+  };
+  const onDrop = (e) => { e.preventDefault(); setDrag(false); upload(e.dataTransfer.files?.[0]); };
+  const fileName = isStored ? decodeURIComponent((value || "").split("/").pop()) : "";
+
+  return (
+    <div className="aes-field">
+      <span>{label}</span>
+      <div className="aes-lf-toggle">
+        <button type="button" className={"aes-lf-tab" + (mode === "link" ? " on" : "")} onClick={() => setMode("link")}>Link</button>
+        <button type="button" className={"aes-lf-tab" + (mode === "pdf" ? " on" : "")} onClick={() => setMode("pdf")}>PDF upload</button>
+      </div>
+      {mode === "link" ? (
+        <TextInput defaultValue={value || ""} placeholder="https://…" onBlur={(e) => onSave(e.target.value)} />
+      ) : (
+        <>
+          <div className={"aes-lf-drop" + (drag ? " drag" : "")} onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={onDrop}>
+            <input ref={inputRef} type="file" accept="application/pdf" hidden onChange={(e) => upload(e.target.files?.[0])} />
+            {busy ? <span><Loader2 size={14} className="aes-spin" /> Uploading…</span>
+              : <span><Upload size={14} /> Drag a PDF here, or click to choose</span>}
+          </div>
+          {isStored && value && <a className="aes-lf-current" href={value} target="_blank" rel="noreferrer"><FileText size={13} /> {fileName || "Current PDF"}</a>}
+        </>
+      )}
+      {hint && <span className="aes-mini-label">{hint}</span>}
+      {err && <span className="aes-import-err">{err}</span>}
+    </div>
+  );
+}
+
+/* car-model dropdown driven by the iRacing IMSA catalog for the team's class */
+function CarSelect({ value, classId, onSave }) {
+  const [v, setV] = useState(value || "");
+  useEffect(() => { setV(value || ""); }, [value]);
+  const opts = CARS[classId] || [];
+  const known = opts.includes(v);
+  return (
+    <select className="aes-input" value={v} onChange={(e) => { setV(e.target.value); onSave(e.target.value); }}>
+      <option value="">— car model —</option>
+      {!known && v && <option value={v}>{v}</option>}
+      {opts.map((c) => <option key={c} value={c}>{c}</option>)}
+    </select>
+  );
+}
 const lapSec = (t) => { if (!t) return null; const m = String(t).trim().match(/^(\d+):(\d+(?:\.\d+)?)$/); if (m) return +m[1] * 60 + parseFloat(m[2]); const n = parseFloat(t); return isNaN(n) ? null : n; };
 const pointsForPos = (table, pos) => (pos >= 1 && pos <= (table || []).length ? Number(table[pos - 1]) || 0 : 0);
 
@@ -397,8 +467,8 @@ function TeamsTab({ supabase, d, reload }) {
           <div key={t.id} className="aes-edit-row" style={grid}>
             <TextInput defaultValue={t.number ?? ""} onBlur={(e) => setTeam(t, { number: e.target.value })} placeholder="#" />
             <TextInput defaultValue={t.name} onBlur={(e) => setTeam(t, { name: e.target.value })} placeholder="Team name" />
-            <select className="aes-input" defaultValue={t.class_id || ""} onChange={(e) => setTeam(t, { class_id: e.target.value || null })}><option value="">— class —</option>{d.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-            <TextInput defaultValue={t.car || ""} onBlur={(e) => setTeam(t, { car: e.target.value })} placeholder="Car model" />
+            <select className="aes-input" defaultValue={t.class_id || ""} onChange={async (e) => { await setTeam(t, { class_id: e.target.value || null }); reload(); }}><option value="">— class —</option>{d.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+            <CarSelect value={t.car || ""} classId={t.class_id} onSave={(car) => setTeam(t, { car })} />
             <span className="aes-edit-meta mono">{driverCount(t.id)}</span>
             <div className="aes-edit-actions"><button className="aes-icon-btn danger" onClick={() => delTeam(t)}><Trash2 size={15} /></button></div>
           </div>
@@ -426,9 +496,9 @@ function LeagueTab({ supabase, d, reload }) {
         <Field label="League name"><TextInput defaultValue={s.name || ""} onBlur={(e) => setS({ name: e.target.value })} /></Field>
         <Field label="Tagline"><TextInput defaultValue={s.tagline || ""} onBlur={(e) => setS({ tagline: e.target.value })} /></Field>
         <Field label="Timezone label"><TextInput defaultValue={s.timezone || ""} onBlur={(e) => setS({ timezone: e.target.value })} /></Field>
-        <Field label="Discord link"><TextInput defaultValue={s.discord_url || ""} onBlur={(e) => setS({ discord_url: e.target.value })} /></Field>
-        <Field label="Broadcast link"><TextInput defaultValue={s.broadcast_url || ""} onBlur={(e) => setS({ broadcast_url: e.target.value })} /></Field>
-        <Field label="Rulebook link"><TextInput defaultValue={s.rulebook_url || ""} onBlur={(e) => setS({ rulebook_url: e.target.value })} /></Field>
+        <LinkOrFile label="Discord" hint="Sign-ups, briefings & race control" value={s.discord_url} storageKey="discord" supabase={supabase} onSave={(v) => setS({ discord_url: v })} />
+        <LinkOrFile label="Broadcast" hint="Live coverage of every round" value={s.broadcast_url} storageKey="broadcast" supabase={supabase} onSave={(v) => setS({ broadcast_url: v })} />
+        <LinkOrFile label="Rulebook" hint="Full sporting & technical regulations" value={s.rulebook_url} storageKey="rulebook" supabase={supabase} onSave={(v) => setS({ rulebook_url: v })} />
         <Field label="Current season">
           <select className="aes-input" value={s.current_season_id || ""} onChange={(e) => setS({ current_season_id: e.target.value })}>
             {d.seasons.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
@@ -687,6 +757,14 @@ textarea.aes-input{ resize:vertical; font-family:var(--body); }
 .aes-points-edit{ margin-top:14px; display:flex; flex-direction:column; gap:6px; }
 .aes-field-label{ font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--mist); }
 .aes-mini-label{ font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--mist); margin-top:6px; }
+.aes-lf-toggle{ display:inline-flex; gap:0; margin-bottom:7px; border:1px solid var(--line); border-radius:7px; overflow:hidden; width:max-content; }
+.aes-lf-tab{ background:transparent; color:var(--mist); border:0; padding:5px 12px; font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; }
+.aes-lf-tab.on{ background:var(--signal); color:#0B0E14; font-weight:700; }
+.aes-lf-drop{ display:flex; align-items:center; justify-content:center; gap:8px; padding:14px; border:1.5px dashed var(--line); border-radius:8px; color:var(--mist); font-size:13px; cursor:pointer; transition:border-color .15s, background .15s; }
+.aes-lf-drop:hover{ border-color:var(--signal); color:var(--chalk); }
+.aes-lf-drop.drag{ border-color:var(--signal); background:rgba(245,238,48,.07); color:var(--chalk); }
+.aes-lf-current{ display:inline-flex; align-items:center; gap:6px; margin-top:8px; color:var(--accent2); font-size:12.5px; text-decoration:none; word-break:break-all; }
+.aes-lf-current:hover{ text-decoration:underline; }
 .aes-points-hint{ font-size:11.5px; color:var(--mist2); line-height:1.45; }
 @media (max-width:820px){
   .aes-edit-row.driver{ grid-template-columns:1fr 1fr; }
