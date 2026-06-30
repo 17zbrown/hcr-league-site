@@ -108,11 +108,13 @@ Run those. Refresh the GitHub page and your files should be there.
 2. Click **Add new site → Import an existing project**.
 3. Choose **GitHub**, authorize if asked, and pick your `hcr-league-site` repo.
 4. Netlify auto-detects Next.js and fills in the build settings (build command `npm run build`; the Next.js runtime handles the rest). Leave them as detected.
-5. **Before deploying, add your environment variables.** Find **Add environment variables** on this screen (or you can do it afterward under **Site configuration → Environment variables**). Add the same two:
+5. **Before deploying, add your environment variables.** Find **Add environment variables** on this screen (or you can do it afterward under **Site configuration → Environment variables**). Add these:
    ```
    NEXT_PUBLIC_SUPABASE_URL       = https://abcdxyz.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY  = sb_publishable_your_key_here
+   ANTHROPIC_API_KEY              = sk-ant-...        (server-only; powers the admin PDF import)
    ```
+   The first two are public (they ship to the browser, protected by RLS). **`ANTHROPIC_API_KEY` is a secret** — it has no `NEXT_PUBLIC_` prefix, so it stays on the server and is only used by the admin import route. Get a key at https://console.anthropic.com. (You can skip it for now and add it later if you're not using PDF import yet.)
 6. Click **Deploy**. The first build takes a couple of minutes.
 7. When it finishes you'll get a live URL like `https://random-name-123.netlify.app`. Open it — your league is online.
 

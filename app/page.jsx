@@ -3,8 +3,9 @@ import { fetchLeagueData, isConfigured } from "@/lib/leagueData";
 
 export const dynamic = "force-dynamic";
 
-export default async function Page() {
-  const data = isConfigured() ? await fetchLeagueData() : null;
+export default async function Page({ searchParams }) {
+  const seasonId = searchParams?.season;
+  const data = isConfigured() ? await fetchLeagueData(seasonId) : null;
 
   if (!data) {
     return (

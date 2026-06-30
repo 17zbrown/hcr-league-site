@@ -2082,24 +2082,13 @@ function AdminGate({ data, onPass, onClose }) {
 
 /* ================================== APP =================================== */
 /* ============================== Track records ============================ */
-function Records({ data, openDriver, openEvent }) {
-  const byTrack = {};
-  data.events.forEach((ev) => {
-    (ev.results || []).forEach((r) => {
-      const sec = lapToSeconds(r.best);
-      if (sec == null || !r.cls) return;
-      const t = byTrack[ev.track] || (byTrack[ev.track] = { track: ev.track, location: ev.location, perClass: {} });
-      const cur = t.perClass[r.cls];
-      if (!cur || sec < cur.sec) t.perClass[r.cls] = { sec, time: r.best, num: r.num, drivers: r.drivers, car: r.car, evId: ev.id, round: ev.round };
-    });
-  });
-  const tracks = Object.values(byTrack);
-
+function Records({ data, openDriver }) {
+  const tracks = data.records || [];
   return (
     <div className="aes-page">
-      <div className="aes-page-head"><h1>Track records</h1><p>Fastest race lap set at each circuit, by class</p></div>
+      <div className="aes-page-head"><h1>Track records</h1><p>Fastest race lap ever set at each circuit, by class — across all seasons</p></div>
       {tracks.length === 0 ? (
-        <div className="aes-empty">No lap times recorded yet. Import results, or add best-lap times in an event's results table, and records will appear here.</div>
+        <div className="aes-empty">No lap times recorded yet. Add best-lap times in an event's results, and records will appear here.</div>
       ) : (
         <div className="aes-rec-grid">
           {tracks.map((t) => (
@@ -2109,16 +2098,16 @@ function Records({ data, openDriver, openEvent }) {
               <div className="aes-rec-rows">
                 {data.classes.filter((c) => t.perClass[c.id]).map((c) => {
                   const rec = t.perClass[c.id];
-                  const match = data.drivers.find((d) => String(d.num) === String(rec.num) && d.cls === c.id);
+                  const did = (rec.driverIds || []).find((id) => data.drivers.some((d) => d.id === id));
                   return (
                     <div className="aes-rec-row" key={c.id}>
                       <span className="aes-cls-pill" style={{ color: c.color, borderColor: c.color }}>{c.name}</span>
                       <span className="aes-rec-time mono">{rec.time}</span>
                       <span className="aes-rec-who">
-                        {match ? <button className="aes-link-driver" onClick={() => openDriver(match.id)}>{rec.drivers}</button> : rec.drivers}
+                        {did ? <button className="aes-link-driver" onClick={() => openDriver(did)}>{rec.drivers}</button> : rec.drivers}
                         {rec.car && <em className="aes-rec-car">{rec.car}</em>}
                       </span>
-                      <button className="aes-rec-rd" onClick={() => openEvent(rec.evId)}>R{rec.round}</button>
+                      <span className="aes-rec-rd static">{rec.season ? rec.season.replace("Season ", "S") : ""}{rec.round ? " · R" + rec.round : ""}</span>
                     </div>
                   );
                 })}
@@ -2239,8 +2228,15 @@ export default function LeagueApp({ initialData }) {
       <header className="aes-nav">
         <button className="aes-brand" onClick={() => { go("dashboard"); setMenuOpen(false); }}>
           <img src={LOGO} alt={data.league.name} className="aes-brand-logo" />
-          <span className="aes-brand-season">{data.league.season}</span>
         </button>
+        {data.seasons && data.seasons.length > 0 ? (
+          <select className="aes-season-sel" value={data.seasonId || ""}
+            onChange={(e) => { if (typeof window !== "undefined") window.location.href = "/?season=" + e.target.value; }}>
+            {data.seasons.map((s) => <option key={s.id} value={s.id}>{s.name}{s.is_current ? " ·" : ""}</option>)}
+          </select>
+        ) : (
+          <span className="aes-brand-season">{data.league.season}</span>
+        )}
         <nav className="aes-nav-tabs">
           {NAV.map(([id, label]) => (
             <button key={id} className={view === id ? "on" : ""} onClick={() => go(id)}>{label}</button>
@@ -2321,6 +2317,10 @@ function Style() {
   letter-spacing:.18em; color:var(--signal); margin-top:3px; }
 .aes-brand-logo{ height:26px; width:auto; display:block; }
 .aes-brand-season{ font-family:var(--mono); font-size:10px; font-weight:500; letter-spacing:.18em; color:var(--signal); border:1px solid var(--line); border-radius:5px; padding:2px 7px; }
+.aes-season-sel{ background:var(--graphite); border:1px solid var(--line); color:var(--signal); font-family:var(--mono);
+  font-size:11px; font-weight:600; letter-spacing:.1em; padding:5px 9px; border-radius:6px; cursor:pointer; }
+.aes-season-sel:hover{ border-color:var(--signal); }
+.aes-rec-rd.static{ background:none; border:none; color:var(--mist); cursor:default; font-family:var(--mono); font-size:11px; }
 .aes-nav-tabs{ display:flex; gap:4px; margin-left:auto; }
 .aes-nav-tabs button{ background:none; border:none; color:var(--mist); font-size:14px; font-weight:600;
   padding:8px 13px; border-radius:7px; letter-spacing:.02em; }
