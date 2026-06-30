@@ -442,7 +442,7 @@ function BroadcastCard({ url }) {
   );
 }
 
-function Dashboard({ data, openEvent, go }) {
+function Dashboard({ data, openEvent, go, openDriver, openTeam }) {
   const next = data.events.find((e) => e.status === "next") || data.events.find((e) => e.status === "upcoming") || data.events[0];
   const raceSession = next?.sessions?.find((s) => s.type === "Race");
   const cd = useCountdown(raceSession?.start || next?.date || new Date().toISOString());
@@ -536,7 +536,7 @@ function Dashboard({ data, openEvent, go }) {
                   <div key={d.id} className="aes-leader-row">
                     <span className="aes-pos mono">{i + 1}</span>
                     <span className="aes-flag">{d.country}</span>
-                    <span className="aes-leader-name">{d.name}<em>{team?.name}</em></span>
+                    <span className="aes-leader-name"><button className="aes-link-driver" onClick={() => openDriver(d.id)}>{d.name}</button><em>{team ? <button className="aes-link-driver" onClick={() => openTeam(team.id)}>{team.name}</button> : null}</em></span>
                     <span className="aes-leader-pts mono">{d.pts}</span>
                   </div>
                 );
@@ -749,7 +749,7 @@ function EventDetail({ data, ev, back, openDriver }) {
 }
 
 /* ============================== Driver profile =========================== */
-function DriverProfile({ data, driver, back, openEvent }) {
+function DriverProfile({ data, driver, back, openEvent, openTeam }) {
   const team = data.teams.find((t) => t.id === driver.teamId);
   const cls = data.classes.find((c) => c.id === driver.cls);
 
@@ -807,7 +807,7 @@ function DriverProfile({ data, driver, back, openEvent }) {
           <h1 className="aes-prof-name">{driver.country ? <span className="aes-flag">{driver.country}</span> : null} {driver.name}</h1>
           <div className="aes-prof-meta">
             {cls && <span className="aes-cls-pill" style={{ color: cls.color, borderColor: cls.color }}>{cls.name}</span>}
-            {team && <span className="aes-prof-team">{team.name}</span>}
+            {team && <button className="aes-prof-team aes-link-driver" onClick={() => openTeam && openTeam(team.id)}>{team.name}</button>}
             {driver.car && <span className="aes-prof-car mono">{driver.car}</span>}
           </div>
         </div>
@@ -903,7 +903,135 @@ function DriverProfile({ data, driver, back, openEvent }) {
 }
 
 /* =============================== Standings ================================ */
-function Standings({ data, openDriver }) {
+function TeamProfile({ data, team, back, openEvent, openDriver }) {
+  const cls = data.classes.find((c) => c.id === team.cls);
+  const drivers = data.drivers.filter((d) => d.teamId === team.id);
+
+  const races = useMemo(() => {
+    const out = [];
+    data.events.forEach((ev) => {
+      if (!ev.results || !ev.results.length) return;
+      const r = ev.results.find((x) => String(x.num) === String(team.number) && x.cls === team.cls);
+      if (r) out.push({ ev, r });
+    });
+    return out.sort((a, b) => a.ev.round - b.ev.round);
+  }, [data, team]);
+
+  const totalPts = races.reduce((a, x) => a + (Number(x.r.points) || 0) + (Number(x.r.adjust) || 0), 0);
+  const finishes = races.map((x) => x.r.clsPos).filter((n) => n != null && n !== "");
+  const bestFinish = finishes.length ? Math.min(...finishes) : null;
+  const avgFinish = finishes.length ? finishes.reduce((a, b) => a + b, 0) / finishes.length : null;
+  const incTotal = races.reduce((a, x) => a + (Number(x.r.inc) || 0), 0);
+  let bestLap = "", bestLapSec = null, wins = 0, podiums = 0, poles = 0, fastLaps = 0, lapsTotal = 0;
+  races.forEach((x) => {
+    const r = x.r, ev = x.ev;
+    const s = lapToSeconds(r.best);
+    if (s != null && (bestLapSec == null || s < bestLapSec)) { bestLapSec = s; bestLap = r.best; }
+    if (r.clsPos === 1) wins++;
+    if (r.clsPos && r.clsPos <= 3) podiums++;
+    lapsTotal += Number(r.laps) || 0;
+    const sameCls = (ev.results || []).filter((y) => y.cls === r.cls);
+    const grids = sameCls.map((y) => Number(y.grid)).filter((n) => !isNaN(n) && n > 0);
+    if (grids.length && Number(r.grid) === Math.min(...grids)) poles++;
+    const secs = sameCls.map((y) => lapToSeconds(y.best)).filter((v) => v != null);
+    if (s != null && secs.length && s === Math.min(...secs)) fastLaps++;
+  });
+
+  const completed = data.events.filter((e) => e.status === "complete").sort((a, b) => a.round - b.round);
+  let cum = 0;
+  const progression = completed.map((e) => {
+    const ms = (e.results || []).filter((r) => String(r.num) === String(team.number) && r.cls === team.cls);
+    cum += ms.reduce((b, r) => b + (Number(r.points) || 0) + (Number(r.adjust) || 0), 0);
+    return { round: "R" + e.round, pts: cum };
+  });
+
+  return (
+    <div className="aes-page">
+      <button className="aes-back" onClick={back}><ArrowLeft size={15} /> Back</button>
+
+      <div className="aes-prof-head">
+        <div className="aes-prof-num mono">{team.number ?? "—"}</div>
+        <div className="aes-prof-id">
+          <h1 className="aes-prof-name">{team.name}</h1>
+          <div className="aes-prof-meta">
+            {cls && <span className="aes-cls-pill" style={{ color: cls.color, borderColor: cls.color }}>{cls.name}</span>}
+            {team.car && <span className="aes-prof-car mono">{team.car}</span>}
+          </div>
+        </div>
+      </div>
+
+      {drivers.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 14px", alignItems: "center", margin: "0 0 18px" }}>
+          <span style={{ fontFamily: "var(--mono)", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--mist)" }}>Drivers</span>
+          {drivers.map((d) => (
+            <button key={d.id} className="aes-link-driver" onClick={() => openDriver && openDriver(d.id)}>
+              {d.country ? <span className="aes-flag">{d.country}</span> : null} {d.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="aes-prof-stats">
+        <div className="aes-stat"><span className="aes-stat-v mono">{totalPts}</span><span className="aes-stat-k">Points</span></div>
+        <div className="aes-stat"><span className="aes-stat-v mono">{wins}</span><span className="aes-stat-k">Wins</span></div>
+        <div className="aes-stat"><span className="aes-stat-v mono">{podiums}</span><span className="aes-stat-k">Podiums</span></div>
+        <div className="aes-stat"><span className="aes-stat-v mono">{poles}</span><span className="aes-stat-k">Poles</span></div>
+        <div className="aes-stat"><span className="aes-stat-v mono">{fastLaps}</span><span className="aes-stat-k">Fastest laps</span></div>
+        <div className="aes-stat"><span className="aes-stat-v mono">{bestFinish ? "P" + bestFinish : "—"}</span><span className="aes-stat-k">Best finish</span></div>
+        <div className="aes-stat"><span className="aes-stat-v mono">{avgFinish ? "P" + avgFinish.toFixed(1) : "—"}</span><span className="aes-stat-k">Avg finish</span></div>
+        <div className="aes-stat"><span className="aes-stat-v mono">{races.length}</span><span className="aes-stat-k">Races</span></div>
+        <div className="aes-stat"><span className="aes-stat-v mono">{lapsTotal}</span><span className="aes-stat-k">Laps</span></div>
+        <div className="aes-stat"><span className="aes-stat-v mono">{bestLap || "—"}</span><span className="aes-stat-k">Best lap</span></div>
+        <div className="aes-stat"><span className="aes-stat-v mono">{incTotal}</span><span className="aes-stat-k">Incidents</span></div>
+      </div>
+
+      {races.length > 0 ? (
+        <section className="aes-card">
+          <div className="aes-card-head"><h2><Flag size={16} /> Race-by-race</h2></div>
+          <div className="aes-rt-wrap">
+            <table className="aes-results-table">
+              <thead><tr><th>Rd</th><th>Event</th><th>Class pos</th><th>Best lap</th><th>Inc</th><th>Status</th><th>Pts</th></tr></thead>
+              <tbody>
+                {races.map((x, i) => (
+                  <tr key={i}>
+                    <td className="mono">R{x.ev.round}</td>
+                    <td><button className="aes-link-driver" onClick={() => openEvent && openEvent(x.ev.id)}>{x.ev.track.split(" ")[0]}</button></td>
+                    <td className="aes-results-pos">{x.r.clsPos ? "P" + x.r.clsPos : "—"}</td>
+                    <td className="mono dim">{x.r.best || "—"}</td>
+                    <td className="mono dim">{x.r.inc !== "" && x.r.inc != null ? x.r.inc : "—"}</td>
+                    <td className="mono dim">{x.r.status || "—"}</td>
+                    <td className="mono pts">{(Number(x.r.points) || 0) + (Number(x.r.adjust) || 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : (
+        <section className="aes-card"><div style={{ color: "var(--mist)", padding: "8px 2px" }}>No race results yet for this team.</div></section>
+      )}
+
+      {progression.length > 1 && (
+        <section className="aes-card">
+          <div className="aes-card-head"><h2><Trophy size={16} /> Points progression</h2></div>
+          <div style={{ width: "100%", height: 240 }}>
+            <ResponsiveContainer>
+              <LineChart data={progression} margin={{ top: 10, right: 16, bottom: 0, left: -10 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
+                <XAxis dataKey="round" stroke="var(--mist)" fontSize={12} />
+                <YAxis stroke="var(--mist)" fontSize={12} />
+                <Tooltip contentStyle={{ background: "var(--panel)", border: "1px solid var(--line)", borderRadius: 8 }} />
+                <Line type="monotone" dataKey="pts" stroke="var(--signal)" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function Standings({ data, openDriver, openTeam }) {
   const [mode, setMode] = useState("drivers");
   const [clsFilter, setClsFilter] = useState("ALL");
   const completedRounds = data.events.filter((e) => e.status === "complete");
@@ -917,11 +1045,15 @@ function Standings({ data, openDriver }) {
   const teamRows = useMemo(() => {
     const rows = data.teams.map((t) => {
       const ds = data.drivers.filter((d) => d.teamId === t.id);
-      const pts = ds.reduce((a, d) => a + driverPoints(d, data.events), 0);
-      const classes = [...new Set(ds.map((d) => d.cls))];
+      // a team is one car — score its results once (by number+class), not per driver
+      const pts = data.events.reduce((a, ev) => {
+        const ms = (ev.results || []).filter((r) => String(r.num) === String(t.number) && r.cls === t.cls);
+        return a + ms.reduce((b, r) => b + (Number(r.points) || 0) + (Number(r.adjust) || 0), 0);
+      }, 0);
+      const classes = t.cls ? [t.cls] : [...new Set(ds.map((d) => d.cls))];
       return { ...t, pts, drivers: ds.length, classes };
     });
-    return rows.filter((t) => t.drivers > 0).sort((a, b) => b.pts - a.pts);
+    return rows.filter((t) => t.drivers > 0 || t.pts > 0).sort((a, b) => b.pts - a.pts);
   }, [data]);
 
   const chartData = useMemo(() => {
@@ -1014,7 +1146,7 @@ function Standings({ data, openDriver }) {
                     <div className="aes-driver-line"><span className="aes-flag">{d.country}</span> <span className="aes-num-badge mono">{d.num}</span> <button className="aes-link-driver" onClick={() => openDriver && openDriver(d.id)}>{d.name}</button></div>
                     {d.car && <div className="aes-driver-car">{d.car}</div>}
                   </td>
-                  <td className="aes-td-team">{d.team?.name || "—"}</td>
+                  <td className="aes-td-team">{d.team ? <button className="aes-link-driver" onClick={() => openTeam(d.team.id)}>{d.team.name}</button> : "—"}</td>
                   <td className="ctr"><ClassDot cls={d.cls} classes={data.classes} /></td>
                   {completedRounds.map((e) => <td key={e.id} className="ctr mono dim">{roundPoints(d, e) || "–"}</td>)}
                   <td className="ctr mono pts">{d.pts}</td>
@@ -1033,7 +1165,7 @@ function Standings({ data, openDriver }) {
               {teamRows.map((t, i) => (
                 <tr key={t.id}>
                   <td className="num mono">{i + 1}</td>
-                  <td className="aes-td-driver">{t.name}</td>
+                  <td className="aes-td-driver"><button className="aes-link-driver" onClick={() => openTeam(t.id)}>{t.name}</button></td>
                   <td className="ctr">{t.classes.map((c) => <ClassDot key={c} cls={c} classes={data.classes} />)}</td>
                   <td className="ctr mono dim">{t.drivers}</td>
                   <td className="ctr mono pts">{t.pts}</td>
@@ -1075,7 +1207,7 @@ function Standings({ data, openDriver }) {
                   <td className="aes-td-driver">
                     <div className="aes-driver-line"><span className="aes-flag">{d.country}</span> <span className="aes-num-badge mono">{d.num}</span> <button className="aes-link-driver" onClick={() => openDriver && openDriver(d.id)}>{d.name}</button></div>
                   </td>
-                  <td className="aes-td-team">{d.team?.name || "—"}</td>
+                  <td className="aes-td-team">{d.team ? <button className="aes-link-driver" onClick={() => openTeam(d.team.id)}>{d.team.name}</button> : "—"}</td>
                   <td className="ctr"><ClassDot cls={d.cls} classes={data.classes} /></td>
                   <td className="ctr mono dim">{d.races}</td>
                   <td className="ctr mono">{d.inc}</td>
@@ -2072,7 +2204,7 @@ function Records({ data, openDriver }) {
 }
 
 /* ============================ Roster / directory ========================= */
-function Roster({ data, openDriver }) {
+function Roster({ data, openDriver, openTeam }) {
   const entriesFor = (ds) => {
     const map = {};
     ds.forEach((d) => { const k = d.cls + "#" + d.num; (map[k] = map[k] || { num: d.num, cls: d.cls, car: d.car, drivers: [] }).drivers.push(d); });
@@ -2104,7 +2236,7 @@ function Roster({ data, openDriver }) {
       <div className="aes-page-head"><h1>Roster</h1><p>Every team, entry and driver in {data.league.season}</p></div>
       {teamsWithD.map(({ t, ds }) => (
         <section className="aes-card" key={t.id}>
-          <div className="aes-card-head"><h2><Users size={16} /> {t.name}</h2><span className="aes-roster-count">{ds.length} driver{ds.length !== 1 ? "s" : ""}</span></div>
+          <div className="aes-card-head"><h2><Users size={16} /> <button className="aes-link-driver" onClick={() => openTeam && openTeam(t.id)}>{t.name}</button></h2><span className="aes-roster-count">{ds.length} driver{ds.length !== 1 ? "s" : ""}</span></div>
           <div className="aes-entry-list">{entriesFor(ds).map((e) => <Entry key={e.cls + e.num} e={e} />)}</div>
         </section>
       ))}
@@ -2152,11 +2284,13 @@ export default function LeagueApp({ initialData }) {
   const [view, setView] = useState("dashboard");
   const [eventId, setEventId] = useState(null);
   const [driverId, setDriverId] = useState(null);
+  const [teamId, setTeamId] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
   const scroll = () => { if (typeof window !== "undefined") window.scrollTo(0, 0); };
   const openEvent = (id) => { setEventId(id); setView("event"); scroll(); };
   const openDriver = (id) => { setDriverId(id); setView("driver"); scroll(); };
+  const openTeam = (id) => { setTeamId(id); setView("team"); scroll(); };
   const go = (v) => { setView(v); setEventId(null); scroll(); };
 
   if (!data) {
@@ -2170,6 +2304,7 @@ export default function LeagueApp({ initialData }) {
 
   const currentEvent = data.events.find((e) => e.id === eventId);
   const currentDriver = data.drivers.find((d) => d.id === driverId);
+  const currentTeam = data.teams.find((t) => t.id === teamId);
 
   const NAV = [["dashboard", "Dashboard"], ["schedule", "Schedule"], ["results", "Results"], ["standings", "Championship"], ["records", "Records"], ["roster", "Roster"], ["info", "Info"]];
 
@@ -2209,14 +2344,15 @@ export default function LeagueApp({ initialData }) {
       </header>
 
       <main>
-        {view === "dashboard" && <Dashboard data={data} openEvent={openEvent} go={go} />}
+        {view === "dashboard" && <Dashboard data={data} openEvent={openEvent} go={go} openDriver={openDriver} openTeam={openTeam} />}
         {view === "schedule" && <Schedule data={data} openEvent={openEvent} />}
         {view === "results" && <ResultsArchive data={data} openEvent={openEvent} />}
-        {view === "event" && currentEvent && <EventDetail data={data} ev={currentEvent} back={() => go("schedule")} openDriver={openDriver} />}
-        {view === "standings" && <Standings data={data} openDriver={openDriver} />}
+        {view === "event" && currentEvent && <EventDetail data={data} ev={currentEvent} back={() => go("schedule")} openDriver={openDriver} openTeam={openTeam} />}
+        {view === "standings" && <Standings data={data} openDriver={openDriver} openTeam={openTeam} />}
         {view === "records" && <Records data={data} openDriver={openDriver} openEvent={openEvent} />}
-        {view === "roster" && <Roster data={data} openDriver={openDriver} />}
-        {view === "driver" && currentDriver && <DriverProfile data={data} driver={currentDriver} back={() => go("standings")} openEvent={openEvent} />}
+        {view === "roster" && <Roster data={data} openDriver={openDriver} openTeam={openTeam} />}
+        {view === "driver" && currentDriver && <DriverProfile data={data} driver={currentDriver} back={() => go("standings")} openEvent={openEvent} openTeam={openTeam} />}
+        {view === "team" && currentTeam && <TeamProfile data={data} team={currentTeam} back={() => go("standings")} openEvent={openEvent} openDriver={openDriver} />}
         {view === "info" && <Info data={data} />}
       </main>
 
