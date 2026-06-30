@@ -14,6 +14,18 @@ const Field = ({ label, children }) => (<label className="aes-field"><span>{labe
 const lapSec = (t) => { if (!t) return null; const m = String(t).trim().match(/^(\d+):(\d+(?:\.\d+)?)$/); if (m) return +m[1] * 60 + parseFloat(m[2]); const n = parseFloat(t); return isNaN(n) ? null : n; };
 const pointsForPos = (table, pos) => (pos >= 1 && pos <= (table || []).length ? Number(table[pos - 1]) || 0 : 0);
 
+/* points systems from real series — applied to a season, used to auto-score results */
+const POINTS_PRESETS = {
+  "F1 (2010–present)": [25, 18, 15, 12, 10, 8, 6, 4, 2, 1],
+  "IMSA WeatherTech": [35, 32, 30, 28, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5],
+  "WEC / Le Mans": [25, 18, 15, 12, 10, 8, 6, 4, 2, 1],
+  "IndyCar": [50, 40, 35, 32, 30, 28, 26, 24, 22, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5],
+  "NASCAR Cup (stage-less)": [40, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
+  "MotoGP": [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
+  "Formula E": [25, 18, 15, 12, 10, 8, 6, 4, 2, 1],
+  "Simple 10-8-6-5-4-3-2-1": [10, 8, 6, 5, 4, 3, 2, 1],
+};
+
 /* --------------------------- load everything ----------------------------- */
 async function loadAdminData(sb, seasonId) {
   const { data: settings } = await sb.from("league_settings").select("*").eq("id", 1).maybeSingle();
@@ -22,63 +34,60 @@ async function loadAdminData(sb, seasonId) {
   let sid = seasonId;
   if (!sid) sid = settings?.current_season_id || slist.find((s) => s.is_current)?.id || slist[0]?.id || "";
 
-  const [classes, teams, tracks, drivers, entries, entryDrivers, events, sessions, weather, results] = await Promise.all([
+  const [classes, teams, tracks, drivers, events, sessions, weather, results] = await Promise.all([
     sb.from("classes").select("*").order("sort"),
     sb.from("teams").select("*").order("name"),
     sb.from("tracks").select("*").order("name"),
     sb.from("drivers").select("*").order("name"),
-    sb.from("entries").select("*").eq("season_id", sid),
-    sb.from("entry_drivers").select("*"),
     sb.from("events").select("*").eq("season_id", sid).order("round"),
     sb.from("sessions").select("*").order("sort"),
     sb.from("weather").select("*").order("sort"),
     sb.from("results").select("*"),
   ].map((p) => p.then((r) => r.data || [])));
 
-  const lineupByEntry = {};
-  entryDrivers.forEach((ed) => { (lineupByEntry[ed.entry_id] = lineupByEntry[ed.entry_id] || []).push(ed.driver_id); });
-  const driverById = Object.fromEntries(drivers.map((d) => [d.id, d]));
-  const entryById = Object.fromEntries(entries.map((e) => [e.id, e]));
+  const teamById = Object.fromEntries(teams.map((t) => [t.id, t]));
+  const teamByKey = {};
+  teams.forEach((t) => { if (t.number != null && t.class_id) teamByKey[`${t.class_id}#${t.number}`] = t; });
+  const teamOf = (r) => (r.team_id ? teamById[r.team_id] : teamByKey[`${r.class_id}#${r.number}`]) || null;
+  const driversByTeam = {};
+  drivers.forEach((d) => { if (d.team_id) (driversByTeam[d.team_id] = driversByTeam[d.team_id] || []).push(d); });
+  const teamDriverNames = (id) => (driversByTeam[id] || []).map((d) => d.name).filter(Boolean).join(" / ");
 
   const byEvent = (arr) => { const m = {}; arr.forEach((r) => (m[r.event_id] = m[r.event_id] || []).push(r)); return m; };
   const sBy = byEvent(sessions), wBy = byEvent(weather), rBy = byEvent(results);
 
   const shapedEvents = events.map((ev) => ({
-    id: ev.id, round: ev.round, track_id: ev.track_id, date: ev.date || "",
+    id: ev.id, round: ev.round, track_id: ev.track_id, season_id: ev.season_id, date: ev.date || "",
     status: ev.status || "upcoming", durationH: ev.duration_h ?? "", simStartHour: ev.sim_start_hour ?? "",
     timeMult: ev.time_mult ?? 1, pointsMult: ev.points_mult ?? 1, minDrivers: ev.min_drivers ?? "",
     maxDrivers: ev.max_drivers ?? "", notes: ev.notes || "",
     sessions: (sBy[ev.id] || []).map((s) => ({ id: s.id, type: s.type || "", start: s.start || "", durMin: s.dur_min ?? "", sort: s.sort ?? 0 })),
     weather: (wBy[ev.id] || []).map((w) => ({ id: w.id, atHour: w.at_hour ?? "", air: w.air_f ?? "", sky: w.sky || "", precip: w.precip ?? "", wind: w.wind_mph ?? "", humidity: w.humidity ?? "", sort: w.sort ?? 0 })),
     results: (rBy[ev.id] || []).map((r) => {
-      const e = r.entry_id ? entryById[r.entry_id] : null;
-      const names = e ? (lineupByEntry[e.id] || []).map((id) => driverById[id]?.name).filter(Boolean).join(" / ") : "";
-      return { id: r.id, entry_id: r.entry_id, cls: r.class_id || (e && e.class_id) || "", num: r.number ?? (e ? e.number : ""), drivers: names || r.drivers_text || "", car: (e && e.car) || "", pos: r.pos ?? "", clsPos: r.cls_pos ?? "", grid: r.grid ?? "", laps: r.laps ?? "", best: r.best_lap || "", inc: r.inc ?? "", status: r.status || "", points: r.points ?? "", adjust: r.adjust ?? "" };
+      const t = teamOf(r);
+      return { id: r.id, team_id: r.team_id, cls: r.class_id || (t && t.class_id) || "", num: r.number ?? (t ? t.number : ""), drivers: (t && teamDriverNames(t.id)) || r.drivers_text || "", car: (t && t.car) || "", pos: r.pos ?? "", clsPos: r.cls_pos ?? "", grid: r.grid ?? "", laps: r.laps ?? "", best: r.best_lap || "", inc: r.inc ?? "", status: r.status || "", points: r.points ?? "", adjust: r.adjust ?? "" };
     }).sort((a, b) => (+a.pos || 999) - (+b.pos || 999)),
   }));
 
-  // drivers in this season (person + their first entry here)
-  const firstEntryOf = {};
-  entries.forEach((e) => { (lineupByEntry[e.id] || []).forEach((did) => { if (!firstEntryOf[did]) firstEntryOf[did] = e; }); });
-  const seasonDrivers = drivers.filter((d) => firstEntryOf[d.id]).map((d) => {
-    const e = firstEntryOf[d.id];
-    return { id: d.id, name: d.name, country: d.country || "", custId: d.iracing_custid || "", entryId: e.id, num: e.number ?? "", cls: e.class_id || "", car: e.car || "", teamId: e.team_id || null };
-  });
-  // season points per driver (from results of their entries)
+  // season points per driver, via their team's results in this season
   const ptsByDriver = {};
   shapedEvents.forEach((ev) => ev.results.forEach((r) => {
-    if (!r.entry_id) return;
-    (lineupByEntry[r.entry_id] || []).forEach((did) => { ptsByDriver[did] = (ptsByDriver[did] || 0) + (Number(r.points) || 0) + (Number(r.adjust) || 0); });
+    if (!r.team_id) return;
+    (driversByTeam[r.team_id] || []).forEach((d) => { ptsByDriver[d.id] = (ptsByDriver[d.id] || 0) + (Number(r.points) || 0) + (Number(r.adjust) || 0); });
   }));
-  seasonDrivers.forEach((d) => { d.pts = ptsByDriver[d.id] || 0; });
+
+  const driverRows = drivers.map((d) => {
+    const t = d.team_id ? teamById[d.team_id] : null;
+    return { id: d.id, name: d.name, country: d.country || "", custId: d.iracing_custid || "", teamId: d.team_id || null, num: t ? (t.number ?? "") : "", cls: t ? (t.class_id || "") : "", car: t ? (t.car || "") : "", pts: ptsByDriver[d.id] || 0 };
+  });
 
   const trackById = Object.fromEntries(tracks.map((t) => [t.id, t]));
   shapedEvents.forEach((ev) => { ev.track = trackById[ev.track_id]?.name || "New event"; });
 
   return {
     settings: settings || { id: 1 }, seasons: slist, seasonId: sid,
-    classes, teams, tracks, drivers, entries, lineupByEntry,
-    events: shapedEvents, seasonDrivers,
+    classes, teams, tracks, drivers, driverRows,
+    events: shapedEvents,
   };
 }
 
@@ -140,26 +149,27 @@ function ImportDrop({ supabase, eventId, seasonId, autoAdd, onDone }) {
 /* ---------------------------- results editor ----------------------------- */
 function ResultsBlock({ supabase, d, ev, reload }) {
   const rows = ev.results;
-  const seasonEntries = d.entries;
+  const teams = d.teams;
   const classes = d.classes;
   const [msg, setMsg] = useState("");
-  const entryLabel = (e) => `#${e.number} ${e.class_id}${e.car ? " — " + e.car : ""}`;
+  const teamLabel = (t) => `#${t.number ?? "?"} ${t.class_id || ""}${t.car ? " — " + t.car : ""} · ${t.name}`;
 
   const num = (v) => (v === "" || v == null ? null : Number(v));
   const saveRow = async (r) => {
-    if (!r.cls || r.num === "" || r.num == null) { setMsg("Pick a car first."); return; }
-    const payload = { event_id: ev.id, entry_id: r.entry_id || null, class_id: r.cls, number: String(r.num), pos: num(r.pos), cls_pos: num(r.clsPos), grid: num(r.grid), laps: num(r.laps), best_lap: r.best || "", inc: num(r.inc), status: r.status || "", points: num(r.points) || 0, adjust: num(r.adjust) || 0 };
+    if (!r.cls || r.num === "" || r.num == null) { setMsg("Pick a team first."); return; }
+    const payload = { event_id: ev.id, team_id: r.team_id || null, class_id: r.cls, number: String(r.num), pos: num(r.pos), cls_pos: num(r.clsPos), grid: num(r.grid), laps: num(r.laps), best_lap: r.best || "", inc: num(r.inc), status: r.status || "", points: num(r.points) || 0, adjust: num(r.adjust) || 0 };
     const q = r.id ? supabase.from("results").update(payload).eq("id", r.id) : supabase.from("results").insert(payload);
     const { error } = await q; if (error) setMsg("Save error: " + error.message); else { setMsg(""); reload(); }
   };
   const addRow = async () => {
-    const { error } = await supabase.from("results").insert({ event_id: ev.id, class_id: classes[0]?.id || "GTP", number: "0", pos: rows.length + 1, status: "Running", points: 0, adjust: 0 });
+    const t0 = teams[0];
+    const { error } = await supabase.from("results").insert({ event_id: ev.id, team_id: t0?.id || null, class_id: t0?.class_id || classes[0]?.id || "GTP", number: t0?.number || "0", pos: rows.length + 1, status: "Running", points: 0, adjust: 0 });
     if (error) setMsg("Add error: " + error.message); else reload();
   };
   const delRow = async (r) => { if (r.id) { await supabase.from("results").delete().eq("id", r.id); reload(); } };
-  const pickEntry = async (r, entryId) => {
-    const e = seasonEntries.find((x) => x.id === entryId);
-    await supabase.from("results").update({ entry_id: entryId || null, class_id: e?.class_id || r.cls, number: e ? String(e.number) : r.num }).eq("id", r.id);
+  const pickTeam = async (r, teamId) => {
+    const t = teams.find((x) => x.id === teamId);
+    await supabase.from("results").update({ team_id: teamId || null, class_id: t?.class_id || r.cls, number: t ? String(t.number) : r.num }).eq("id", r.id);
     reload();
   };
   const setCell = async (r, patch) => { await supabase.from("results").update(patch).eq("id", r.id); };
@@ -174,25 +184,25 @@ function ResultsBlock({ supabase, d, ev, reload }) {
       const pts = Math.round(pointsForPos(table, seen[r.cls]) * mult);
       await supabase.from("results").update({ cls_pos: seen[r.cls], points: pts }).eq("id", r.id);
     }
-    setMsg("Points auto-filled."); reload();
+    setMsg("Points auto-filled from the season's points system."); reload();
   };
   const apply = async () => { await supabase.from("events").update({ status: "complete" }).eq("id", ev.id); setMsg("Applied — round marked Final, standings updated."); reload(); };
 
   return (
     <div className="aes-edit-sub">
-      <div className="aes-edit-sub-head"><b>Results &amp; points</b><button className="aes-btn ghost xs" onClick={addRow}><Plus size={12} /> Add car</button></div>
+      <div className="aes-edit-sub-head"><b>Results &amp; points</b><button className="aes-btn ghost xs" onClick={addRow}><Plus size={12} /> Add team</button></div>
       {msg && <div className="aes-import-note" style={{ color: "var(--signal)" }}>{msg}</div>}
       {rows.length === 0 ? (
-        <div className="aes-import-note">No results yet. Drop a PDF above, or add cars by hand.</div>
+        <div className="aes-import-note">No results yet. Drop a PDF above, or add teams by hand.</div>
       ) : (
         <>
           <div className="aes-res-scroll"><div className="aes-res-grid">
-            <div className="aes-res-head"><span>Car</span><span>Pos</span><span>Cls</span><span>Grid</span><span>Laps</span><span>Best lap</span><span>Inc</span><span>Status</span><span>Pts</span><span>Adj</span><span /></div>
+            <div className="aes-res-head"><span>Team / car</span><span>Pos</span><span>Cls</span><span>Grid</span><span>Laps</span><span>Best lap</span><span>Inc</span><span>Status</span><span>Pts</span><span>Adj</span><span /></div>
             {rows.map((r) => (
               <div key={r.id} className="aes-res-row" style={{ gridTemplateColumns: "1.6fr 56px 60px 56px 60px 96px 50px 96px 64px 56px 32px" }}>
-                <select className="aes-input" value={r.entry_id || ""} onChange={(e) => pickEntry(r, e.target.value)}>
-                  <option value="">{r.num ? `#${r.num} ${r.cls}` : "— pick car —"}</option>
-                  {seasonEntries.map((e) => <option key={e.id} value={e.id}>{entryLabel(e)}</option>)}
+                <select className="aes-input" value={r.team_id || ""} onChange={(e) => pickTeam(r, e.target.value)}>
+                  <option value="">{r.num ? `#${r.num} ${r.cls}` : "— pick team —"}</option>
+                  {teams.map((t) => <option key={t.id} value={t.id}>{teamLabel(t)}</option>)}
                 </select>
                 <NumInput defaultValue={r.pos} onBlur={(e) => setCell(r, { pos: num(e.target.value) })} />
                 <NumInput defaultValue={r.clsPos} onBlur={(e) => setCell(r, { cls_pos: num(e.target.value) })} />
@@ -211,7 +221,7 @@ function ResultsBlock({ supabase, d, ev, reload }) {
             <button className="aes-btn ghost sm" onClick={autofill}><Gauge size={14} /> Auto-fill points</button>
             <button className="aes-btn primary sm" onClick={apply}><CheckCircle2 size={14} /> Apply to standings</button>
           </div>
-          <div className="aes-points-hint">Pick each car from the dropdown (number + class come from it, points credit its whole line-up). “Auto-fill points” scores by class position from your points table; “Apply” marks the round Final. Edits save when you click away from a field.</div>
+          <div className="aes-points-hint">Pick each team from the dropdown — its number, class and whole driver line-up come with it. “Auto-fill points” scores by class position from this season's points system; “Apply” marks the round Final. Edits save when you click away from a field.</div>
         </>
       )}
     </div>
@@ -248,6 +258,11 @@ function EventCard({ supabase, d, ev, reload, autoAdd }) {
         <div className="aes-edit-card-body">
           <div className="aes-edit-grid">
             <Field label="Round #"><NumInput defaultValue={ev.round} onBlur={(e) => setField("round", num(e.target.value))} /></Field>
+            <Field label="Season">
+              <select className="aes-input" value={ev.season_id || ""} onChange={(e) => patchEvent({ season_id: e.target.value })}>
+                {d.seasons.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </Field>
             <Field label="Track">
               <select className="aes-input" value={ev.track_id || ""} onChange={(e) => patchEvent({ track_id: e.target.value })}>
                 <option value="">— pick a track —</option>
@@ -313,19 +328,13 @@ function EventCard({ supabase, d, ev, reload, autoAdd }) {
 function DriversTab({ supabase, d, reload }) {
   const [q, setQ] = useState(""); const [cls, setCls] = useState("ALL"); const [msg, setMsg] = useState("");
   const teamName = (id) => d.teams.find((t) => t.id === id)?.name || "";
+  const className = (id) => d.classes.find((c) => c.id === id)?.name || id || "";
   const setDriver = async (row, patch) => { await supabase.from("drivers").update(patch).eq("id", row.id); };
-  const setEntry = async (row, patch) => { if (row.entryId) await supabase.from("entries").update(patch).eq("id", row.entryId); };
-  const addDriver = async () => {
-    const { data: dr, error } = await supabase.from("drivers").insert({ name: "New Driver", country: "" }).select("id").single();
-    if (error) { setMsg(error.message); return; }
-    const { data: en } = await supabase.from("entries").insert({ season_id: d.seasonId, number: "0", class_id: d.classes[0]?.id || "GTP", car: "" }).select("id").single();
-    if (en) await supabase.from("entry_drivers").insert({ entry_id: en.id, driver_id: dr.id });
-    reload();
-  };
-  const delDriver = async (row) => { if (confirm("Remove this driver from the season?")) { if (row.entryId) await supabase.from("entry_drivers").delete().eq("entry_id", row.entryId).eq("driver_id", row.id); reload(); } };
+  const addDriver = async () => { const { error } = await supabase.from("drivers").insert({ name: "New Driver", country: "" }); if (error) setMsg(error.message); else reload(); };
+  const delDriver = async (row) => { if (confirm("Delete this driver?")) { await supabase.from("drivers").delete().eq("id", row.id); reload(); } };
 
   const dq = q.trim().toLowerCase();
-  const shown = d.seasonDrivers.filter((x) => (cls === "ALL" || x.cls === cls) && (!dq || [x.name, x.num, x.car, x.cls, teamName(x.teamId)].some((v) => String(v ?? "").toLowerCase().includes(dq))));
+  const shown = d.driverRows.filter((x) => (cls === "ALL" || x.cls === cls) && (!dq || [x.name, x.num, x.car, x.cls, teamName(x.teamId)].some((v) => String(v ?? "").toLowerCase().includes(dq))));
   return (
     <>
       <div className="aes-admin-addbar">
@@ -338,19 +347,19 @@ function DriversTab({ supabase, d, reload }) {
         <div className="aes-edit-row driver head"><span>#</span><span>Driver name</span><span>Flag</span><span>Team</span><span>Class</span><span>Car</span><span>Pts</span><span /></div>
         {shown.map((x) => (
           <div key={x.id} className="aes-edit-row driver">
-            <NumInput defaultValue={x.num} onBlur={(e) => setEntry(x, { number: e.target.value })} placeholder="#" />
+            <span className="aes-ro mono">{x.num || "—"}</span>
             <TextInput defaultValue={x.name} onBlur={(e) => setDriver(x, { name: e.target.value })} placeholder="Driver name" />
             <TextInput defaultValue={x.country} onBlur={(e) => setDriver(x, { country: e.target.value })} placeholder="🏳️" />
-            <select className="aes-input" defaultValue={x.teamId || ""} onChange={(e) => setEntry(x, { team_id: e.target.value || null })}><option value="">— No team —</option>{d.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
-            <select className="aes-input" defaultValue={x.cls} onChange={(e) => setEntry(x, { class_id: e.target.value })}>{d.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-            <TextInput defaultValue={x.car} onBlur={(e) => setEntry(x, { car: e.target.value })} placeholder="Car" />
+            <select className="aes-input" defaultValue={x.teamId || ""} onChange={(e) => setDriver(x, { team_id: e.target.value || null })}><option value="">— No team —</option>{d.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+            <span className="aes-ro">{x.cls ? className(x.cls) : "—"}</span>
+            <span className="aes-ro mono">{x.car || "—"}</span>
             <span className="aes-edit-total mono">{x.pts}</span>
             <div className="aes-edit-actions"><button className="aes-icon-btn danger" onClick={() => delDriver(x)}><Trash2 size={15} /></button></div>
           </div>
         ))}
         {shown.length === 0 && <div className="aes-filter-empty">No drivers match.</div>}
       </div>
-      <p className="aes-hint">Drivers are shared people — number, class, team &amp; car here belong to their car this season (co-drivers share one car). Points total automatically from results.</p>
+      <p className="aes-hint">A driver's number, class and car come from their <b>team</b> — set those on the Teams tab. Assign a driver to a team with the Team dropdown; co-drivers just share the same team. Points total automatically from results.</p>
     </>
   );
 }
@@ -358,10 +367,14 @@ function DriversTab({ supabase, d, reload }) {
 function TeamsTab({ supabase, d, reload }) {
   const [q, setQ] = useState("");
   const setTeam = async (t, patch) => { await supabase.from("teams").update(patch).eq("id", t.id); };
-  const addTeam = async () => { await supabase.from("teams").insert({ name: "New Team" }); reload(); };
-  const delTeam = async (t) => { if (confirm("Delete this team?")) { await supabase.from("teams").delete().eq("id", t.id); reload(); } };
+  const addTeam = async () => { await supabase.from("teams").insert({ name: "New Team", number: "0", class_id: d.classes[0]?.id || "GTP", car: "" }); reload(); };
+  const delTeam = async (t) => { if (confirm("Delete this team? Its drivers will be unassigned.")) { await supabase.from("teams").delete().eq("id", t.id); reload(); } };
   const tq = q.trim().toLowerCase();
-  const shown = d.teams.filter((t) => !tq || String(t.name || "").toLowerCase().includes(tq));
+  const shown = [...d.teams]
+    .sort((a, b) => String(a.class_id || "").localeCompare(String(b.class_id || "")) || (+a.number || 0) - (+b.number || 0))
+    .filter((t) => !tq || String(t.name || "").toLowerCase().includes(tq));
+  const driverCount = (id) => d.driverRows.filter((x) => x.teamId === id).length;
+  const grid = { gridTemplateColumns: "70px 1.3fr 120px 1.4fr 72px auto" };
   return (
     <>
       <div className="aes-admin-addbar">
@@ -369,19 +382,20 @@ function TeamsTab({ supabase, d, reload }) {
         <div className="aes-filter"><Search size={14} /><input className="aes-filter-input" placeholder="Filter teams…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       </div>
       <div className="aes-edit-list">
-        <div className="aes-edit-row team head"><span>Team name</span><span>Drivers</span><span /></div>
-        {shown.map((t) => {
-          const count = d.seasonDrivers.filter((x) => x.teamId === t.id).length;
-          return (
-            <div key={t.id} className="aes-edit-row team">
-              <TextInput defaultValue={t.name} onBlur={(e) => setTeam(t, { name: e.target.value })} placeholder="Team name" />
-              <span className="aes-edit-meta mono">{count} driver{count !== 1 ? "s" : ""}</span>
-              <div className="aes-edit-actions"><button className="aes-icon-btn danger" onClick={() => delTeam(t)}><Trash2 size={15} /></button></div>
-            </div>
-          );
-        })}
+        <div className="aes-edit-row head" style={grid}><span>Car #</span><span>Team name</span><span>Class</span><span>Car model</span><span>Drivers</span><span /></div>
+        {shown.map((t) => (
+          <div key={t.id} className="aes-edit-row" style={grid}>
+            <TextInput defaultValue={t.number ?? ""} onBlur={(e) => setTeam(t, { number: e.target.value })} placeholder="#" />
+            <TextInput defaultValue={t.name} onBlur={(e) => setTeam(t, { name: e.target.value })} placeholder="Team name" />
+            <select className="aes-input" defaultValue={t.class_id || ""} onChange={(e) => setTeam(t, { class_id: e.target.value || null })}><option value="">— class —</option>{d.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+            <TextInput defaultValue={t.car || ""} onBlur={(e) => setTeam(t, { car: e.target.value })} placeholder="Car model" />
+            <span className="aes-edit-meta mono">{driverCount(t.id)}</span>
+            <div className="aes-edit-actions"><button className="aes-icon-btn danger" onClick={() => delTeam(t)}><Trash2 size={15} /></button></div>
+          </div>
+        ))}
         {shown.length === 0 && <div className="aes-filter-empty">No teams match.</div>}
       </div>
+      <p className="aes-hint">Each team is one car — its number, class and model. Assign drivers to it on the Drivers tab. When you enter results, you pick the team and points credit all of its drivers.</p>
     </>
   );
 }
@@ -414,9 +428,15 @@ function LeagueTab({ supabase, d, reload }) {
 
       {season && (
         <div className="aes-points-edit">
-          <span className="aes-field-label">{season.name} — championship points by finishing position</span>
-          <input className="aes-input mono" defaultValue={(season.points_table || []).join(", ")} onBlur={(e) => setSeason({ points_table: e.target.value.split(",").map((x) => parseInt(x.trim(), 10)).filter((n) => !isNaN(n)) })} />
-          <span className="aes-points-hint">P1 first, comma-separated. Used when a results PDF is imported and by Auto-fill points — each class scores independently, and the round's points multiplier is applied on top.</span>
+          <span className="aes-field-label">{season.name} — points system</span>
+          <select className="aes-input" value={POINTS_PRESETS[season.points_system] ? season.points_system : "Custom"}
+            onChange={(e) => { const k = e.target.value; if (k === "Custom") setSeason({ points_system: "Custom" }); else setSeason({ points_system: k, points_table: POINTS_PRESETS[k] }); }}>
+            {Object.keys(POINTS_PRESETS).map((k) => <option key={k} value={k}>{k}</option>)}
+            <option value="Custom">Custom (edit below)</option>
+          </select>
+          <input className="aes-input mono" key={(season.points_table || []).join(",")} defaultValue={(season.points_table || []).join(", ")}
+            onBlur={(e) => setSeason({ points_table: e.target.value.split(",").map((x) => parseInt(x.trim(), 10)).filter((n) => !isNaN(n)), points_system: "Custom" })} />
+          <span className="aes-points-hint">Pick a real series' points system (P1 → last place) — it fills the table below, and you can still tweak any value (that switches it to Custom). Used by Auto-fill points and PDF import: each class scores independently, and a round's points multiplier applies on top.</span>
         </div>
       )}
 
@@ -630,6 +650,7 @@ textarea.aes-input{ resize:vertical; font-family:var(--body); }
 .aes-edit-actions{ display:flex; gap:6px; justify-content:flex-end; }
 .aes-edit-total{ text-align:center; font-weight:700; color:var(--amber); }
 .aes-edit-meta{ color:var(--mist); font-size:12.5px; }
+.aes-ro{ color:var(--mist); font-size:13px; display:flex; align-items:center; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .aes-icon-btn{ display:grid; place-items:center; background:var(--steel); border:1px solid var(--line); border-radius:7px; width:34px; height:34px; color:var(--mist); cursor:pointer; }
 .aes-icon-btn:hover{ color:var(--chalk); } .aes-icon-btn.danger:hover{ color:var(--signal); border-color:var(--signal); }
 
