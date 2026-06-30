@@ -46,13 +46,14 @@ export async function POST(req) {
     const [{ data: classes }, { data: teams }, { data: season }, { data: event }, { data: allDrivers }] = await Promise.all([
       sb.from("classes").select("id,name").order("sort"),
       sb.from("teams").select("id,name,number,class_id,car"),
-      sb.from("seasons").select("points_table").eq("id", seasonId).maybeSingle(),
+      sb.from("seasons").select("points_table,quali_table").eq("id", seasonId).maybeSingle(),
       sb.from("events").select("id,points_mult").eq("id", eventId).maybeSingle(),
       sb.from("drivers").select("id,name,iracing_custid,team_id"),
     ]);
     const classIds = (classes || []).map((c) => c.id);
     if (classIds.length === 0) return json({ error: "No classes defined yet." }, 400);
     const pointsTable = Array.isArray(season?.points_table) ? season.points_table : [];
+    const qualiTable = Array.isArray(season?.quali_table) ? season.quali_table : [];
     const pointsMult = Number(event?.points_mult) || 1;
 
     const teamByKey = {};
@@ -139,13 +140,16 @@ export async function POST(req) {
       let points = 0;
       if (cp && cp >= 1 && cp <= pointsTable.length) points = Number(pointsTable[cp - 1]) || 0;
       points = Math.round(points * pointsMult);
+      const qp = num(it.quali_pos);
+      let qualiPoints = 0;
+      if (qp && qp >= 1 && qp <= qualiTable.length) qualiPoints = Number(qualiTable[qp - 1]) || 0;
 
       const payload = {
         event_id: eventId, team_id: team ? team.id : null, class_id: cls, number,
         drivers_text: driverObjs(it.drivers).map((x) => x.name).join(" / "),
         pos: num(it.pos), cls_pos: cp, grid: num(it.grid), inc: num(it.inc), laps: num(it.laps),
         total_time: it.total_time || "", gap: it.gap || "", best_lap: it.best_lap || "", status: it.status || "",
-        points, adjust: 0,
+        points, quali_pos: qp, quali_points: qualiPoints, adjust: 0,
       };
       const existingId = existById[`${cls}#${number}`];
       const q = existingId ? sb.from("results").update(payload).eq("id", existingId) : sb.from("results").insert(payload);

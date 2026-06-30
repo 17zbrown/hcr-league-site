@@ -14,16 +14,20 @@ const Field = ({ label, children }) => (<label className="aes-field"><span>{labe
 const lapSec = (t) => { if (!t) return null; const m = String(t).trim().match(/^(\d+):(\d+(?:\.\d+)?)$/); if (m) return +m[1] * 60 + parseFloat(m[2]); const n = parseFloat(t); return isNaN(n) ? null : n; };
 const pointsForPos = (table, pos) => (pos >= 1 && pos <= (table || []).length ? Number(table[pos - 1]) || 0 : 0);
 
-/* points systems from real series — applied to a season, used to auto-score results */
+/* points systems from real series — applied to a season, used to auto-score results.
+   race = points by finishing position; quali = points by qualifying position (empty = none). */
 const POINTS_PRESETS = {
-  "F1 (2010–present)": [25, 18, 15, 12, 10, 8, 6, 4, 2, 1],
-  "IMSA WeatherTech": [35, 32, 30, 28, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5],
-  "WEC / Le Mans": [25, 18, 15, 12, 10, 8, 6, 4, 2, 1],
-  "IndyCar": [50, 40, 35, 32, 30, 28, 26, 24, 22, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5],
-  "NASCAR Cup (stage-less)": [40, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-  "MotoGP": [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-  "Formula E": [25, 18, 15, 12, 10, 8, 6, 4, 2, 1],
-  "Simple 10-8-6-5-4-3-2-1": [10, 8, 6, 5, 4, 3, 2, 1],
+  "F1 (2010–present)": { race: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1], quali: [] },
+  "IMSA WeatherTech": {
+    race: [350, 320, 300, 280, 260, 250, 240, 230, 220, 210, 200, 190, 180, 170, 160, 150, 140, 130, 120, 110, 100, 90, 80, 70, 60, 50, 40, 30, 20, 10],
+    quali: [35, 32, 30, 28, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
+  },
+  "WEC / Le Mans": { race: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1], quali: [] },
+  "IndyCar": { race: [50, 40, 35, 32, 30, 28, 26, 24, 22, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5], quali: [] },
+  "NASCAR Cup (stage-less)": { race: [40, 35, 34, 33, 32, 31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1], quali: [] },
+  "MotoGP": { race: [25, 20, 16, 13, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1], quali: [] },
+  "Formula E": { race: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1], quali: [] },
+  "Simple 10-8-6-5-4-3-2-1": { race: [10, 8, 6, 5, 4, 3, 2, 1], quali: [] },
 };
 
 /* --------------------------- load everything ----------------------------- */
@@ -65,7 +69,7 @@ async function loadAdminData(sb, seasonId) {
     weather: (wBy[ev.id] || []).map((w) => ({ id: w.id, atHour: w.at_hour ?? "", air: w.air_f ?? "", sky: w.sky || "", precip: w.precip ?? "", wind: w.wind_mph ?? "", humidity: w.humidity ?? "", sort: w.sort ?? 0 })),
     results: (rBy[ev.id] || []).map((r) => {
       const t = teamOf(r);
-      return { id: r.id, team_id: r.team_id, cls: r.class_id || (t && t.class_id) || "", num: r.number ?? (t ? t.number : ""), drivers: (t && teamDriverNames(t.id)) || r.drivers_text || "", car: (t && t.car) || "", pos: r.pos ?? "", clsPos: r.cls_pos ?? "", grid: r.grid ?? "", laps: r.laps ?? "", best: r.best_lap || "", inc: r.inc ?? "", status: r.status || "", points: r.points ?? "", adjust: r.adjust ?? "" };
+      return { id: r.id, team_id: r.team_id, cls: r.class_id || (t && t.class_id) || "", num: r.number ?? (t ? t.number : ""), drivers: (t && teamDriverNames(t.id)) || r.drivers_text || "", car: (t && t.car) || "", pos: r.pos ?? "", clsPos: r.cls_pos ?? "", grid: r.grid ?? "", laps: r.laps ?? "", best: r.best_lap || "", inc: r.inc ?? "", status: r.status || "", points: r.points ?? "", adjust: r.adjust ?? "", qpos: r.quali_pos ?? "", qpts: Number(r.quali_points) || 0 };
     }).sort((a, b) => (+a.pos || 999) - (+b.pos || 999)),
   }));
 
@@ -73,7 +77,7 @@ async function loadAdminData(sb, seasonId) {
   const ptsByDriver = {};
   shapedEvents.forEach((ev) => ev.results.forEach((r) => {
     if (!r.team_id) return;
-    (driversByTeam[r.team_id] || []).forEach((d) => { ptsByDriver[d.id] = (ptsByDriver[d.id] || 0) + (Number(r.points) || 0) + (Number(r.adjust) || 0); });
+    (driversByTeam[r.team_id] || []).forEach((d) => { ptsByDriver[d.id] = (ptsByDriver[d.id] || 0) + (Number(r.points) || 0) + (Number(r.qpts) || 0) + (Number(r.adjust) || 0); });
   }));
 
   const driverRows = drivers.map((d) => {
@@ -175,16 +179,20 @@ function ResultsBlock({ supabase, d, ev, reload }) {
   const setCell = async (r, patch) => { await supabase.from("results").update(patch).eq("id", r.id); };
 
   const autofill = async () => {
-    const table = d.seasons.find((s) => s.id === d.seasonId)?.points_table || [];
+    const season = d.seasons.find((s) => s.id === d.seasonId);
+    const table = season?.points_table || [];
+    const qualiTable = season?.quali_table || [];
     const mult = Number(ev.pointsMult || 1);
     const order = rows.map((r) => ({ r, pos: +r.pos || 999 })).sort((a, b) => a.pos - b.pos);
     const seen = {};
     for (const { r } of order) {
       seen[r.cls] = (seen[r.cls] || 0) + 1;
       const pts = Math.round(pointsForPos(table, seen[r.cls]) * mult);
-      await supabase.from("results").update({ cls_pos: seen[r.cls], points: pts }).eq("id", r.id);
+      const qpos = +r.qpos || 0;
+      const qpts = qpos ? pointsForPos(qualiTable, qpos) : 0;
+      await supabase.from("results").update({ cls_pos: seen[r.cls], points: pts, quali_points: qpts }).eq("id", r.id);
     }
-    setMsg("Points auto-filled from the season's points system."); reload();
+    setMsg(qualiTable.length ? "Race + qualifying points auto-filled from the season's system." : "Points auto-filled from the season's points system."); reload();
   };
   const apply = async () => { await supabase.from("events").update({ status: "complete" }).eq("id", ev.id); setMsg("Applied — round marked Final, standings updated."); reload(); };
 
@@ -197,21 +205,23 @@ function ResultsBlock({ supabase, d, ev, reload }) {
       ) : (
         <>
           <div className="aes-res-scroll"><div className="aes-res-grid">
-            <div className="aes-res-head"><span>Team / car</span><span>Pos</span><span>Cls</span><span>Grid</span><span>Laps</span><span>Best lap</span><span>Inc</span><span>Status</span><span>Pts</span><span>Adj</span><span /></div>
+            <div className="aes-res-head"><span>Team / car</span><span>Pos</span><span>Cls</span><span>Q</span><span>Grid</span><span>Laps</span><span>Best lap</span><span>Inc</span><span>Status</span><span>Pts</span><span>Q-pts</span><span>Adj</span><span /></div>
             {rows.map((r) => (
-              <div key={r.id} className="aes-res-row" style={{ gridTemplateColumns: "1.6fr 56px 60px 56px 60px 96px 50px 96px 64px 56px 32px" }}>
+              <div key={r.id} className="aes-res-row" style={{ gridTemplateColumns: "1.6fr 56px 60px 50px 56px 60px 96px 50px 96px 64px 60px 56px 32px" }}>
                 <select className="aes-input" value={r.team_id || ""} onChange={(e) => pickTeam(r, e.target.value)}>
                   <option value="">{r.num ? `#${r.num} ${r.cls}` : "— pick team —"}</option>
                   {teams.map((t) => <option key={t.id} value={t.id}>{teamLabel(t)}</option>)}
                 </select>
                 <NumInput defaultValue={r.pos} onBlur={(e) => setCell(r, { pos: num(e.target.value) })} />
                 <NumInput defaultValue={r.clsPos} onBlur={(e) => setCell(r, { cls_pos: num(e.target.value) })} />
+                <NumInput defaultValue={r.qpos} title="Qualifying position in class" onBlur={(e) => setCell(r, { quali_pos: num(e.target.value) })} placeholder="Q" />
                 <NumInput defaultValue={r.grid} onBlur={(e) => setCell(r, { grid: num(e.target.value) })} />
                 <NumInput defaultValue={r.laps} onBlur={(e) => setCell(r, { laps: num(e.target.value) })} />
                 <TextInput defaultValue={r.best} onBlur={(e) => setCell(r, { best_lap: e.target.value })} placeholder="1:35.4" />
                 <NumInput defaultValue={r.inc} onBlur={(e) => setCell(r, { inc: num(e.target.value) })} />
                 <TextInput defaultValue={r.status} onBlur={(e) => setCell(r, { status: e.target.value })} placeholder="Running" />
-                <NumInput defaultValue={r.points} onBlur={(e) => setCell(r, { points: num(e.target.value) || 0 })} />
+                <NumInput defaultValue={r.points} title="Race points" onBlur={(e) => setCell(r, { points: num(e.target.value) || 0 })} />
+                <NumInput defaultValue={r.qpts} title="Qualifying points" onBlur={(e) => setCell(r, { quali_points: num(e.target.value) || 0 })} />
                 <NumInput defaultValue={r.adjust} title="Stewards' adjustment (± points)" onBlur={(e) => setCell(r, { adjust: num(e.target.value) || 0 })} />
                 <button className="aes-icon-btn danger" onClick={() => delRow(r)}><Trash2 size={14} /></button>
               </div>
@@ -221,7 +231,7 @@ function ResultsBlock({ supabase, d, ev, reload }) {
             <button className="aes-btn ghost sm" onClick={autofill}><Gauge size={14} /> Auto-fill points</button>
             <button className="aes-btn primary sm" onClick={apply}><CheckCircle2 size={14} /> Apply to standings</button>
           </div>
-          <div className="aes-points-hint">Pick each team from the dropdown — its number, class and whole driver line-up come with it. “Auto-fill points” scores by class position from this season's points system; “Apply” marks the round Final. Edits save when you click away from a field.</div>
+          <div className="aes-points-hint">Pick each team from the dropdown — its number, class and whole driver line-up come with it. Enter the qualifying position in class under <b>Q</b> (only used if this season's system awards qualifying points, e.g. IMSA). “Auto-fill points” scores race points by finish and qualifying points by Q-position from this season's system; a car's total = race + qualifying + adjustment. “Apply” marks the round Final. Edits save when you click away from a field.</div>
         </>
       )}
     </div>
@@ -430,13 +440,17 @@ function LeagueTab({ supabase, d, reload }) {
         <div className="aes-points-edit">
           <span className="aes-field-label">{season.name} — points system</span>
           <select className="aes-input" value={POINTS_PRESETS[season.points_system] ? season.points_system : "Custom"}
-            onChange={(e) => { const k = e.target.value; if (k === "Custom") setSeason({ points_system: "Custom" }); else setSeason({ points_system: k, points_table: POINTS_PRESETS[k] }); }}>
+            onChange={(e) => { const k = e.target.value; if (k === "Custom") setSeason({ points_system: "Custom" }); else setSeason({ points_system: k, points_table: POINTS_PRESETS[k].race, quali_table: POINTS_PRESETS[k].quali }); }}>
             {Object.keys(POINTS_PRESETS).map((k) => <option key={k} value={k}>{k}</option>)}
             <option value="Custom">Custom (edit below)</option>
           </select>
-          <input className="aes-input mono" key={(season.points_table || []).join(",")} defaultValue={(season.points_table || []).join(", ")}
+          <span className="aes-mini-label">Race points — P1 → last place</span>
+          <input className="aes-input mono" key={"r" + (season.points_table || []).join(",")} defaultValue={(season.points_table || []).join(", ")}
             onBlur={(e) => setSeason({ points_table: e.target.value.split(",").map((x) => parseInt(x.trim(), 10)).filter((n) => !isNaN(n)), points_system: "Custom" })} />
-          <span className="aes-points-hint">Pick a real series' points system (P1 → last place) — it fills the table below, and you can still tweak any value (that switches it to Custom). Used by Auto-fill points and PDF import: each class scores independently, and a round's points multiplier applies on top.</span>
+          <span className="aes-mini-label">Qualifying points — pole → last (leave blank for none)</span>
+          <input className="aes-input mono" key={"q" + (season.quali_table || []).join(",")} defaultValue={(season.quali_table || []).join(", ")}
+            onBlur={(e) => setSeason({ quali_table: e.target.value.split(",").map((x) => parseInt(x.trim(), 10)).filter((n) => !isNaN(n)), points_system: "Custom" })} />
+          <span className="aes-points-hint">Pick a real series' points system — it fills both tables. Race points score by finishing position (× a round's points multiplier); qualifying points score by the Q-position you enter on each result. IMSA awards both (350 to win, 35 for pole); most other series only award race points, so their qualifying table is blank. Tweak any value and it switches to Custom.</span>
         </div>
       )}
 
@@ -672,6 +686,7 @@ textarea.aes-input{ resize:vertical; font-family:var(--body); }
 .aes-res-grid .aes-icon-btn{ justify-self:center; width:30px; height:30px; }
 .aes-points-edit{ margin-top:14px; display:flex; flex-direction:column; gap:6px; }
 .aes-field-label{ font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--mist); }
+.aes-mini-label{ font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:var(--mist); margin-top:6px; }
 .aes-points-hint{ font-size:11.5px; color:var(--mist2); line-height:1.45; }
 @media (max-width:820px){
   .aes-edit-row.driver{ grid-template-columns:1fr 1fr; }
