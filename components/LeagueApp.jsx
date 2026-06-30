@@ -463,6 +463,7 @@ function Dashboard({ data, openEvent, go }) {
   return (
     <div className="aes-page">
       {/* Hero — next race */}
+      {next ? (
       <section className="aes-hero">
         <div className="aes-hero-tag">
           <Flag size={13} /> Next Round · {next.location}
@@ -497,19 +498,27 @@ function Dashboard({ data, openEvent, go }) {
           <DayNightBar ev={next} />
         </div>
       </section>
+      ) : (
+      <section className="aes-hero" style={{ display: "block", textAlign: "center" }}>
+        <div className="aes-hero-tag" style={{ justifyContent: "center" }}><Flag size={13} /> Season setup in progress</div>
+        <h1 className="aes-hero-track" style={{ marginTop: 10 }}>No rounds scheduled yet</h1>
+        <p style={{ color: "var(--mist)", marginTop: 10, maxWidth: 560, marginLeft: "auto", marginRight: "auto" }}>The {data.league.season} calendar is being put together — check back soon for the schedule, broadcast and live timing.</p>
+      </section>
+      )}
 
       <BroadcastCard url={data.league.links && data.league.links.broadcast} />
 
-      {/* Weather preview */}
+      {next && (
       <section className="aes-card">
         <div className="aes-card-head">
           <h2><CloudSun size={16} /> Forecast — {next.track}</h2>
           <button className="aes-link" onClick={() => openEvent(next.id)}>Full event <ChevronRight size={13} /></button>
         </div>
         <div className="aes-wx-strip">
-          {next.weather.map((w, i) => <WeatherCell key={i} w={w} />)}
+          {(next.weather || []).map((w, i) => <WeatherCell key={i} w={w} />)}
         </div>
       </section>
+      )}
 
       {/* Championship leaders */}
       <section className="aes-card">
@@ -542,10 +551,11 @@ function Dashboard({ data, openEvent, go }) {
         <div className="aes-card">
           <div className="aes-card-head"><h2><Calendar size={16} /> Season progress</h2></div>
           <div className="aes-progress">
-            <div className="aes-progress-bar"><div className="aes-progress-fill" style={{ width: (completed / data.events.length) * 100 + "%" }} /></div>
+            <div className="aes-progress-bar"><div className="aes-progress-fill" style={{ width: (data.events.length ? (completed / data.events.length) * 100 : 0) + "%" }} /></div>
             <div className="aes-progress-meta mono">{completed} / {data.events.length} rounds complete</div>
           </div>
           <div className="aes-mini-sched">
+            {data.events.length === 0 && <span className="aes-progress-meta mono" style={{ opacity: .7 }}>Schedule coming soon</span>}
             {data.events.map((e) => (
               <button key={e.id} className={"aes-mini-round " + e.status} onClick={() => openEvent(e.id)}>
                 <span className="mono">R{e.round}</span>
