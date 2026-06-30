@@ -619,7 +619,7 @@ function Schedule({ data, openEvent }) {
 }
 
 /* =============================== Event detail ============================= */
-function EventDetail({ data, ev, back, openDriver }) {
+function EventDetail({ data, ev, back, openDriver, openTeam }) {
   const race = ev.sessions.find((s) => s.type === "Race");
   const cd = useCountdown(race?.start || ev.date);
   const upcoming = ev.status !== "complete";
@@ -705,7 +705,7 @@ function EventDetail({ data, ev, back, openDriver }) {
 
       {ev.results && ev.results.length > 0 && (
         <section className="aes-card">
-          <div className="aes-card-head"><h2><Flag size={16} /> Classified results</h2></div>
+          <div className="aes-card-head"><h2><Flag size={16} /> Race results</h2></div>
           {data.classes.map((c) => {
             const inCls = ev.results.filter((r) => r.cls === c.id).sort((a, b) => a.pos - b.pos);
             if (!inCls.length) return null;
@@ -714,10 +714,11 @@ function EventDetail({ data, ev, back, openDriver }) {
                 <div className="aes-cr-clshead"><span className="aes-cls-pill" style={{ color: c.color, borderColor: c.color }}>{c.name}</span></div>
                 <div className="aes-rt-wrap">
                   <table className="aes-results-table">
-                    <thead><tr><th>Pos</th><th>#</th><th>Driver</th><th>Car</th><th>Grid</th><th>Laps</th><th>Best</th><th>Gap</th><th>Inc</th><th>Status</th><th>Pts</th></tr></thead>
+                    <thead><tr><th>Pos</th><th>#</th><th>Driver</th><th>Team</th><th>Car</th><th>Grid</th><th>Laps</th><th>Best</th><th>Gap</th><th>Inc</th><th>Status</th><th>Pts</th></tr></thead>
                     <tbody>
                       {inCls.map((r, i) => {
                         const match = data.drivers.find((d) => String(d.num) === String(r.num) && d.cls === r.cls);
+                        const team = data.teams.find((t) => String(t.number) === String(r.num) && t.cls === r.cls);
                         return (
                           <tr key={i}>
                             <td className="aes-results-pos">{r.clsPos || i + 1}</td>
@@ -725,6 +726,9 @@ function EventDetail({ data, ev, back, openDriver }) {
                             <td>{match
                               ? <button className="aes-link-driver" onClick={() => openDriver && openDriver(match.id)}>{r.drivers}</button>
                               : r.drivers}</td>
+                            <td>{team
+                              ? <button className="aes-link-driver" onClick={() => openTeam && openTeam(team.id)}>{team.name}</button>
+                              : "—"}</td>
                             <td className="dim aes-rt-car">{r.car || "—"}</td>
                             <td className="mono dim">{r.grid !== "" && r.grid != null ? r.grid : "—"}</td>
                             <td className="mono dim">{r.laps !== "" && r.laps != null ? r.laps : "—"}</td>
