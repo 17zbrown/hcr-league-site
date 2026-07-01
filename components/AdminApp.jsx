@@ -27,6 +27,31 @@ const hhmmToHour = (str) => {
   if (isNaN(h)) return null;
   return h + (Number(m) || 0) / 60;
 };
+/* Schedule date/times are always handled in Eastern (America/New_York), regardless
+   of the admin's own browser timezone. Convert between an ET wall-clock coming from
+   a datetime-local field ("YYYY-MM-DDTHH:MM") and the stored UTC ISO instant. */
+const ET_ZONE = "America/New_York";
+const _etParts = (instant) => Object.fromEntries(
+  new Intl.DateTimeFormat("en-CA", { timeZone: ET_ZONE, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    .formatToParts(instant).filter((x) => x.type !== "literal").map((x) => [x.type, x.value]));
+const etLocalToISO = (local) => {
+  if (!local) return null;
+  const m = String(local).match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return null;
+  const utcGuess = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  const p = _etParts(new Date(utcGuess));
+  const etAsUTC = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  const offset = etAsUTC - utcGuess;         // ET offset at this instant (negative)
+  return new Date(utcGuess - offset).toISOString();
+};
+const isoToETLocal = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso).slice(0, 16);
+  const p = _etParts(d);
+  const hh = p.hour === "24" ? "00" : p.hour;
+  return `${p.year}-${p.month}-${p.day}T${hh}:${p.minute}`;
+};
 
 /* a setting that can be either a pasted link or an uploaded PDF (hosted in Supabase Storage) */
 function LinkOrFile({ label, hint, value, storageKey, supabase, onSave }) {
@@ -186,7 +211,7 @@ async function loadAdminData(sb, seasonId) {
   const sBy = byEvent(sessions), wBy = byEvent(weather), rBy = byEvent(results);
 
   const shapedEvents = events.map((ev) => ({
-    id: ev.id, round: ev.round, track_id: ev.track_id, season_id: ev.season_id, date: ev.date || "",
+    id: ev.id, round: ev.round, name: ev.name || "", track_id: ev.track_id, season_id: ev.season_id, date: ev.date || "",
     status: ev.status || "upcoming", durationH: ev.duration_h ?? "", durationMin: ev.duration_min ?? (ev.duration_h != null ? Math.round(ev.duration_h * 60) : ""), simStartHour: ev.sim_start_hour ?? "",
     timeMult: ev.time_mult ?? 1, pointsMult: ev.points_mult ?? 1, minDrivers: ev.min_drivers ?? "",
     maxDrivers: ev.max_drivers ?? "", notes: ev.notes || "",
@@ -330,7 +355,7 @@ function EventCard({ supabase, d, ev, reload }) {
     <div className="aes-edit-card">
       <div className="aes-edit-card-head" onClick={() => setOpen(!open)}>
         <span className="mono aes-edit-round">R{ev.round}</span>
-        <span className="aes-edit-track">{ev.track}</span>
+        <span className="aes-edit-track">{ev.track}{ev.name ? <span style={{ color: "var(--mist)", fontWeight: 400 }}> · {ev.name}</span> : null}</span>
         <StatusChip s={ev.status} />
         <span className="aes-edit-spacer" />
         <button className="aes-icon-btn danger" onClick={async (e) => { e.stopPropagation(); if (confirm("Delete this round and its results?")) { await supabase.from("results").delete().eq("event_id", ev.id); await supabase.from("sessions").delete().eq("event_id", ev.id); await supabase.from("weather").delete().eq("event_id", ev.id); await supabase.from("events").delete().eq("id", ev.id); reload(); } }}><Trash2 size={15} /></button>
@@ -339,6 +364,7 @@ function EventCard({ supabase, d, ev, reload }) {
       {open && (
         <div className="aes-edit-card-body">
           <div className="aes-edit-grid">
+            <Field label="Race name"><TextInput defaultValue={ev.name} onBlur={(e) => setField("name", e.target.value || null)} placeholder="e.g. Season Opener (optional)" /></Field>
             <Field label="Round #"><NumInput defaultValue={ev.round} onBlur={(e) => setField("round", num(e.target.value))} /></Field>
             <Field label="Season">
               <select className="aes-input" value={ev.season_id || ""} onChange={(e) => patchEvent({ season_id: e.target.value })}>
@@ -352,7 +378,7 @@ function EventCard({ supabase, d, ev, reload }) {
               </select>
             </Field>
             <Field label="Duration (minutes)"><NumInput step="5" defaultValue={ev.durationMin} onBlur={(e) => { const mins = num(e.target.value); setField("duration_min", mins); patchEvent({ duration_h: mins != null ? mins / 60 : null }); }} /></Field>
-            <Field label="Race date/time"><TextInput type="datetime-local" defaultValue={(ev.date || "").slice(0, 16)} onBlur={(e) => setField("date", e.target.value ? e.target.value + ":00" : null)} /></Field>
+            <Field label="Race date/time (ET)"><TextInput type="datetime-local" defaultValue={isoToETLocal(ev.date)} onBlur={(e) => setField("date", etLocalToISO(e.target.value))} /></Field>
             <Field label="Status">
               <select className="aes-input" value={ev.status} onChange={(e) => patchEvent({ status: e.target.value })}>
                 <option value="upcoming">Scheduled</option><option value="next">Next Up</option><option value="complete">Final</option>
@@ -373,7 +399,7 @@ function EventCard({ supabase, d, ev, reload }) {
                 <select className="aes-input" defaultValue={s.type} onChange={(e) => setSession(s, { type: e.target.value })}>
                   <option>Practice</option><option>Qualifying</option><option>Warmup</option><option>Race</option>
                 </select>
-                <TextInput type="datetime-local" defaultValue={(s.start || "").slice(0, 16)} onBlur={(e) => setSession(s, { start: e.target.value ? e.target.value + ":00" : null })} />
+                <TextInput type="datetime-local" defaultValue={isoToETLocal(s.start)} onBlur={(e) => setSession(s, { start: etLocalToISO(e.target.value) })} />
                 <NumInput defaultValue={s.durMin} onBlur={(e) => setSession(s, { dur_min: num(e.target.value) })} placeholder="min" />
                 <button className="aes-icon-btn danger" onClick={() => delSession(s)}><Trash2 size={14} /></button>
               </div>

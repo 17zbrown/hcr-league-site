@@ -499,6 +499,7 @@ function Dashboard({ data, openEvent, go, openDriver, openTeam }) {
           <div className="aes-hero-main">
             <div className="aes-hero-round mono">R{next.round}</div>
             <h1 className="aes-hero-track">{next.track}</h1>
+            {next.name ? <div className="aes-hero-name">{next.name}</div> : null}
             <div className="aes-hero-sub">
               <span><Timer size={14} /> {fmtDur(durMins(next))}</span>
               <span><Calendar size={14} /> {fmtFullDate(next.date)}</span>
@@ -628,6 +629,7 @@ function Schedule({ data, openEvent }) {
               </div>
               <div className="aes-tl-main">
                 <div className="aes-tl-track">{e.track}</div>
+                {e.name ? <div className="aes-tl-name">{e.name}</div> : null}
                 <div className="aes-tl-loc"><MapPin size={12} /> {e.location}</div>
               </div>
               <div className="aes-tl-meta">
@@ -659,6 +661,7 @@ function EventDetail({ data, ev, back, openDriver, openTeam }) {
           <StatusChip status={ev.status} />
         </div>
         <h1 className="aes-hero-track">{ev.track}</h1>
+        {ev.name ? <div className="aes-hero-name">{ev.name}</div> : null}
         <div className="aes-hero-sub">
           <span><MapPin size={14} /> {ev.location}</span>
           <span><Timer size={14} /> {fmtDur(durMins(ev))}</span>
@@ -2610,6 +2613,7 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-hero-grid{ position:relative; display:grid; grid-template-columns:1fr auto; gap:24px; align-items:center; }
 .aes-hero-round{ font-size:13px; color:var(--mist); letter-spacing:.2em; }
 .aes-hero-track{ font-size:42px; font-weight:700; line-height:1.02; margin:4px 0 14px; }
+.aes-hero-name{ font-size:18px; font-weight:600; color:var(--signal); letter-spacing:.01em; margin:-9px 0 14px; }
 .aes-hero-sub{ display:flex; flex-wrap:wrap; gap:18px; color:var(--mist); font-size:14px; margin-bottom:18px; }
 .aes-hero-sub span{ display:inline-flex; align-items:center; gap:6px; }
 .aes-hero-sub svg{ color:var(--mist2); }
@@ -2700,6 +2704,7 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-tl-round{ display:flex; flex-direction:column; gap:7px; }
 .aes-tl-round>span:first-child{ font-family:var(--disp); font-weight:700; font-size:20px; color:var(--chalk); }
 .aes-tl-track{ font-weight:600; font-size:16px; }
+.aes-tl-name{ font-size:12.5px; font-weight:600; color:var(--signal); margin-top:1px; }
 .aes-tl-loc{ display:flex; align-items:center; gap:5px; color:var(--mist); font-size:12.5px; margin-top:3px; }
 .aes-tl-meta{ display:flex; flex-direction:column; gap:5px; font-size:12.5px; color:var(--mist); }
 .aes-tl-meta span{ display:flex; align-items:center; gap:6px; }
