@@ -13,6 +13,20 @@ import {
 const TextInput = (p) => <input className="aes-input" {...p} />;
 const NumInput = (p) => <input type="number" className="aes-input" {...p} />;
 const Field = ({ label, children }) => (<label className="aes-field"><span>{label}</span>{children}</label>);
+/* sim-hour (decimal, e.g. 18.6) <-> "HH:MM" for time inputs */
+const hourToHHMM = (dec) => {
+  if (dec == null || dec === "" || isNaN(Number(dec))) return "";
+  let h = ((Number(dec) % 24) + 24) % 24;
+  let hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+  if (mm === 60) { hh = (hh + 1) % 24; mm = 0; }
+  return String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0");
+};
+const hhmmToHour = (str) => {
+  if (!str) return null;
+  const [h, m] = String(str).split(":").map(Number);
+  if (isNaN(h)) return null;
+  return h + (Number(m) || 0) / 60;
+};
 
 /* a setting that can be either a pasted link or an uploaded PDF (hosted in Supabase Storage) */
 function LinkOrFile({ label, hint, value, storageKey, supabase, onSave }) {
@@ -176,11 +190,13 @@ async function loadAdminData(sb, seasonId) {
     status: ev.status || "upcoming", durationH: ev.duration_h ?? "", durationMin: ev.duration_min ?? (ev.duration_h != null ? Math.round(ev.duration_h * 60) : ""), simStartHour: ev.sim_start_hour ?? "",
     timeMult: ev.time_mult ?? 1, pointsMult: ev.points_mult ?? 1, minDrivers: ev.min_drivers ?? "",
     maxDrivers: ev.max_drivers ?? "", notes: ev.notes || "",
+    sunriseHour: ev.sunrise_hour != null ? Number(ev.sunrise_hour) : 6.6,
+    sunsetHour: ev.sunset_hour != null ? Number(ev.sunset_hour) : 18.6,
     sessions: (sBy[ev.id] || []).map((s) => ({ id: s.id, type: s.type || "", start: s.start || "", durMin: s.dur_min ?? "", sort: s.sort ?? 0 })),
     weather: (wBy[ev.id] || []).map((w) => ({ id: w.id, atHour: w.at_hour ?? "", air: w.air_f ?? "", clouds: w.clouds ?? "", sky: w.sky || "", precip: w.precip ?? "", wind: w.wind_mph ?? "", humidity: w.humidity ?? "", sort: w.sort ?? 0 })),
     results: (rBy[ev.id] || []).map((r) => {
       const t = teamOf(r);
-      return { id: r.id, team_id: r.team_id, cls: r.class_id || (t && t.class_id) || "", num: r.number ?? (t ? t.number : ""), drivers: (t && teamDriverNames(t.id)) || r.drivers_text || "", car: (t && t.car) || "", pos: r.pos ?? "", clsPos: r.cls_pos ?? "", grid: r.grid ?? "", laps: r.laps ?? "", best: r.best_lap || "", inc: r.inc ?? "", status: r.status || "", points: r.points ?? "", adjust: r.adjust ?? "", qpos: r.quali_pos ?? "", qpts: Number(r.quali_points) || 0 };
+      return { id: r.id, team_id: r.team_id, cls: r.class_id || (t && t.class_id) || "", num: r.number ?? (t ? t.number : ""), drivers: (t && teamDriverNames(t.id)) || r.drivers_text || "", car: r.car || (t && t.car) || "", pos: r.pos ?? "", clsPos: r.cls_pos ?? "", grid: r.grid ?? "", laps: r.laps ?? "", best: r.best_lap || "", inc: r.inc ?? "", status: r.status || "", points: r.points ?? "", adjust: r.adjust ?? "", qpos: r.quali_pos ?? "", qpts: Number(r.quali_points) || 0 };
     }).sort((a, b) => (+a.pos || 999) - (+b.pos || 999)),
   }));
 
@@ -366,6 +382,13 @@ function EventCard({ supabase, d, ev, reload }) {
 
           <div className="aes-edit-sub">
             <div className="aes-edit-sub-head"><b>Weather points</b><button className="aes-btn ghost xs" onClick={addWx}><Plus size={12} /> Add</button></div>
+            <div className="aes-daylight-row">
+              <label className="aes-field"><span>Sunrise (sim)</span>
+                <TextInput type="time" defaultValue={hourToHHMM(ev.sunriseHour)} onBlur={(e) => setField("sunrise_hour", hhmmToHour(e.target.value))} /></label>
+              <label className="aes-field"><span>Sunset (sim)</span>
+                <TextInput type="time" defaultValue={hourToHHMM(ev.sunsetHour)} onBlur={(e) => setField("sunset_hour", hhmmToHour(e.target.value))} /></label>
+              <span className="aes-daylight-hint">Sets the sunrise/sunset markers and sky colours on the daylight bar for this race.</span>
+            </div>
             <div className="aes-wx-edit-head"><span>Race hour</span><span>Air °F</span><span>Cloud %</span><span>Rain %</span><span /></div>
             {ev.weather.map((w) => (
               <div key={w.id} className="aes-edit-wrow">
@@ -701,6 +724,9 @@ textarea.aes-input{ resize:vertical; font-family:var(--body); }
 .aes-edit-srow{ display:grid; grid-template-columns:130px 1fr 90px 36px; gap:8px; margin-bottom:8px; align-items:center; }
 .aes-edit-wrow{ display:grid; grid-template-columns:repeat(4,1fr) 36px; gap:6px; margin-bottom:7px; align-items:center; }
 .aes-wx-edit-head{ display:grid; grid-template-columns:repeat(4,1fr) 36px; gap:6px; font-size:11px; color:var(--mist); font-weight:600; margin-bottom:7px; padding:0 2px; }
+.aes-daylight-row{ display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap; margin-bottom:13px; padding-bottom:13px; border-bottom:1px solid var(--line); }
+.aes-daylight-row .aes-field{ max-width:130px; }
+.aes-daylight-hint{ flex:1; min-width:180px; font-size:11px; color:var(--mist); line-height:1.4; }
 .aes-chip{ font-family:var(--mono); font-size:10px; letter-spacing:.05em; padding:3px 8px; border-radius:5px; border:1px solid var(--line); color:var(--mist); }
 .aes-chip.complete{ color:var(--green); border-color:var(--green); } .aes-chip.next{ color:var(--signal); border-color:var(--signal); }
 

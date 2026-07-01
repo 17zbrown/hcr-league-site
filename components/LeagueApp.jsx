@@ -275,20 +275,31 @@ function fmtDur(mins) {
   if (m < 60) return m + " min";
   return Math.floor(m / 60) + "h " + (m % 60) + "m";
 }
-function dayNightGradient(simStart, durationH, mult = 1) {
+/* remap an actual sim hour into the reference palette space so the tuned SKY
+   keyframes (dawn ~6 / dusk ~18) line up with this race's real sunrise/sunset */
+function refHour(h, SR, SS) {
+  h = ((h % 24) + 24) % 24;
+  let sr = SR, ss = SS;
+  if (!(ss > sr) || ss - sr < 1 || ss - sr > 23) { sr = 6.6; ss = 18.6; }
+  const refSR = 6, refSS = 18;
+  if (h >= sr && h <= ss) return refSR + ((h - sr) / (ss - sr)) * (refSS - refSR);
+  const hh = h < sr ? h + 24 : h;              // place into [ss, sr+24]
+  const t = (hh - ss) / ((sr + 24) - ss);       // 0..1 through the night
+  return (refSS + t * ((refSR + 24) - refSS)) % 24;
+}
+function dayNightGradient(simStart, durationH, mult = 1, SR = 6.6, SS = 18.6) {
   const stops = [];
-  const steps = Math.min(60, Math.max(12, Math.round(durationH * 2)));
+  const steps = Math.min(64, Math.max(16, Math.round(durationH * 3)));
   for (let i = 0; i <= steps; i++) {
     const elapsed = (i / steps) * durationH;
     const simHour = simStart + elapsed * mult;
     const pct = (i / steps) * 100;
-    stops.push(`${skyColor(simHour)} ${pct.toFixed(1)}%`);
+    stops.push(`${skyColor(refHour(simHour, SR, SS))} ${pct.toFixed(1)}%`);
   }
   return `linear-gradient(90deg, ${stops.join(", ")})`;
 }
-function sunEvents(simStart, durationH, mult = 1) {
+function sunEvents(simStart, durationH, mult = 1, SR = 6.6, SS = 18.6) {
   const events = [];
-  const SR = 6.6, SS = 18.6; // approx sunrise / sunset sim hours
   const days = Math.round((durationH * mult) / 24) + 2;
   for (let k = -1; k <= days; k++) {
     for (const tg of [{ h: SR + 24 * k, kind: "sunrise" }, { h: SS + 24 * k, kind: "sunset" }]) {
@@ -327,9 +338,11 @@ function StatusChip({ status }) {
 function DayNightBar({ ev, compact }) {
   const mult = ev.timeMult || 1;
   const durH = ev.durationH != null && ev.durationH > 0 ? ev.durationH : (durMins(ev) / 60) || 1;
-  const grad = dayNightGradient(ev.simStartHour, durH, mult);
+  const SR = ev.sunriseHour != null ? ev.sunriseHour : 6.6;
+  const SS = ev.sunsetHour != null ? ev.sunsetHour : 18.6;
+  const grad = dayNightGradient(ev.simStartHour, durH, mult, SR, SS);
   const endHour = ev.simStartHour + durH * mult;
-  const suns = sunEvents(ev.simStartHour, durH, mult);
+  const suns = sunEvents(ev.simStartHour, durH, mult, SR, SS);
 
   const markers = [
     { pct: 0, kind: "start", label: "Start", time: simClock(ev.simStartHour), anchor: "left" },
