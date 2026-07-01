@@ -7,7 +7,7 @@ import {
   Flag, Clock, CloudRain, Cloud, Sun, CloudSun, Wind, Droplets, Thermometer,
   Trophy, Calendar, Gauge, ChevronRight, X, Lock, Settings, Plus, Trash2,
   Save, Download, Upload, RotateCcw, MapPin, Users, Timer, Moon, Radio,
-  ArrowLeft, CheckCircle2, CircleDot, Eye, FileText, Loader2, AlertTriangle, Search, Menu,
+  ArrowLeft, CheckCircle2, CircleDot, Eye, FileText, Loader2, AlertTriangle, Search, Menu, Sunrise, Sunset,
 } from "lucide-react";
 import { CARS } from "@/lib/cars";
 import { COUNTRIES, flagOf, flagFor } from "@/lib/countries";
@@ -288,14 +288,13 @@ function dayNightGradient(simStart, durationH, mult = 1) {
 }
 function sunEvents(simStart, durationH, mult = 1) {
   const events = [];
-  const SR = 6.2, SS = 18.4; // approx sunrise / sunset sim hours
-  const N = Math.round(durationH * mult) + 2;
-  for (let k = -1; k <= N; k++) {
-    const targets = [{ h: SR + 24 * k, label: "Sunrise" }, { h: SS + 24 * k, label: "Sunset" }];
-    for (const tg of targets) {
+  const SR = 6.6, SS = 18.6; // approx sunrise / sunset sim hours
+  const days = Math.round((durationH * mult) / 24) + 2;
+  for (let k = -1; k <= days; k++) {
+    for (const tg of [{ h: SR + 24 * k, kind: "sunrise" }, { h: SS + 24 * k, kind: "sunset" }]) {
       const elapsed = (tg.h - simStart) / mult;
-      if (elapsed > 0.2 && elapsed < durationH - 0.2) {
-        events.push({ pct: (elapsed / durationH) * 100, label: tg.label });
+      if (elapsed > 0.12 && elapsed < durationH - 0.12) {
+        events.push({ pct: (elapsed / durationH) * 100, kind: tg.kind, simHour: ((tg.h % 24) + 24) % 24 });
       }
     }
   }
@@ -326,37 +325,38 @@ function StatusChip({ status }) {
 
 /* =============================== Day/Night bar ============================= */
 function DayNightBar({ ev, compact }) {
-  const grad = dayNightGradient(ev.simStartHour, ev.durationH, ev.timeMult);
-  const suns = sunEvents(ev.simStartHour, ev.durationH, ev.timeMult);
-  const endHour = ev.simStartHour + ev.durationH * (ev.timeMult || 1);
-  const hourTicks = [];
-  if (!compact) {
-    const tickEvery = ev.durationH <= 8 ? 1 : ev.durationH <= 14 ? 2 : 3;
-    for (let e = 0; e <= ev.durationH + 0.001; e += tickEvery) {
-      hourTicks.push({ pct: (e / ev.durationH) * 100, sim: ev.simStartHour + e * (ev.timeMult || 1) });
-    }
-  }
+  const mult = ev.timeMult || 1;
+  const durH = ev.durationH != null && ev.durationH > 0 ? ev.durationH : (durMins(ev) / 60) || 1;
+  const grad = dayNightGradient(ev.simStartHour, durH, mult);
+  const endHour = ev.simStartHour + durH * mult;
+  const suns = sunEvents(ev.simStartHour, durH, mult);
+
+  const markers = [
+    { pct: 0, kind: "start", label: "Start", time: simClock(ev.simStartHour), anchor: "left" },
+    ...suns.map((s) => ({ pct: s.pct, kind: s.kind, label: s.kind === "sunrise" ? "Sunrise" : "Sunset", time: simClock(s.simHour), anchor: "center" })),
+    { pct: 100, kind: "finish", label: "Finish", time: simClock(endHour), anchor: "right" },
+  ];
+
+  const iconFor = (kind, size) =>
+    kind === "start" ? <Flag size={size} /> :
+    kind === "finish" ? <span className="aes-dn-checker" style={{ width: size, height: size }} /> :
+    kind === "sunrise" ? <Sunrise size={size} /> :
+    <Sunset size={size} />;
+
   return (
     <div className={"aes-dn" + (compact ? " compact" : "")}>
-      <div className="aes-dn-bar" style={{ background: grad }} aria-hidden="true">
-        {suns.map((s, i) => (
-          <div key={i} className="aes-dn-sun" style={{ left: s.pct + "%" }} title={s.label}>
-            {s.label === "Sunrise" ? <Sun size={12} /> : <Moon size={12} />}
+      <div className="aes-dn-bar" style={{ background: grad }}>
+        {markers.map((m, i) => (
+          <div key={i} className={"aes-dn-mk " + m.kind + " a-" + m.anchor} style={{ left: m.pct + "%" }} title={m.label + " · " + m.time}>
+            {iconFor(m.kind, compact ? 9 : 12)}
           </div>
         ))}
       </div>
       <div className="aes-dn-ends">
         <span className="mono">{simClock(ev.simStartHour)} <em>start</em></span>
-        <span className="aes-dn-mid">{fmtDur(durMins(ev))}</span>
+        <span className="aes-dn-mid"><Timer size={11} /> {fmtDur(durMins(ev))}{mult && mult !== 1 ? " · " + mult + "× time" : ""}</span>
         <span className="mono"><em>finish</em> {simClock(endHour)}</span>
       </div>
-      {!compact && (
-        <div className="aes-dn-ticks">
-          {hourTicks.map((t, i) => (
-            <span key={i} className="aes-dn-tick mono" style={{ left: t.pct + "%" }}>{simClock(t.sim)}</span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -2613,14 +2613,27 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-dn-bar{ position:relative; height:34px; border-radius:7px; border:1px solid var(--line);
   box-shadow:inset 0 0 0 1px rgba(255,255,255,.03); }
 .aes-dn.compact .aes-dn-bar{ height:18px; }
-.aes-dn-sun{ position:absolute; top:50%; transform:translate(-50%,-50%); color:rgba(255,255,255,.92);
-  filter:drop-shadow(0 0 4px rgba(0,0,0,.5)); }
+
+/* marker icons sitting on the bar */
+.aes-dn-mk{ position:absolute; top:50%; left:0; transform:translate(-50%,-50%);
+  width:22px; height:22px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  background:rgba(11,14,20,.82); border:1px solid rgba(255,255,255,.16); box-shadow:0 1px 4px rgba(0,0,0,.55); }
+.aes-dn-mk.a-left{ transform:translate(1px,-50%); }
+.aes-dn-mk.a-right{ transform:translate(calc(-100% - 1px),-50%); }
+.aes-dn-mk.start{ color:var(--green); }
+.aes-dn-mk.finish{ color:var(--chalk); }
+.aes-dn-mk.sunrise{ color:var(--amber); }
+.aes-dn-mk.sunset{ color:var(--accent2); }
+.aes-dn.compact .aes-dn-mk{ width:16px; height:16px; }
+.aes-dn-checker{ display:inline-block; border-radius:2px;
+  background-image:conic-gradient(#E8ECF2 90deg,#0B0E14 90deg 180deg,#E8ECF2 180deg 270deg,#0B0E14 270deg);
+  background-size:50% 50%; }
+
 .aes-dn-ends{ display:flex; justify-content:space-between; align-items:center; margin-top:7px;
   font-size:11px; color:var(--mist); }
 .aes-dn-ends em{ font-style:normal; color:var(--mist2); }
-.aes-dn-mid{ font-family:var(--mono); font-size:10px; letter-spacing:.08em; color:var(--mist2); }
-.aes-dn-ticks{ position:relative; height:14px; margin-top:2px; }
-.aes-dn-tick{ position:absolute; transform:translateX(-50%); font-size:9.5px; color:var(--mist2); }
+.aes-dn-mid{ display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:10px; letter-spacing:.06em; color:var(--mist2); }
+.aes-dn-mid svg{ color:var(--mist2); }
 .aes-dn.compact .aes-dn-ends{ font-size:10px; }
 
 /* weather */
