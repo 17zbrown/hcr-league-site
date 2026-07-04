@@ -235,7 +235,7 @@ async function loadAdminData(sb, seasonId) {
 
   const driverRows = drivers.map((d) => {
     const t = d.team_id ? teamById[d.team_id] : null;
-    return { id: d.id, name: d.name, country: d.country || "", custId: d.iracing_custid || "", teamId: d.team_id || null, num: t ? (t.number ?? "") : "", cls: t ? (t.class_id || "") : "", car: t ? (t.car || "") : "", pts: ptsByDriver[d.id] || 0 };
+    return { id: d.id, name: d.name, country: d.country || "", custId: d.iracing_custid || "", teamId: d.team_id || null, num: t ? (t.number ?? "") : "", cls: t ? (t.class_id || "") : "", car: t ? (t.car || "") : "", pts: ptsByDriver[d.id] || 0, createdAt: d.created_at || "" };
   });
 
   const trackById = Object.fromEntries(tracks.map((t) => [t.id, t]));
@@ -436,16 +436,48 @@ function EventCard({ supabase, d, ev, reload }) {
 }
 
 /* ------------------------------ admin tabs ------------------------------- */
+function SortHead({ label, sk, sort, onSort }) {
+  const active = sort.key === sk;
+  return (
+    <button type="button" className={"aes-sorth" + (active ? " on" : "")} onClick={() => onSort(sk)}>
+      {label}{active ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}
+    </button>
+  );
+}
+
 function DriversTab({ supabase, d, reload }) {
   const [q, setQ] = useState(""); const [cls, setCls] = useState("ALL"); const [msg, setMsg] = useState("");
+  const [sort, setSort] = useState({ key: "created", dir: "desc" });
   const teamName = (id) => d.teams.find((t) => t.id === id)?.name || "";
   const className = (id) => d.classes.find((c) => c.id === id)?.name || id || "";
   const setDriver = async (row, patch) => { await supabase.from("drivers").update(patch).eq("id", row.id); };
-  const addDriver = async () => { const { error } = await supabase.from("drivers").insert({ name: "New Driver", country: "" }); if (error) setMsg(error.message); else reload(); };
+  const addDriver = async () => { const { error } = await supabase.from("drivers").insert({ name: "New Driver", country: "" }); if (error) setMsg(error.message); else { setSort({ key: "created", dir: "desc" }); reload(); } };
   const delDriver = async (row) => { if (confirm("Delete this driver?")) { await supabase.from("drivers").delete().eq("id", row.id); reload(); } };
 
+  const DESC_FIRST = new Set(["created", "num", "pts", "license"]);
+  const onSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: DESC_FIRST.has(key) ? "desc" : "asc" });
+  const licRating = (x) => { const l = driverLicense(x, d.events); return l.rating == null ? -1 : l.rating; };
+  const sval = (x, key) => {
+    switch (key) {
+      case "num": return Number(x.num) || 0;
+      case "name": return (x.name || "").toLowerCase();
+      case "team": return teamName(x.teamId).toLowerCase();
+      case "cls": return x.cls || "";
+      case "car": return (x.car || "").toLowerCase();
+      case "pts": return x.pts || 0;
+      case "license": return licRating(x);
+      default: return x.createdAt || "";
+    }
+  };
+
   const dq = q.trim().toLowerCase();
-  const shown = d.driverRows.filter((x) => (cls === "ALL" || x.cls === cls) && (!dq || [x.name, x.num, x.car, x.cls, teamName(x.teamId)].some((v) => String(v ?? "").toLowerCase().includes(dq))));
+  const shown = d.driverRows
+    .filter((x) => (cls === "ALL" || x.cls === cls) && (!dq || [x.name, x.num, x.car, x.cls, teamName(x.teamId)].some((v) => String(v ?? "").toLowerCase().includes(dq))))
+    .sort((a, b) => {
+      const va = sval(a, sort.key), vb = sval(b, sort.key);
+      const cmp = typeof va === "number" ? va - vb : String(va).localeCompare(String(vb));
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
   return (
     <>
       <div className="aes-admin-addbar">
@@ -455,7 +487,17 @@ function DriversTab({ supabase, d, reload }) {
       </div>
       {msg && <div className="aes-import-err">{msg}</div>}
       <div className="aes-edit-list">
-        <div className="aes-edit-row driver head"><span>#</span><span>Driver name</span><span>Flag</span><span>Team</span><span>Class</span><span>Car</span><span>Pts</span><span>License</span><span /></div>
+        <div className="aes-edit-row driver head">
+          <SortHead label="#" sk="num" sort={sort} onSort={onSort} />
+          <SortHead label="Driver name" sk="name" sort={sort} onSort={onSort} />
+          <span>Flag</span>
+          <SortHead label="Team" sk="team" sort={sort} onSort={onSort} />
+          <SortHead label="Class" sk="cls" sort={sort} onSort={onSort} />
+          <SortHead label="Car" sk="car" sort={sort} onSort={onSort} />
+          <SortHead label="Pts" sk="pts" sort={sort} onSort={onSort} />
+          <SortHead label="License" sk="license" sort={sort} onSort={onSort} />
+          <span />
+        </div>
         {shown.map((x) => {
           const lic = driverLicense(x, d.events);
           return (
@@ -477,21 +519,41 @@ function DriversTab({ supabase, d, reload }) {
         })}
         {shown.length === 0 && <div className="aes-filter-empty">No drivers match.</div>}
       </div>
-      <p className="aes-hint">A driver's number, class and car come from their <b>team</b> — set those on the Teams tab. Assign a driver to a team with the Team dropdown; co-drivers just share the same team. Points total automatically from results.</p>
+      <p className="aes-hint">A driver's number, class and car come from their <b>team</b> — set those on the Teams tab. Assign a driver to a team with the Team dropdown; co-drivers just share the same team. Points total automatically from results. Click any column heading to sort; new drivers appear at the top.</p>
     </>
   );
 }
 
 function TeamsTab({ supabase, d, reload }) {
   const [q, setQ] = useState("");
+  const [sort, setSort] = useState({ key: "created", dir: "desc" });
   const setTeam = async (t, patch) => { await supabase.from("teams").update(patch).eq("id", t.id); };
-  const addTeam = async () => { await supabase.from("teams").insert({ name: "New Team", number: "0", class_id: d.classes[0]?.id || "GTP", car: "" }); reload(); };
+  const addTeam = async () => { await supabase.from("teams").insert({ name: "New Team", number: "0", class_id: d.classes[0]?.id || "GTP", car: "" }); setSort({ key: "created", dir: "desc" }); reload(); };
   const delTeam = async (t) => { if (confirm("Delete this team? Its drivers will be unassigned.")) { await supabase.from("teams").delete().eq("id", t.id); reload(); } };
+  const driverCount = (id) => d.driverRows.filter((x) => x.teamId === id).length;
+  const className = (id) => d.classes.find((c) => c.id === id)?.name || id || "";
+
+  const DESC_FIRST = new Set(["created", "number", "drivers"]);
+  const onSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: DESC_FIRST.has(key) ? "desc" : "asc" });
+  const sval = (t, key) => {
+    switch (key) {
+      case "number": return Number(t.number) || 0;
+      case "name": return (t.name || "").toLowerCase();
+      case "cls": return className(t.class_id).toLowerCase();
+      case "car": return (t.car || "").toLowerCase();
+      case "drivers": return driverCount(t.id);
+      default: return t.created_at || "";
+    }
+  };
+
   const tq = q.trim().toLowerCase();
   const shown = [...d.teams]
-    .sort((a, b) => String(a.class_id || "").localeCompare(String(b.class_id || "")) || (+a.number || 0) - (+b.number || 0))
-    .filter((t) => !tq || String(t.name || "").toLowerCase().includes(tq));
-  const driverCount = (id) => d.driverRows.filter((x) => x.teamId === id).length;
+    .filter((t) => !tq || String(t.name || "").toLowerCase().includes(tq))
+    .sort((a, b) => {
+      const va = sval(a, sort.key), vb = sval(b, sort.key);
+      const cmp = typeof va === "number" ? va - vb : String(va).localeCompare(String(vb));
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
   const grid = { gridTemplateColumns: "70px 1.3fr 120px 1.4fr 72px auto" };
   return (
     <>
@@ -500,7 +562,14 @@ function TeamsTab({ supabase, d, reload }) {
         <div className="aes-filter"><Search size={14} /><input className="aes-filter-input" placeholder="Filter teams…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       </div>
       <div className="aes-edit-list">
-        <div className="aes-edit-row head" style={grid}><span>Car #</span><span>Team name</span><span>Class</span><span>Car model</span><span>Drivers</span><span /></div>
+        <div className="aes-edit-row head" style={grid}>
+          <SortHead label="Car #" sk="number" sort={sort} onSort={onSort} />
+          <SortHead label="Team name" sk="name" sort={sort} onSort={onSort} />
+          <SortHead label="Class" sk="cls" sort={sort} onSort={onSort} />
+          <SortHead label="Car model" sk="car" sort={sort} onSort={onSort} />
+          <SortHead label="Drivers" sk="drivers" sort={sort} onSort={onSort} />
+          <span />
+        </div>
         {shown.map((t) => (
           <div key={t.id} className="aes-edit-row" style={grid}>
             <TextInput defaultValue={t.number ?? ""} onBlur={(e) => setTeam(t, { number: e.target.value })} placeholder="#" />
@@ -513,7 +582,7 @@ function TeamsTab({ supabase, d, reload }) {
         ))}
         {shown.length === 0 && <div className="aes-filter-empty">No teams match.</div>}
       </div>
-      <p className="aes-hint">Each team is one car — its number, class and model. Assign drivers to it on the Drivers tab. When you enter results, you pick the team and points credit all of its drivers.</p>
+      <p className="aes-hint">Each team is one car — its number, class and model. Assign drivers to it on the Drivers tab. When you enter results, you pick the team and points credit all of its drivers. Click any column heading to sort; new teams appear at the top.</p>
     </>
   );
 }
@@ -792,6 +861,10 @@ textarea.aes-input{ resize:vertical; font-family:var(--body); }
 .aes-edit-row.team{ grid-template-columns:1fr auto auto; }
 .aes-edit-row.head{ background:none; border:none; padding:2px 12px 0; align-items:end; }
 .aes-edit-row.head span{ font-family:var(--mono); font-size:9.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--mist2); }
+.aes-edit-row.head .aes-sorth{ appearance:none; background:none; border:0; padding:0; margin:0; cursor:pointer; text-align:left;
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--mist2); }
+.aes-edit-row.head .aes-sorth:hover{ color:var(--chalk); }
+.aes-edit-row.head .aes-sorth.on{ color:var(--signal); }
 .aes-edit-actions{ display:flex; gap:6px; justify-content:flex-end; }
 .aes-edit-total{ text-align:center; font-weight:700; color:var(--amber); }
 .aes-edit-meta{ color:var(--mist); font-size:12.5px; }
