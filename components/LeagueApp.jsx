@@ -260,6 +260,7 @@ const LICENSE_TIERS = [
   { name: "Silver", min: 58, color: "#AEB8C4" },
   { name: "Bronze", min: 0, color: "#CB8452" },
 ];
+const LICENSE_GATE = { Platinum: 8, Gold: 5, Silver: 3 };
 function driverLicense(driver, events) {
   const races = [];
   (events || []).forEach((ev) => {
@@ -295,13 +296,18 @@ function driverLicense(driver, events) {
   const results = Math.min(100, posScore(avgFinish) + wins * 4 + podiums * 2);
   const pace = Math.min(100, posScore(avgGrid) + poles * 4 + fastLaps * 3);
   const safety = Math.max(0, Math.min(100, 100 - incPerRace * 5));
-  const rating = Math.round(0.42 * results + 0.28 * pace + 0.30 * safety);
-  const t = LICENSE_TIERS.find((x) => rating >= x.min) || LICENSE_TIERS[LICENSE_TIERS.length - 1];
+  const perf = 0.42 * results + 0.28 * pace + 0.30 * safety;
+  const conf = Math.min(1, starts / 8);                 // full weight at 8 starts
+  const rating = Math.round(perf * conf + 40 * (1 - conf)); // new drivers start low, climb with a record
+  let t = LICENSE_TIERS.find((x) => rating >= x.min) || LICENSE_TIERS[LICENSE_TIERS.length - 1];
+  while (t.name !== "Bronze" && starts < (LICENSE_GATE[t.name] || 0)) {
+    t = LICENSE_TIERS[LICENSE_TIERS.indexOf(t) + 1];     // not enough starts — hold at the tier below
+  }
 
   return {
     tier: t.name, color: t.color, rating,
     pace: Math.round(pace), results: Math.round(results), safety: Math.round(safety),
-    starts, incPerRace, wins, podiums, provisional: starts < 3,
+    starts, incPerRace, wins, podiums, provisional: starts < 5,
   };
 }
 
@@ -1077,7 +1083,7 @@ function LicenseCard({ lic }) {
             </div>
             <div className="aes-lic-foot">
               {lic.starts} start{lic.starts === 1 ? "" : "s"}
-              {lic.provisional ? <span className="aes-lic-prov"> · provisional (firms up at 3 starts)</span> : null}
+              {lic.provisional ? <span className="aes-lic-prov"> · provisional — climbs as you race more</span> : null}
             </div>
           </>
         ) : (
@@ -1715,7 +1721,7 @@ function Info({ data }) {
 
       <section className="aes-card">
         <div className="aes-card-head"><h2><Gauge size={16} /> Driver classes</h2></div>
-        <p className="aes-info-lead">Every driver carries a license class based on the same FIA categorization IMSA uses (Bronze up to Platinum). In HCR it's calculated from your league record — qualifying &amp; pace, race results, and incident points — and firms up after three starts.</p>
+        <p className="aes-info-lead">Every driver carries a license class based on the same FIA categorization IMSA uses (Bronze up to Platinum). In HCR it's calculated from your league record — qualifying &amp; pace, race results, and incident points. It's experience-weighted, so everyone starts in Bronze and climbs only by building a proven record over many rounds. Each tier also needs a minimum number of starts: Silver 3, Gold 5, Platinum 8.</p>
         <div className="aes-classlist">
           {LICENSE_TIERS.map((t) => (
             <div key={t.name} className="aes-classrow">
