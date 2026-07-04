@@ -424,64 +424,138 @@ function codeMeta(code) {
   if (c >= 95) return { label: "Thunderstorm", Icon: CloudRain };
   return { label: "—", Icon: CloudSun };
 }
+/* condition from a weather payload: text desc (wttr) -> WMO code -> derive from cloud/precip */
+function condFrom(d) {
+  if (d.desc) {
+    const s = d.desc.toLowerCase();
+    let Icon = CloudSun;
+    if (/thunder|storm/.test(s)) Icon = CloudRain;
+    else if (/snow|sleet|ice|blizzard/.test(s)) Icon = Cloud;
+    else if (/rain|drizzle|shower/.test(s)) Icon = CloudRain;
+    else if (/fog|mist|haze/.test(s)) Icon = Cloud;
+    else if (/overcast|cloud/.test(s)) Icon = Cloud;
+    else if (/sunny|clear/.test(s)) Icon = Sun;
+    return { label: d.desc, Icon };
+  }
+  if (d.code != null) return codeMeta(d.code);
+  const cloud = Number(d.cloudPct) || 0;
+  const prob = d.precipProb != null ? Number(d.precipProb) : null;
+  const wet = (prob != null && prob >= 50) || (Number(d.precipIn) || 0) > 0.02;
+  if (wet) return { label: "Rain", Icon: CloudRain };
+  if (cloud >= 85) return { label: "Overcast", Icon: Cloud };
+  if (cloud >= 50) return { label: "Cloudy", Icon: Cloud };
+  if (cloud >= 15) return { label: "Partly cloudy", Icon: CloudSun };
+  return { label: "Clear", Icon: Sun };
+}
 
-function CurrentWeather({ city }) {
-  const [st, setSt] = useState({ loading: true, data: null, error: null });
+/* build the ?lat/lon (or city fallback) query for a given event */
+function wxLocParam(ev) {
+  if (ev.lat != null && ev.lon != null) {
+    const place = encodeURIComponent((ev.location || "").split(",")[0] || "");
+    return `lat=${ev.lat}&lon=${ev.lon}&place=${place}`;
+  }
+  if (ev.location) return `city=${encodeURIComponent(ev.location)}`;
+  return null;
+}
+function etDateStr(iso) {
+  try { return new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" }); }
+  catch { return null; }
+}
+function useWeather(url) {
+  const [st, setSt] = useState({ loading: true, data: null });
   useEffect(() => {
+    if (!url) { setSt({ loading: false, data: null }); return; }
     let alive = true;
-    setSt({ loading: true, data: null, error: null });
-    fetch(`/api/weather?city=${encodeURIComponent(city)}`)
+    setSt({ loading: true, data: null });
+    fetch(url)
       .then((r) => r.json())
-      .then((d) => { if (alive) setSt({ loading: false, data: d && !d.error ? d : null, error: d?.error || null }); })
-      .catch(() => { if (alive) setSt({ loading: false, data: null, error: "unavailable" }); });
+      .then((d) => { if (alive) setSt({ loading: false, data: d && !d.error ? d : null }); })
+      .catch(() => { if (alive) setSt({ loading: false, data: null }); });
     return () => { alive = false; };
-  }, [city]);
+  }, [url]);
+  return st;
+}
 
-  if (st.loading) return <div className="aes-wx-live-msg"><Loader2 size={14} className="aes-spin" /> Fetching current conditions…</div>;
-  if (!st.data) return <div className="aes-wx-live-msg">Live weather isn’t available for “{city}” right now.</div>;
-  const d = st.data;
-  const { label, Icon } = codeMeta(d.code);
-  const place = d.city + (d.region ? `, ${d.region}` : "");
+function LiveWeather({ ev }) {
+  const loc = wxLocParam(ev);
+  const { loading, data } = useWeather(loc ? `/api/weather?${loc}` : null);
+  if (!loc) return <div className="aes-wx-live-msg">No location is set for this track.</div>;
+  if (loading) return <div className="aes-wx-live-msg"><Loader2 size={14} className="aes-spin" /> Fetching current conditions…</div>;
+  if (!data) return <div className="aes-wx-live-msg">Live weather is unavailable right now.</div>;
+  const { label, Icon } = condFrom(data);
   return (
     <div className="aes-wx-live">
       <div className="aes-wx-live-head">
         <Icon size={34} style={{ color: "var(--amber)" }} />
         <div className="aes-wx-live-tempwrap">
-          <div className="aes-wx-live-temp">{d.tempF}°<span>F</span></div>
+          <div className="aes-wx-live-temp">{data.tempF}°<span>F</span></div>
           <div className="aes-wx-live-label">{label}</div>
         </div>
-        <div className="aes-wx-live-place"><MapPin size={12} /> {place}</div>
+        <div className="aes-wx-live-place"><MapPin size={12} /> {ev.location}</div>
       </div>
       <div className="aes-wx-live-grid">
-        <span><Thermometer size={13} /> Feels {d.feelsF}°F</span>
-        <span><Cloud size={13} /> {d.cloudPct}% cloud</span>
-        <span><Droplets size={13} /> {d.humidity}% humidity</span>
-        <span><Wind size={13} /> {d.windMph} mph</span>
+        <span><Thermometer size={13} /> Feels {data.feelsF}°F</span>
+        <span><Cloud size={13} /> {data.cloudPct}% cloud</span>
+        <span><Droplets size={13} /> {data.humidity}% humidity</span>
+        <span><Wind size={13} /> {data.windMph} mph</span>
       </div>
-      <div className="aes-wx-live-foot">Live real-world conditions — reference only, not the in-sim forecast.</div>
+      <div className="aes-wx-live-foot">Live conditions at the circuit.</div>
+    </div>
+  );
+}
+
+function ForecastWeather({ ev }) {
+  const loc = wxLocParam(ev);
+  const date = etDateStr(ev.date);
+  const { loading, data } = useWeather(loc && date ? `/api/forecast?${loc}&date=${date}` : null);
+  if (!loc || !date) return <div className="aes-wx-live-msg">A race date and track location are needed for the forecast.</div>;
+  if (loading) return <div className="aes-wx-live-msg"><Loader2 size={14} className="aes-spin" /> Loading race-day forecast…</div>;
+  if (!data) return <div className="aes-wx-live-msg">Race-day forecast is unavailable right now.</div>;
+  const { label, Icon } = condFrom(data);
+  const historical = data.mode === "historical";
+  const rain = data.precipProb != null ? `${data.precipProb}% rain`
+    : data.precipSumIn != null ? `${data.precipSumIn}" rain` : "—";
+  return (
+    <div className="aes-wx-live">
+      <div className="aes-wx-live-head">
+        <Icon size={34} style={{ color: "var(--amber)" }} />
+        <div className="aes-wx-live-tempwrap">
+          <div className="aes-wx-live-temp">{data.tempF}°<span>F</span></div>
+          <div className="aes-wx-live-label">{label} · at 8 PM</div>
+        </div>
+        <div className="aes-wx-live-place"><MapPin size={12} /> {ev.location}</div>
+      </div>
+      <div className="aes-wx-live-grid">
+        <span><Thermometer size={13} /> High {data.highF}° · Low {data.lowF}°</span>
+        <span><Cloud size={13} /> {data.cloudPct}% cloud</span>
+        <span><Droplets size={13} /> {rain}</span>
+        <span><Wind size={13} /> {data.windMph} mph</span>
+      </div>
+      <div className="aes-wx-live-foot">
+        {historical
+          ? `Seasonal expectation — actual weather here on this date in ${data.sourceYear}.`
+          : "Live forecast for race day at the circuit."}
+      </div>
     </div>
   );
 }
 
 function WeatherPanel({ ev }) {
-  const [tab, setTab] = useState("sim");
-  const city = (ev.location || "").trim();
+  const hasSim = ev.weather && ev.weather.length > 0;
+  const [tab, setTab] = useState("forecast");
   return (
     <section className="aes-card">
       <div className="aes-card-head aes-wx-head">
         <h2><CloudSun size={16} /> Weather</h2>
         <div className="aes-wx-tabs">
-          <button className={"aes-wx-tab" + (tab === "sim" ? " on" : "")} onClick={() => setTab("sim")}>Sim forecast</button>
-          {city ? <button className={"aes-wx-tab" + (tab === "live" ? " on" : "")} onClick={() => setTab("live")}>Live at {city.split(",")[0]}</button> : null}
+          <button className={"aes-wx-tab" + (tab === "forecast" ? " on" : "")} onClick={() => setTab("forecast")}>Race-day forecast</button>
+          <button className={"aes-wx-tab" + (tab === "live" ? " on" : "")} onClick={() => setTab("live")}>Live now</button>
+          {hasSim ? <button className={"aes-wx-tab" + (tab === "sim" ? " on" : "")} onClick={() => setTab("sim")}>In-sim plan</button> : null}
         </div>
       </div>
-      {tab === "sim" ? (
-        ev.weather && ev.weather.length
-          ? <div className="aes-wx-strip">{ev.weather.map((w, i) => <WeatherCell key={i} w={w} />)}</div>
-          : <div className="aes-wx-live-msg">No in-sim forecast has been set for this race yet.</div>
-      ) : (
-        <CurrentWeather city={city} />
-      )}
+      {tab === "forecast" && <ForecastWeather ev={ev} />}
+      {tab === "live" && <LiveWeather ev={ev} />}
+      {tab === "sim" && hasSim && <div className="aes-wx-strip">{ev.weather.map((w, i) => <WeatherCell key={i} w={w} />)}</div>}
     </section>
   );
 }
