@@ -3155,8 +3155,8 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 
 /* clickable driver links */
 .aes-link-driver{ background:none; border:none; padding:0; color:inherit; font:inherit; cursor:pointer;
-  border-bottom:1px dotted var(--mist2); transition:color .12s, border-color .12s; }
-.aes-link-driver:hover{ color:var(--signal); border-bottom-color:var(--signal); }
+  transition:color .12s; }
+.aes-link-driver:hover{ color:var(--signal); }
 .aes-rt-car{ font-size:12px; white-space:nowrap; }
 .aes-laps-toggle{ display:flex; align-items:flex-start; gap:8px; margin-top:10px; font-size:12px; color:var(--mist); line-height:1.4; cursor:pointer; }
 .aes-laps-toggle input{ margin-top:2px; accent-color:var(--signal); }
