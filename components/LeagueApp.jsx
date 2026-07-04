@@ -574,15 +574,18 @@ function ForecastWeather({ ev }) {
   );
 }
 
-function WeatherPanel({ ev }) {
+function WeatherPanel({ ev, onFullEvent }) {
   const [tab, setTab] = useState("forecast");
   return (
     <section className="aes-card">
       <div className="aes-card-head aes-wx-head">
         <h2><CloudSun size={16} /> Weather</h2>
-        <div className="aes-wx-tabs">
-          <button className={"aes-wx-tab" + (tab === "forecast" ? " on" : "")} onClick={() => setTab("forecast")}>Race-day forecast</button>
-          <button className={"aes-wx-tab" + (tab === "live" ? " on" : "")} onClick={() => setTab("live")}>Live now</button>
+        <div className="aes-wx-head-right">
+          <div className="aes-wx-tabs">
+            <button className={"aes-wx-tab" + (tab === "forecast" ? " on" : "")} onClick={() => setTab("forecast")}>Race-day forecast</button>
+            <button className={"aes-wx-tab" + (tab === "live" ? " on" : "")} onClick={() => setTab("live")}>Live now</button>
+          </div>
+          {onFullEvent ? <button className="aes-link" onClick={onFullEvent}>Full event <ChevronRight size={13} /></button> : null}
         </div>
       </div>
       {tab === "forecast" ? <ForecastWeather ev={ev} /> : <LiveWeather ev={ev} />}
@@ -680,8 +683,8 @@ function Dashboard({ data, openEvent, go, openDriver, openTeam }) {
         <div className="aes-hero-grid">
           <div className="aes-hero-main">
             <div className="aes-hero-round mono">R{next.round}</div>
-            {next.name ? <div className="aes-hero-name">{next.name}</div> : null}
-            <h1 className="aes-hero-track">{next.track}</h1>
+            <h1 className={"aes-hero-track" + (next.name ? " has-sub" : "")}>{next.name || next.track}</h1>
+            {next.name ? <div className="aes-hero-name">{next.track}</div> : null}
             <div className="aes-hero-sub">
               <span><Timer size={14} /> {fmtDur(durMins(next))}</span>
               <span><Calendar size={14} /> {fmtFullDate(next.date)}</span>
@@ -719,15 +722,7 @@ function Dashboard({ data, openEvent, go, openDriver, openTeam }) {
       <BroadcastCard url={data.league.links && data.league.links.broadcast} />
 
       {next && (
-      <section className="aes-card">
-        <div className="aes-card-head">
-          <h2><CloudSun size={16} /> Forecast — {next.track}</h2>
-          <button className="aes-link" onClick={() => openEvent(next.id)}>Full event <ChevronRight size={13} /></button>
-        </div>
-        <div className="aes-wx-strip">
-          {(next.weather || []).map((w, i) => <WeatherCell key={i} w={w} />)}
-        </div>
-      </section>
+        <WeatherPanel ev={next} onFullEvent={() => openEvent(next.id)} />
       )}
 
       {/* Championship leaders */}
@@ -810,8 +805,8 @@ function Schedule({ data, openEvent }) {
                 <StatusChip status={e.status} />
               </div>
               <div className="aes-tl-main">
-                {e.name ? <div className="aes-tl-name">{e.name}</div> : null}
-                <div className="aes-tl-track">{e.track}</div>
+                <div className="aes-tl-track">{e.name || e.track}</div>
+                {e.name ? <div className="aes-tl-name">{e.track}</div> : null}
                 <div className="aes-tl-loc"><MapPin size={12} /> {e.location}</div>
               </div>
               <div className="aes-tl-meta">
@@ -842,8 +837,8 @@ function EventDetail({ data, ev, back, openDriver, openTeam }) {
           <span className="aes-hero-round mono">R{ev.round}</span>
           <StatusChip status={ev.status} />
         </div>
-        {ev.name ? <div className="aes-hero-name">{ev.name}</div> : null}
-        <h1 className="aes-hero-track">{ev.track}</h1>
+        <h1 className={"aes-hero-track" + (ev.name ? " has-sub" : "")}>{ev.name || ev.track}</h1>
+        {ev.name ? <div className="aes-hero-name">{ev.track}</div> : null}
         <div className="aes-hero-sub">
           <span><MapPin size={14} /> {ev.location}</span>
           <span><Timer size={14} /> {fmtDur(durMins(ev))}</span>
@@ -2789,8 +2784,9 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
   font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--signal); margin-bottom:14px; }
 .aes-hero-grid{ position:relative; display:grid; grid-template-columns:1fr auto; gap:24px; align-items:center; }
 .aes-hero-round{ font-size:13px; color:var(--mist); letter-spacing:.2em; }
-.aes-hero-track{ font-size:42px; font-weight:700; line-height:1.02; margin:3px 0 14px; }
-.aes-hero-name{ font-size:17px; font-weight:600; color:var(--signal); letter-spacing:.02em; line-height:1.2; margin:2px 0 8px; }
+.aes-hero-track{ font-size:42px; font-weight:700; line-height:1.03; margin:3px 0 14px; }
+.aes-hero-track.has-sub{ margin-bottom:5px; }
+.aes-hero-name{ font-size:18px; font-weight:600; color:var(--mist); letter-spacing:.01em; line-height:1.2; margin:0 0 14px; }
 .aes-hero-sub{ display:flex; flex-wrap:wrap; gap:18px; color:var(--mist); font-size:14px; margin-bottom:18px; }
 .aes-hero-sub span{ display:inline-flex; align-items:center; gap:6px; }
 .aes-hero-sub svg{ color:var(--mist2); }
@@ -2841,6 +2837,7 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-wx-rows svg{ color:var(--mist2); flex-shrink:0; }
 /* weather tabs */
 .aes-wx-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.aes-wx-head-right{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
 .aes-wx-tabs{ display:inline-flex; background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:3px; gap:2px; }
 .aes-wx-tab{ appearance:none; border:0; background:transparent; color:var(--mist); font-family:var(--disp); font-weight:600;
   font-size:12px; letter-spacing:.02em; padding:5px 11px; border-radius:6px; cursor:pointer; white-space:nowrap; }
@@ -2915,7 +2912,7 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-tl-round{ display:flex; flex-direction:column; gap:7px; }
 .aes-tl-round>span:first-child{ font-family:var(--disp); font-weight:700; font-size:20px; color:var(--chalk); }
 .aes-tl-track{ font-weight:600; font-size:16px; }
-.aes-tl-name{ font-size:12.5px; font-weight:600; color:var(--signal); margin:0 0 3px; }
+.aes-tl-name{ font-size:12.5px; font-weight:500; color:var(--mist); margin:1px 0 0; }
 .aes-tl-loc{ display:flex; align-items:center; gap:5px; color:var(--mist); font-size:12.5px; margin-top:3px; }
 .aes-tl-meta{ display:flex; flex-direction:column; gap:5px; font-size:12.5px; color:var(--mist); }
 .aes-tl-meta span{ display:flex; align-items:center; gap:6px; }
