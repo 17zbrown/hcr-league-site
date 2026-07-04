@@ -408,6 +408,84 @@ function WeatherCell({ w }) {
   );
 }
 
+/* WMO weather code (Open-Meteo) -> label + icon */
+function codeMeta(code) {
+  const c = Number(code);
+  if (c === 0) return { label: "Clear", Icon: Sun };
+  if (c === 1) return { label: "Mainly clear", Icon: Sun };
+  if (c === 2) return { label: "Partly cloudy", Icon: CloudSun };
+  if (c === 3) return { label: "Overcast", Icon: Cloud };
+  if (c === 45 || c === 48) return { label: "Fog", Icon: Cloud };
+  if (c >= 51 && c <= 57) return { label: "Drizzle", Icon: CloudRain };
+  if (c >= 61 && c <= 67) return { label: "Rain", Icon: CloudRain };
+  if (c >= 71 && c <= 77) return { label: "Snow", Icon: Cloud };
+  if (c >= 80 && c <= 82) return { label: "Rain showers", Icon: CloudRain };
+  if (c >= 85 && c <= 86) return { label: "Snow showers", Icon: Cloud };
+  if (c >= 95) return { label: "Thunderstorm", Icon: CloudRain };
+  return { label: "—", Icon: CloudSun };
+}
+
+function CurrentWeather({ city }) {
+  const [st, setSt] = useState({ loading: true, data: null, error: null });
+  useEffect(() => {
+    let alive = true;
+    setSt({ loading: true, data: null, error: null });
+    fetch(`/api/weather?city=${encodeURIComponent(city)}`)
+      .then((r) => r.json())
+      .then((d) => { if (alive) setSt({ loading: false, data: d && !d.error ? d : null, error: d?.error || null }); })
+      .catch(() => { if (alive) setSt({ loading: false, data: null, error: "unavailable" }); });
+    return () => { alive = false; };
+  }, [city]);
+
+  if (st.loading) return <div className="aes-wx-live-msg"><Loader2 size={14} className="aes-spin" /> Fetching current conditions…</div>;
+  if (!st.data) return <div className="aes-wx-live-msg">Live weather isn’t available for “{city}” right now.</div>;
+  const d = st.data;
+  const { label, Icon } = codeMeta(d.code);
+  const place = d.city + (d.region ? `, ${d.region}` : "");
+  return (
+    <div className="aes-wx-live">
+      <div className="aes-wx-live-head">
+        <Icon size={34} style={{ color: "var(--amber)" }} />
+        <div className="aes-wx-live-tempwrap">
+          <div className="aes-wx-live-temp">{d.tempF}°<span>F</span></div>
+          <div className="aes-wx-live-label">{label}</div>
+        </div>
+        <div className="aes-wx-live-place"><MapPin size={12} /> {place}</div>
+      </div>
+      <div className="aes-wx-live-grid">
+        <span><Thermometer size={13} /> Feels {d.feelsF}°F</span>
+        <span><Cloud size={13} /> {d.cloudPct}% cloud</span>
+        <span><Droplets size={13} /> {d.humidity}% humidity</span>
+        <span><Wind size={13} /> {d.windMph} mph</span>
+      </div>
+      <div className="aes-wx-live-foot">Live real-world conditions — reference only, not the in-sim forecast.</div>
+    </div>
+  );
+}
+
+function WeatherPanel({ ev }) {
+  const [tab, setTab] = useState("sim");
+  const city = (ev.location || "").trim();
+  return (
+    <section className="aes-card">
+      <div className="aes-card-head aes-wx-head">
+        <h2><CloudSun size={16} /> Weather</h2>
+        <div className="aes-wx-tabs">
+          <button className={"aes-wx-tab" + (tab === "sim" ? " on" : "")} onClick={() => setTab("sim")}>Sim forecast</button>
+          {city ? <button className={"aes-wx-tab" + (tab === "live" ? " on" : "")} onClick={() => setTab("live")}>Live at {city.split(",")[0]}</button> : null}
+        </div>
+      </div>
+      {tab === "sim" ? (
+        ev.weather && ev.weather.length
+          ? <div className="aes-wx-strip">{ev.weather.map((w, i) => <WeatherCell key={i} w={w} />)}</div>
+          : <div className="aes-wx-live-msg">No in-sim forecast has been set for this race yet.</div>
+      ) : (
+        <CurrentWeather city={city} />
+      )}
+    </section>
+  );
+}
+
 /* ================================ Countdown =============================== */
 function useCountdown(targetIso) {
   const [now, setNow] = useState(Date.now());
@@ -705,12 +783,7 @@ function EventDetail({ data, ev, back, openDriver, openTeam }) {
         </section>
       </div>
 
-      <section className="aes-card">
-        <div className="aes-card-head"><h2><CloudSun size={16} /> Predicted weather</h2></div>
-        <div className="aes-wx-strip">
-          {ev.weather.map((w, i) => <WeatherCell key={i} w={w} />)}
-        </div>
-      </section>
+      <WeatherPanel ev={ev} />
 
       {ev.notes && (
         <section className="aes-card">
@@ -2662,6 +2735,28 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-wx-rows{ display:grid; gap:5px; }
 .aes-wx-rows span{ display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--mist); font-family:var(--mono); }
 .aes-wx-rows svg{ color:var(--mist2); flex-shrink:0; }
+/* weather tabs */
+.aes-wx-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.aes-wx-tabs{ display:inline-flex; background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:3px; gap:2px; }
+.aes-wx-tab{ appearance:none; border:0; background:transparent; color:var(--mist); font-family:var(--disp); font-weight:600;
+  font-size:12px; letter-spacing:.02em; padding:5px 11px; border-radius:6px; cursor:pointer; white-space:nowrap; }
+.aes-wx-tab:hover{ color:var(--chalk); }
+.aes-wx-tab.on{ background:var(--steel); color:var(--signal); }
+.aes-wx-live-msg{ display:flex; align-items:center; gap:8px; color:var(--mist); font-size:13px; padding:14px 2px; }
+/* live weather card */
+.aes-wx-live{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 18px; }
+.aes-wx-live-head{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.aes-wx-live-tempwrap{ display:flex; flex-direction:column; }
+.aes-wx-live-temp{ font-family:var(--disp); font-weight:700; font-size:34px; line-height:1; }
+.aes-wx-live-temp span{ font-size:16px; color:var(--mist); margin-left:1px; }
+.aes-wx-live-label{ font-size:13px; color:var(--chalk); font-weight:600; margin-top:3px; }
+.aes-wx-live-place{ margin-left:auto; display:flex; align-items:center; gap:5px; font-size:12.5px; color:var(--mist); }
+.aes-wx-live-place svg{ color:var(--mist2); }
+.aes-wx-live-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px 16px; margin-top:14px;
+  padding-top:13px; border-top:1px solid var(--line); }
+.aes-wx-live-grid span{ display:flex; align-items:center; gap:7px; font-size:13px; color:var(--mist); font-family:var(--mono); }
+.aes-wx-live-grid svg{ color:var(--mist2); flex-shrink:0; }
+.aes-wx-live-foot{ margin-top:12px; font-size:11px; color:var(--mist2); font-style:italic; }
 
 /* leaders */
 .aes-leader-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:22px; }
