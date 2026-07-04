@@ -2,10 +2,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { CARS } from "@/lib/cars";
+import { driverLicense } from "@/lib/license";
 import { COUNTRIES, flagOf, flagFor } from "@/lib/countries";
 import {
   Lock, Settings, Eye, LogOut, Plus, Trash2, Loader2, ChevronRight, Search,
-  Upload, FileText, AlertTriangle, CheckCircle2, Gauge,
+  Upload, FileText, AlertTriangle, CheckCircle2, Gauge, Save,
 } from "lucide-react";
 
 
@@ -454,8 +455,10 @@ function DriversTab({ supabase, d, reload }) {
       </div>
       {msg && <div className="aes-import-err">{msg}</div>}
       <div className="aes-edit-list">
-        <div className="aes-edit-row driver head"><span>#</span><span>Driver name</span><span>Flag</span><span>Team</span><span>Class</span><span>Car</span><span>Pts</span><span /></div>
-        {shown.map((x) => (
+        <div className="aes-edit-row driver head"><span>#</span><span>Driver name</span><span>Flag</span><span>Team</span><span>Class</span><span>Car</span><span>Pts</span><span>License</span><span /></div>
+        {shown.map((x) => {
+          const lic = driverLicense(x, d.events);
+          return (
           <div key={x.id} className="aes-edit-row driver">
             <span className="aes-ro mono">{x.num || "—"}</span>
             <TextInput defaultValue={x.name} onBlur={(e) => setDriver(x, { name: e.target.value })} placeholder="Driver name" />
@@ -464,9 +467,14 @@ function DriversTab({ supabase, d, reload }) {
             <span className="aes-ro">{x.cls ? className(x.cls) : "—"}</span>
             <span className="aes-ro mono">{x.car || "—"}</span>
             <span className="aes-edit-total mono">{x.pts}</span>
+            <span className="aes-adm-lic" style={{ color: lic.color }}
+              title={lic.rating != null ? `Rating ${lic.rating}/100 · Pace ${lic.pace} · Results ${lic.results} · Safety ${lic.safety} · ${lic.starts} start${lic.starts === 1 ? "" : "s"}${lic.provisional ? " (provisional)" : ""}` : "No starts yet"}>
+              {lic.tier}{lic.rating != null ? <b className="mono"> {lic.rating}</b> : null}
+            </span>
             <div className="aes-edit-actions"><button className="aes-icon-btn danger" onClick={() => delDriver(x)}><Trash2 size={15} /></button></div>
           </div>
-        ))}
+          );
+        })}
         {shown.length === 0 && <div className="aes-filter-empty">No drivers match.</div>}
       </div>
       <p className="aes-hint">A driver's number, class and car come from their <b>team</b> — set those on the Teams tab. Assign a driver to a team with the Team dropdown; co-drivers just share the same team. Points total automatically from results.</p>
@@ -581,6 +589,25 @@ function LeagueTab({ supabase, d, reload }) {
 }
 
 /* ------------------------------- shell ----------------------------------- */
+function SaveBar({ reload }) {
+  const [state, setState] = useState("idle"); // idle | saving | saved
+  const save = async () => {
+    setState("saving");
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    await new Promise((r) => setTimeout(r, 250)); // let any pending field save commit first
+    await reload();
+    setState("saved");
+    setTimeout(() => setState("idle"), 1800);
+  };
+  return (
+    <button className="aes-btn primary sm" onClick={save} disabled={state === "saving"}>
+      {state === "saving" ? <><Loader2 size={14} className="aes-spin" /> Saving…</>
+        : state === "saved" ? <><CheckCircle2 size={14} /> Saved</>
+        : <><Save size={14} /> Save &amp; refresh</>}
+    </button>
+  );
+}
+
 function Shell({ supabase, session }) {
   const [tab, setTab] = useState("events");
   const [editSeason, setEditSeason] = useState("");
@@ -606,6 +633,7 @@ function Shell({ supabase, session }) {
       <div className="aes-admin-top">
         <div className="aes-admin-title"><Settings size={18} /> Race Control <span className="aes-admin-mode">ADMIN</span></div>
         <div className="aes-admin-actions">
+          <SaveBar reload={reload} />
           <select className="aes-input aes-season-pick" value={editSeason} onChange={(e) => { setEditSeason(e.target.value); setLoading(true); }}>
             {d.seasons.map((s) => <option key={s.id} value={s.id}>{s.name}{s.is_current ? " · current" : ""}</option>)}
           </select>
@@ -758,7 +786,9 @@ textarea.aes-input{ resize:vertical; font-family:var(--body); }
 
 .aes-edit-list{ display:flex; flex-direction:column; gap:8px; }
 .aes-edit-row{ display:grid; gap:8px; align-items:center; background:var(--graphite); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
-.aes-edit-row.driver{ grid-template-columns:50px 1.3fr 90px 1fr 90px 1.25fr 56px auto; }
+.aes-edit-row.driver{ grid-template-columns:50px 1.3fr 90px 1fr 90px 1.05fr 46px 128px auto; }
+.aes-adm-lic{ font-size:11px; font-weight:700; letter-spacing:.02em; text-transform:uppercase; white-space:nowrap; }
+.aes-adm-lic b{ font-weight:700; }
 .aes-edit-row.team{ grid-template-columns:1fr auto auto; }
 .aes-edit-row.head{ background:none; border:none; padding:2px 12px 0; align-items:end; }
 .aes-edit-row.head span{ font-family:var(--mono); font-size:9.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--mist2); }

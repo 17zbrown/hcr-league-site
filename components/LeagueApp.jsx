@@ -10,6 +10,7 @@ import {
   ArrowLeft, CheckCircle2, CircleDot, Eye, FileText, Loader2, AlertTriangle, Search, Menu, Sunrise, Sunset,
 } from "lucide-react";
 import { CARS } from "@/lib/cars";
+import { driverLicense, LICENSE_TIERS } from "@/lib/license";
 import { COUNTRIES, flagOf, flagFor } from "@/lib/countries";
 
 /* ============================================================
@@ -250,66 +251,9 @@ function roundPoints(driver, ev) {
 }
 function driverPoints(d, events) { return (events || []).reduce((a, ev) => a + roundPoints(d, ev), 0); }
 
-/* ------------------------- HCR racing license ---------------------------- */
-/* A computed FIA/iRacing-style license per driver from their league record:
-   qualifying + pace, race results, incident cleanliness, and starts (experience).
-   All position-based inputs are class-relative, so classes compare fairly. */
-const LICENSE_TIERS = [
-  { name: "Platinum", min: 88, color: "#DCE3EA" },
-  { name: "Gold", min: 74, color: "#F5C542" },
-  { name: "Silver", min: 58, color: "#AEB8C4" },
-  { name: "Bronze", min: 0, color: "#CB8452" },
-];
-const LICENSE_GATE = { Platinum: 8, Gold: 5, Silver: 3 };
-function driverLicense(driver, events) {
-  const races = [];
-  (events || []).forEach((ev) => {
-    if (!ev.results || !ev.results.length) return;
-    const r = ev.results.find((x) => String(x.num) === String(driver.num) && x.cls === driver.cls) ||
-      (slug(driver.name).length > 3 ? ev.results.find((x) => slug(x.drivers).includes(slug(driver.name))) : null);
-    if (r) races.push({ ev, r });
-  });
-  const starts = races.length;
-  if (!starts) return { tier: "Unranked", color: "#6b7686", rating: null, pace: null, results: null, safety: null, starts: 0, provisional: true };
+/* HCR racing license is computed in @/lib/license (shared with the admin). */
 
-  let finishSum = 0, finishN = 0, gridSum = 0, gridN = 0, wins = 0, podiums = 0, poles = 0, fastLaps = 0, incTotal = 0;
-  races.forEach(({ ev, r }) => {
-    const cp = Number(r.clsPos);
-    if (cp) { finishSum += cp; finishN++; if (cp === 1) wins++; if (cp <= 3) podiums++; }
-    incTotal += Number(r.inc) || 0;
-    const sameCls = (ev.results || []).filter((y) => y.cls === r.cls);
-    const grids = sameCls.map((y) => Number(y.grid)).filter((n) => !isNaN(n) && n > 0);
-    const g = Number(r.grid);
-    if (!isNaN(g) && g > 0 && grids.length) {
-      gridSum += grids.filter((x) => x < g).length + 1; gridN++;
-      if (g === Math.min(...grids)) poles++;
-    }
-    const s = lapToSeconds(r.best);
-    const secs = sameCls.map((y) => lapToSeconds(y.best)).filter((v) => v != null);
-    if (s != null && secs.length && s === Math.min(...secs)) fastLaps++;
-  });
-  const avgFinish = finishN ? finishSum / finishN : null;
-  const avgGrid = gridN ? gridSum / gridN : null;
-  const incPerRace = incTotal / starts;
 
-  const posScore = (p) => p == null ? 55 : Math.max(0, Math.min(100, 104 - p * 11));
-  const results = Math.min(100, posScore(avgFinish) + wins * 4 + podiums * 2);
-  const pace = Math.min(100, posScore(avgGrid) + poles * 4 + fastLaps * 3);
-  const safety = Math.max(0, Math.min(100, 100 - incPerRace * 5));
-  const perf = 0.42 * results + 0.28 * pace + 0.30 * safety;
-  const conf = Math.min(1, starts / 8);                 // full weight at 8 starts
-  const rating = Math.round(perf * conf + 40 * (1 - conf)); // new drivers start low, climb with a record
-  let t = LICENSE_TIERS.find((x) => rating >= x.min) || LICENSE_TIERS[LICENSE_TIERS.length - 1];
-  while (t.name !== "Bronze" && starts < (LICENSE_GATE[t.name] || 0)) {
-    t = LICENSE_TIERS[LICENSE_TIERS.indexOf(t) + 1];     // not enough starts — hold at the tier below
-  }
-
-  return {
-    tier: t.name, color: t.color, rating,
-    pace: Math.round(pace), results: Math.round(results), safety: Math.round(safety),
-    starts, incPerRace, wins, podiums, provisional: starts < 5,
-  };
-}
 
 /* sky color keyframes -> muted, dark-theme-friendly */
 const SKY = [
@@ -462,7 +406,7 @@ function WeatherCell({ w }) {
       <div className="aes-wx-sky">{label}</div>
       <div className="aes-wx-rows">
         <span><Thermometer size={12} /> {w.air}°F air</span>
-        <span><Cloud size={12} /> {clouds}% cloud</span>
+        <span><Cloud size={12} /> {clouds}% cloud cover</span>
         <span><Droplets size={12} /> {w.precip}% rain</span>
       </div>
     </div>
@@ -586,8 +530,8 @@ function LiveWeather({ ev }) {
         <div className="aes-wx-live-place"><MapPin size={12} /> {ev.location}</div>
       </div>
       <div className="aes-wx-live-grid">
-        <span><Thermometer size={13} /> Feels {data.feelsF}°F</span>
-        <span><Cloud size={13} /> {data.cloudPct}% cloud</span>
+        <span><Thermometer size={13} /> Feels like {data.feelsF}°F</span>
+        <span><Cloud size={13} /> {data.cloudPct}% cloud cover</span>
         <span><Droplets size={13} /> {data.humidity}% humidity</span>
         <span><Wind size={13} /> {data.windMph} mph</span>
       </div>
@@ -625,7 +569,7 @@ function ForecastWeather({ ev }) {
       </div>
       <div className="aes-wx-live-grid">
         <span><Thermometer size={13} /> High {at.highF}° · Low {at.lowF}°</span>
-        <span><Cloud size={13} /> {at.cloudPct}% cloud</span>
+        <span><Cloud size={13} /> {at.cloudPct}% cloud cover</span>
         <span><Droplets size={13} /> {rain}</span>
         <span><Wind size={13} /> {at.windMph} mph</span>
       </div>
@@ -825,7 +769,7 @@ function Dashboard({ data, openEvent, go, openDriver, openTeam }) {
             {data.events.map((e) => (
               <button key={e.id} className={"aes-mini-round " + e.status} onClick={() => openEvent(e.id)}>
                 <span className="mono">R{e.round}</span>
-                <span>{e.track.split(" ")[0]}</span>
+                <span>{e.track}</span>
               </button>
             ))}
           </div>
@@ -1056,49 +1000,28 @@ function EventDetail({ data, ev, back, openDriver, openTeam }) {
 }
 
 /* ============================== Driver profile =========================== */
-function LicenseBar({ label, v }) {
-  return (
-    <div className="aes-lic-bar">
-      <div className="aes-lic-bar-top"><span>{label}</span><span className="mono">{v}</span></div>
-      <div className="aes-lic-bar-track"><div className="aes-lic-bar-fill" style={{ width: `${Math.max(0, Math.min(100, v))}%` }} /></div>
-    </div>
-  );
-}
 function LicenseCard({ lic }) {
-  const ranked = lic && lic.rating != null;
+  const ranked = lic && lic.tier && lic.tier !== "Unranked";
+  const color = lic?.color || "#6b7686";
+  const desc = ranked ? (TIER_DESC[lic.tier] || "") : "A license is issued after the driver's first race start.";
   return (
     <section className="aes-lic">
-      <div className="aes-lic-badge" style={{ borderColor: lic?.color || "#6b7686", color: lic?.color || "#6b7686" }}>
+      <div className="aes-lic-badge" style={{ borderColor: color, color }}>
         <span className="aes-lic-label">HCR License</span>
         <span className="aes-lic-tier">{lic?.tier || "Unranked"}</span>
-        <span className="aes-lic-rating mono">{ranked ? lic.rating : "—"}<em>/100</em></span>
       </div>
       <div className="aes-lic-side">
-        {ranked ? (
-          <>
-            <div className="aes-lic-bars">
-              <LicenseBar label="Pace / Qualifying" v={lic.pace} />
-              <LicenseBar label="Race results" v={lic.results} />
-              <LicenseBar label="Safety" v={lic.safety} />
-            </div>
-            <div className="aes-lic-foot">
-              {lic.starts} start{lic.starts === 1 ? "" : "s"}
-              {lic.provisional ? <span className="aes-lic-prov"> · provisional — climbs as you race more</span> : null}
-            </div>
-          </>
-        ) : (
-          <div className="aes-lic-foot">A license is issued after the driver's first race start.</div>
-        )}
+        <div className="aes-lic-desc">{desc}</div>
+        {ranked && lic.provisional ? <div className="aes-lic-foot"><span className="aes-lic-prov">Provisional — climbs as they race more</span></div> : null}
       </div>
     </section>
   );
 }
 function LicensePill({ lic }) {
-  const ranked = lic && lic.rating != null;
+  const color = lic?.color || "#6b7686";
   return (
-    <span className="aes-lic-pill" style={{ color: lic?.color || "#6b7686", borderColor: lic?.color || "#6b7686" }}
-      title={ranked ? `${lic.tier} license · rating ${lic.rating}/100` : "Unranked"}>
-      {lic?.tier || "Unranked"}{ranked ? <b className="mono"> {lic.rating}</b> : null}
+    <span className="aes-lic-pill" style={{ color, borderColor: color }} title={(lic?.tier || "Unranked") + " license"}>
+      {lic?.tier || "Unranked"}
     </span>
   );
 }
@@ -3045,10 +2968,10 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-progress-fill{ height:100%; background:linear-gradient(90deg,var(--signal),var(--amber)); }
 .aes-progress-meta{ font-size:11px; color:var(--mist); margin-top:8px; letter-spacing:.08em; }
 .aes-mini-sched{ display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
-.aes-mini-round{ display:flex; flex-direction:column; gap:2px; align-items:center; background:var(--panel);
-  border:1px solid var(--line); border-radius:8px; padding:8px 11px; font-size:12px; color:var(--mist); min-width:64px; }
+.aes-mini-round{ display:flex; flex-direction:column; gap:3px; align-items:center; text-align:center; background:var(--panel);
+  border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:12px; color:var(--mist); min-width:104px; max-width:150px; flex:1 1 104px; }
 .aes-mini-round span:first-child{ font-family:var(--mono); font-size:11px; color:var(--mist2); }
-.aes-mini-round span:last-child{ color:var(--chalk); font-weight:600; }
+.aes-mini-round span:last-child{ color:var(--chalk); font-weight:600; font-size:11.5px; line-height:1.25; }
 .aes-mini-round:hover{ border-color:var(--mist2); }
 .aes-mini-round.complete{ border-left:3px solid var(--green); }
 .aes-mini-round.next{ border-left:3px solid var(--signal); }
@@ -3242,7 +3165,8 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-lic-tier{ font-family:var(--disp); font-weight:800; font-size:25px; line-height:1.05; }
 .aes-lic-rating{ font-size:15px; color:var(--chalk); }
 .aes-lic-rating em{ font-style:normal; color:var(--mist2); font-size:11px; }
-.aes-lic-side{ flex:1; min-width:220px; display:flex; flex-direction:column; justify-content:center; gap:10px; }
+.aes-lic-side{ flex:1; min-width:220px; display:flex; flex-direction:column; justify-content:center; gap:8px; }
+.aes-lic-desc{ font-size:13.5px; color:var(--chalk); line-height:1.5; }
 .aes-lic-bars{ display:flex; flex-direction:column; gap:9px; }
 .aes-lic-bar-top{ display:flex; justify-content:space-between; font-size:11.5px; color:var(--mist); margin-bottom:3px; }
 .aes-lic-bar-top .mono{ color:var(--chalk); }
@@ -3274,12 +3198,14 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-rec-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px; }
 .aes-rec-loc{ color:var(--mist); font-size:12.5px; margin:-4px 0 10px; }
 .aes-rec-rows{ display:flex; flex-direction:column; gap:8px; }
-.aes-rec-row{ display:grid; grid-template-columns:auto 96px 1fr auto; align-items:center; gap:10px; padding:9px 10px;
+.aes-rec-row{ display:grid; grid-template-columns:auto 1fr auto; grid-template-areas:"pill time rd" "who who who";
+  align-items:center; column-gap:10px; row-gap:7px; padding:10px 12px;
   background:var(--graphite); border:1px solid var(--line); border-radius:9px; }
-.aes-rec-time{ font-size:15px; font-weight:700; color:var(--chalk); }
-.aes-rec-who{ display:flex; flex-direction:column; gap:1px; min-width:0; font-size:13px; }
-.aes-rec-car{ font-style:normal; font-family:var(--mono); font-size:11px; color:var(--mist2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.aes-rec-rd{ background:var(--steel); border:1px solid var(--line); color:var(--mist); font-family:var(--mono); font-size:11px;
+.aes-rec-row .aes-cls-pill{ grid-area:pill; }
+.aes-rec-time{ grid-area:time; font-size:15px; font-weight:700; color:var(--chalk); }
+.aes-rec-who{ grid-area:who; display:flex; flex-direction:column; gap:2px; min-width:0; font-size:13px; padding-top:8px; border-top:1px solid var(--line); }
+.aes-rec-car{ font-style:normal; font-family:var(--mono); font-size:11px; color:var(--mist2); line-height:1.4; }
+.aes-rec-rd{ grid-area:rd; justify-self:end; background:var(--steel); border:1px solid var(--line); color:var(--mist); font-family:var(--mono); font-size:11px;
   padding:3px 8px; border-radius:6px; cursor:pointer; }
 .aes-rec-rd:hover{ color:var(--signal); border-color:var(--signal); }
 .aes-pen{ color:var(--amber); font-size:11px; font-weight:600; }
