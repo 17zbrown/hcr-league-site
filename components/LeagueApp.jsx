@@ -250,6 +250,61 @@ function roundPoints(driver, ev) {
 }
 function driverPoints(d, events) { return (events || []).reduce((a, ev) => a + roundPoints(d, ev), 0); }
 
+/* ------------------------- HCR racing license ---------------------------- */
+/* A computed FIA/iRacing-style license per driver from their league record:
+   qualifying + pace, race results, incident cleanliness, and starts (experience).
+   All position-based inputs are class-relative, so classes compare fairly. */
+const LICENSE_TIERS = [
+  { name: "Platinum", min: 88, color: "#DCE3EA" },
+  { name: "Gold", min: 74, color: "#F5C542" },
+  { name: "Silver", min: 58, color: "#AEB8C4" },
+  { name: "Bronze", min: 0, color: "#CB8452" },
+];
+function driverLicense(driver, events) {
+  const races = [];
+  (events || []).forEach((ev) => {
+    if (!ev.results || !ev.results.length) return;
+    const r = ev.results.find((x) => String(x.num) === String(driver.num) && x.cls === driver.cls) ||
+      (slug(driver.name).length > 3 ? ev.results.find((x) => slug(x.drivers).includes(slug(driver.name))) : null);
+    if (r) races.push({ ev, r });
+  });
+  const starts = races.length;
+  if (!starts) return { tier: "Unranked", color: "#6b7686", rating: null, pace: null, results: null, safety: null, starts: 0, provisional: true };
+
+  let finishSum = 0, finishN = 0, gridSum = 0, gridN = 0, wins = 0, podiums = 0, poles = 0, fastLaps = 0, incTotal = 0;
+  races.forEach(({ ev, r }) => {
+    const cp = Number(r.clsPos);
+    if (cp) { finishSum += cp; finishN++; if (cp === 1) wins++; if (cp <= 3) podiums++; }
+    incTotal += Number(r.inc) || 0;
+    const sameCls = (ev.results || []).filter((y) => y.cls === r.cls);
+    const grids = sameCls.map((y) => Number(y.grid)).filter((n) => !isNaN(n) && n > 0);
+    const g = Number(r.grid);
+    if (!isNaN(g) && g > 0 && grids.length) {
+      gridSum += grids.filter((x) => x < g).length + 1; gridN++;
+      if (g === Math.min(...grids)) poles++;
+    }
+    const s = lapToSeconds(r.best);
+    const secs = sameCls.map((y) => lapToSeconds(y.best)).filter((v) => v != null);
+    if (s != null && secs.length && s === Math.min(...secs)) fastLaps++;
+  });
+  const avgFinish = finishN ? finishSum / finishN : null;
+  const avgGrid = gridN ? gridSum / gridN : null;
+  const incPerRace = incTotal / starts;
+
+  const posScore = (p) => p == null ? 55 : Math.max(0, Math.min(100, 104 - p * 11));
+  const results = Math.min(100, posScore(avgFinish) + wins * 4 + podiums * 2);
+  const pace = Math.min(100, posScore(avgGrid) + poles * 4 + fastLaps * 3);
+  const safety = Math.max(0, Math.min(100, 100 - incPerRace * 5));
+  const rating = Math.round(0.42 * results + 0.28 * pace + 0.30 * safety);
+  const t = LICENSE_TIERS.find((x) => rating >= x.min) || LICENSE_TIERS[LICENSE_TIERS.length - 1];
+
+  return {
+    tier: t.name, color: t.color, rating,
+    pace: Math.round(pace), results: Math.round(results), safety: Math.round(safety),
+    starts, incPerRace, wins, podiums, provisional: starts < 3,
+  };
+}
+
 /* sky color keyframes -> muted, dark-theme-friendly */
 const SKY = [
   { h: 0, c: [12, 16, 34] }, { h: 4.5, c: [20, 24, 50] }, { h: 6, c: [86, 64, 92] },
@@ -995,6 +1050,53 @@ function EventDetail({ data, ev, back, openDriver, openTeam }) {
 }
 
 /* ============================== Driver profile =========================== */
+function LicenseBar({ label, v }) {
+  return (
+    <div className="aes-lic-bar">
+      <div className="aes-lic-bar-top"><span>{label}</span><span className="mono">{v}</span></div>
+      <div className="aes-lic-bar-track"><div className="aes-lic-bar-fill" style={{ width: `${Math.max(0, Math.min(100, v))}%` }} /></div>
+    </div>
+  );
+}
+function LicenseCard({ lic }) {
+  const ranked = lic && lic.rating != null;
+  return (
+    <section className="aes-lic">
+      <div className="aes-lic-badge" style={{ borderColor: lic?.color || "#6b7686", color: lic?.color || "#6b7686" }}>
+        <span className="aes-lic-label">HCR License</span>
+        <span className="aes-lic-tier">{lic?.tier || "Unranked"}</span>
+        <span className="aes-lic-rating mono">{ranked ? lic.rating : "—"}<em>/100</em></span>
+      </div>
+      <div className="aes-lic-side">
+        {ranked ? (
+          <>
+            <div className="aes-lic-bars">
+              <LicenseBar label="Pace / Qualifying" v={lic.pace} />
+              <LicenseBar label="Race results" v={lic.results} />
+              <LicenseBar label="Safety" v={lic.safety} />
+            </div>
+            <div className="aes-lic-foot">
+              {lic.starts} start{lic.starts === 1 ? "" : "s"}
+              {lic.provisional ? <span className="aes-lic-prov"> · provisional (firms up at 3 starts)</span> : null}
+            </div>
+          </>
+        ) : (
+          <div className="aes-lic-foot">A license is issued after the driver's first race start.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+function LicensePill({ lic }) {
+  const ranked = lic && lic.rating != null;
+  return (
+    <span className="aes-lic-pill" style={{ color: lic?.color || "#6b7686", borderColor: lic?.color || "#6b7686" }}
+      title={ranked ? `${lic.tier} license · rating ${lic.rating}/100` : "Unranked"}>
+      {lic?.tier || "Unranked"}{ranked ? <b className="mono"> {lic.rating}</b> : null}
+    </span>
+  );
+}
+
 function DriverProfile({ data, driver, back, openEvent, openTeam }) {
   const team = data.teams.find((t) => t.id === driver.teamId);
   const cls = data.classes.find((c) => c.id === driver.cls);
@@ -1011,6 +1113,7 @@ function DriverProfile({ data, driver, back, openEvent, openTeam }) {
   }, [data, driver]);
 
   const totalPts = driverPoints(driver, data.events);
+  const lic = driverLicense(driver, data.events);
   const classField = data.drivers.filter((d) => d.cls === driver.cls)
     .map((d) => ({ id: d.id, pts: driverPoints(d, data.events) }))
     .sort((a, b) => b.pts - a.pts);
@@ -1073,6 +1176,8 @@ function DriverProfile({ data, driver, back, openEvent, openTeam }) {
             : <span><b>P{champRank}</b> in {cls?.name || driver.cls} · <b>{champBehind}</b> pt{champBehind === 1 ? "" : "s"} behind the leader</span>}
         </div>
       )}
+
+      <LicenseCard lic={lic} />
 
       <div className="aes-prof-stats">
         <div className="aes-stat"><span className="aes-stat-v mono">{totalPts}</span><span className="aes-stat-k">Points</span></div>
@@ -1559,6 +1664,17 @@ function Standings({ data, openDriver, openTeam }) {
 }
 
 /* ================================== Info ================================== */
+const RACE_CLASSES = [
+  { id: "GTP", cars: "Hypercar / LMDh prototypes — the fastest cars in the field.", rule: "Open lineup — any driver class permitted." },
+  { id: "LMP2", cars: "Spec Le Mans Prototypes (ORECA, Ligier, Dallara, Riley-Multimatic).", rule: "Pro-Am — no Platinum, one Gold maximum, must field a Bronze." },
+  { id: "GTD", cars: "FIA GT3 production-based GT cars.", rule: "Pro-Am — one Platinum maximum, must field a Silver or Bronze." },
+];
+const TIER_DESC = {
+  Platinum: "Elite, professional-level pace with consistently clean racing.",
+  Gold: "Fast semi-professional — strong qualifying, results, and safety.",
+  Silver: "Competitive and experienced, with room to climb.",
+  Bronze: "Developing driver building pace and race consistency.",
+};
 function Info({ data }) {
   const L = data.league;
   return (
@@ -1574,6 +1690,42 @@ function Info({ data }) {
           <div><dt>Drivers per car</dt><dd>2–6 depending on round</dd></div>
           <div><dt>Schedule</dt><dd>One round roughly every 4 weeks, {L.timezone}</dd></div>
           <div><dt>Scoring</dt><dd>Per-class points; finale pays double</dd></div>
+        </div>
+      </section>
+
+      <section className="aes-card">
+        <div className="aes-card-head"><h2><Flag size={16} /> Race classes</h2></div>
+        <p className="aes-info-lead">The field runs in {data.classes.length} classes together on track, each scored separately. Driver-lineup rules follow IMSA's WeatherTech format.</p>
+        <div className="aes-classlist">
+          {RACE_CLASSES.map((rc) => {
+            const c = data.classes.find((x) => x.id === rc.id || x.name === rc.id);
+            const color = c ? c.color : "var(--chalk)";
+            return (
+              <div key={rc.id} className="aes-classrow">
+                <span className="aes-cls-pill" style={{ color, borderColor: color }}>{rc.id}</span>
+                <div className="aes-classtext">
+                  <span className="aes-classcars">{rc.cars}</span>
+                  <span className="aes-classrule">{rc.rule}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="aes-card">
+        <div className="aes-card-head"><h2><Gauge size={16} /> Driver classes</h2></div>
+        <p className="aes-info-lead">Every driver carries a license class based on the same FIA categorization IMSA uses (Bronze up to Platinum). In HCR it's calculated from your league record — qualifying &amp; pace, race results, and incident points — and firms up after three starts.</p>
+        <div className="aes-classlist">
+          {LICENSE_TIERS.map((t) => (
+            <div key={t.name} className="aes-classrow">
+              <span className="aes-classdot" style={{ background: t.color }} />
+              <div className="aes-classtext">
+                <span className="aes-classcars" style={{ color: t.color }}>{t.name}</span>
+                <span className="aes-classrule">{TIER_DESC[t.name]}</span>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -2533,7 +2685,7 @@ function Roster({ data, openDriver, openTeam }) {
         <div className="aes-entry-main">
           <div className="aes-entry-drivers">
             {e.drivers.map((d, i) => (
-              <span key={d.id}>{i > 0 && <span className="aes-codriver-sep"> · </span>}<button className="aes-link-driver" onClick={() => openDriver(d.id)}>{d.country ? d.country + " " : ""}{d.name}</button></span>
+              <span key={d.id} className="aes-roster-driver">{i > 0 && <span className="aes-codriver-sep"> · </span>}<button className="aes-link-driver" onClick={() => openDriver(d.id)}>{d.country ? d.country + " " : ""}{d.name}</button> <LicensePill lic={driverLicense(d, data.events)} /></span>
             ))}
           </div>
           {e.car && <div className="aes-entry-car mono">{e.car}</div>}
@@ -2985,6 +3137,14 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 
 /* info */
 .aes-info-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px 28px; }
+.aes-info-lead{ color:var(--mist); font-size:13.5px; line-height:1.55; margin:0 0 15px; }
+.aes-classlist{ display:flex; flex-direction:column; gap:14px; }
+.aes-classrow{ display:flex; align-items:flex-start; gap:13px; }
+.aes-classdot{ width:13px; height:13px; border-radius:50%; margin-top:4px; flex-shrink:0; box-shadow:0 0 0 1px rgba(255,255,255,.12); }
+.aes-classtext{ display:flex; flex-direction:column; gap:2px; }
+.aes-classcars{ font-weight:600; font-size:14px; }
+.aes-classrule{ font-size:12.5px; color:var(--mist); line-height:1.5; }
+.aes-classrow .aes-cls-pill{ margin-top:2px; flex-shrink:0; min-width:52px; text-align:center; }
 .aes-info-grid dt{ font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--mist); }
 .aes-info-grid dd{ margin:3px 0 0; font-weight:500; }
 .aes-rules{ margin:0; padding-left:18px; display:flex; flex-direction:column; gap:9px; color:var(--mist); font-size:14px; line-height:1.55; }
@@ -3067,6 +3227,26 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-prof-team{ color:var(--chalk); font-weight:600; font-size:14px; }
 .aes-prof-car{ color:var(--mist); font-size:12.5px; }
 .aes-prof-stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(108px,1fr)); gap:10px; margin-bottom:22px; }
+/* racing license */
+.aes-lic{ display:flex; gap:18px; align-items:stretch; background:var(--graphite); border:1px solid var(--line);
+  border-radius:14px; padding:15px 18px; margin-bottom:22px; flex-wrap:wrap; }
+.aes-lic-badge{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  min-width:148px; padding:10px 18px; border:1.5px solid; border-radius:12px; background:rgba(255,255,255,.02); }
+.aes-lic-label{ font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--mist); font-weight:600; }
+.aes-lic-tier{ font-family:var(--disp); font-weight:800; font-size:25px; line-height:1.05; }
+.aes-lic-rating{ font-size:15px; color:var(--chalk); }
+.aes-lic-rating em{ font-style:normal; color:var(--mist2); font-size:11px; }
+.aes-lic-side{ flex:1; min-width:220px; display:flex; flex-direction:column; justify-content:center; gap:10px; }
+.aes-lic-bars{ display:flex; flex-direction:column; gap:9px; }
+.aes-lic-bar-top{ display:flex; justify-content:space-between; font-size:11.5px; color:var(--mist); margin-bottom:3px; }
+.aes-lic-bar-top .mono{ color:var(--chalk); }
+.aes-lic-bar-track{ height:6px; border-radius:4px; background:var(--steel); overflow:hidden; }
+.aes-lic-bar-fill{ height:100%; border-radius:4px; background:linear-gradient(90deg, var(--accent2), var(--signal)); }
+.aes-lic-foot{ font-size:11px; color:var(--mist2); }
+.aes-lic-prov{ color:var(--amber); }
+.aes-lic-pill{ display:inline-flex; align-items:center; font-size:9.5px; font-weight:700; letter-spacing:.03em;
+  text-transform:uppercase; border:1px solid; border-radius:20px; padding:1px 7px; vertical-align:middle; white-space:nowrap; }
+.aes-roster-driver{ display:inline-block; }
 .aes-stat{ background:var(--graphite); border:1px solid var(--line); border-radius:11px; padding:14px 12px; display:flex; flex-direction:column; gap:5px; align-items:flex-start; }
 .aes-stat-v{ font-size:22px; font-weight:700; color:var(--chalk); }
 .aes-stat-k{ font-family:var(--mono); font-size:9.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--mist); }
