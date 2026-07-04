@@ -482,17 +482,32 @@ function useWeather(url) {
 }
 
 /* hourly outlook strip styled after the day/night bar (times are ET) */
+function hourLabel(h) {
+  h = ((h % 24) + 24) % 24;
+  const hh = Math.floor(h), mm = Math.round((h - hh) * 60);
+  let h12 = hh % 12; if (h12 === 0) h12 = 12;
+  const ap = hh < 12 ? "a" : "p";
+  return mm ? `${h12}:${String(mm).padStart(2, "0")}${ap}` : `${h12}${ap}`;
+}
 function owlHour(t) {
   const hh = Number(String(t).slice(11, 13));
-  const lab = hh === 0 ? "12a" : hh < 12 ? `${hh}a` : hh === 12 ? "12p" : `${hh - 12}p`;
-  return { hh, lab };
+  return { hh, lab: hourLabel(hh) };
 }
-function WeatherOutlook({ hours, markerIdx, markerLabel }) {
+/* simStart set => label the strip in in-sim time (marker cell = the sim start
+   hour), matching the day/night bar. Otherwise labels are real-world (live). */
+function WeatherOutlook({ hours, markerIdx, markerLabel, simStart, mult }) {
   if (!hours || hours.length < 2) return null;
+  const useSim = simStart != null;
   return (
     <div className="aes-owl">
       {hours.map((h, i) => {
-        const { hh, lab } = owlHour(h.t);
+        let hh, lab;
+        if (useSim) {
+          hh = simStart + (i - markerIdx) * (mult || 1);
+          lab = hourLabel(hh);
+        } else {
+          ({ hh, lab } = owlHour(h.t));
+        }
         const [r, g, b] = skyColor(hh);
         const { Icon } = condFrom(h);
         const on = i === markerIdx;
@@ -563,7 +578,7 @@ function ForecastWeather({ ev }) {
         <Icon size={34} style={{ color: "var(--amber)" }} />
         <div className="aes-wx-live-tempwrap">
           <div className="aes-wx-live-temp">{at.tempF}°<span>F</span></div>
-          <div className="aes-wx-live-label">{label} · at 8 PM ET</div>
+          <div className="aes-wx-live-label">{label} · at race start</div>
         </div>
         <div className="aes-wx-live-place"><MapPin size={12} /> {ev.location}</div>
       </div>
@@ -573,8 +588,8 @@ function ForecastWeather({ ev }) {
         <span><Droplets size={13} /> {rain}</span>
         <span><Wind size={13} /> {at.windMph} mph</span>
       </div>
-      <WeatherOutlook hours={data.hourly} markerIdx={data.markerIdx} markerLabel={data.markerLabel || "Race"} />
-      <div className="aes-wx-live-foot">Forecast for race day · hourly outlook around the 8 PM ET start.</div>
+      <WeatherOutlook hours={data.hourly} markerIdx={data.markerIdx} markerLabel={data.markerLabel || "Race"} simStart={ev.simStartHour} mult={ev.timeMult} />
+      <div className="aes-wx-live-foot">Forecast for race day · hourly outlook in sim time, centred on the race start.</div>
     </div>
   );
 }
@@ -1091,6 +1106,7 @@ function DriverProfile({ data, driver, back, openEvent, openTeam }) {
           <h1 className="aes-prof-name">{driver.country ? <span className="aes-flag">{driver.country}</span> : null} {driver.name}</h1>
           <div className="aes-prof-meta">
             {cls && <span className="aes-cls-pill" style={{ color: cls.color, borderColor: cls.color }}>{cls.name}</span>}
+            <LicensePill lic={lic} />
             {team && <button className="aes-prof-team aes-link-driver" onClick={() => openTeam && openTeam(team.id)}>{team.name}</button>}
             {driver.car && <span className="aes-prof-car mono">{driver.car}</span>}
           </div>
@@ -1105,8 +1121,6 @@ function DriverProfile({ data, driver, back, openEvent, openTeam }) {
             : <span><b>P{champRank}</b> in {cls?.name || driver.cls} · <b>{champBehind}</b> pt{champBehind === 1 ? "" : "s"} behind the leader</span>}
         </div>
       )}
-
-      <LicenseCard lic={lic} />
 
       <div className="aes-prof-stats">
         <div className="aes-stat"><span className="aes-stat-v mono">{totalPts}</span><span className="aes-stat-k">Points</span></div>
