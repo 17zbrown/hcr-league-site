@@ -1685,9 +1685,16 @@ function Info({ data }) {
       <section className="aes-card">
         <div className="aes-card-head"><h2><Users size={16} /> Get involved</h2></div>
         <div className="aes-links">
-          <a className="aes-link-card" href={L.links.discord} target="_blank" rel="noreferrer"><Radio size={18} /><span>Discord<em>Sign-ups, driver briefings & race control</em></span></a>
-          <a className="aes-link-card" href={L.links.broadcast} target="_blank" rel="noreferrer"><Eye size={18} /><span>Broadcast<em>Live coverage of every round</em></span></a>
-          <a className="aes-link-card" href={L.links.rulebook} target="_blank" rel="noreferrer"><Flag size={18} /><span>Rulebook<em>Full sporting & technical regulations</em></span></a>
+          {[
+            { url: L.links.discord, Icon: Radio, title: "Discord", sub: "Sign-ups, driver briefings & race control" },
+            { url: L.links.broadcast, Icon: Eye, title: "Broadcast", sub: "Live coverage of every round" },
+            { url: L.links.rulebook, Icon: Flag, title: "Rulebook", sub: "Full sporting & technical regulations" },
+          ].map(({ url, Icon, title, sub }) => {
+            const href = (url || "").trim();
+            return href
+              ? <a key={title} className="aes-link-card" href={href} target="_blank" rel="noreferrer"><Icon size={18} /><span>{title}<em>{sub}</em></span></a>
+              : <div key={title} className="aes-link-card disabled"><Icon size={18} /><span>{title}<em>Not set yet</em></span></div>;
+          })}
         </div>
       </section>
     </div>
@@ -3096,6 +3103,9 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-link-card{ display:flex; align-items:center; gap:13px; background:var(--panel); border:1px solid var(--line);
   border-radius:11px; padding:15px 16px; }
 .aes-link-card:hover{ border-color:var(--signal); }
+.aes-link-card.disabled{ opacity:.5; cursor:default; }
+.aes-link-card.disabled:hover{ border-color:var(--line); }
+.aes-link-card.disabled svg{ color:var(--mist2); }
 .aes-link-card svg{ color:var(--signal); }
 .aes-link-card span{ display:flex; flex-direction:column; font-weight:600; }
 .aes-link-card em{ font-style:normal; font-weight:400; font-size:12px; color:var(--mist); margin-top:2px; }
