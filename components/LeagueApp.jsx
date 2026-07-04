@@ -1401,6 +1401,25 @@ function Standings({ data, openDriver, openTeam }) {
     return rows;
   }, [data, clsFilter]);
 
+  const driverGroups = useMemo(() => {
+    const completed = data.events.filter((e) => e.status === "complete").sort((a, b) => a.round - b.round);
+    const prevRounds = completed.slice(0, -1);
+    const classesToShow = clsFilter === "ALL" ? data.classes : data.classes.filter((c) => c.id === clsFilter);
+    return classesToShow.map((c) => {
+      let rows = data.drivers.filter((d) => d.cls === c.id)
+        .map((d) => ({ ...d, pts: driverPoints(d, data.events), team: data.teams.find((t) => t.id === d.teamId) }));
+      rows.sort((a, b) => b.pts - a.pts);
+      if (prevRounds.length > 0) {
+        const prev = rows.map((d) => ({ id: d.id, p: prevRounds.reduce((a, ev) => a + roundPoints(d, ev), 0) })).sort((a, b) => b.p - a.p);
+        const prevRank = {}; prev.forEach((x, i) => { prevRank[x.id] = i + 1; });
+        rows = rows.map((d, i) => ({ ...d, mv: prevRank[d.id] != null ? prevRank[d.id] - (i + 1) : null }));
+      } else {
+        rows = rows.map((d) => ({ ...d, mv: null }));
+      }
+      return { cls: c, rows, leaderPts: rows[0] ? rows[0].pts : 0 };
+    }).filter((g) => g.rows.length > 0);
+  }, [data, clsFilter]);
+
   const teamRows = useMemo(() => {
     const rows = data.teams.map((t) => {
       const ds = data.drivers.filter((d) => d.teamId === t.id);
@@ -1487,35 +1506,40 @@ function Standings({ data, openDriver, openTeam }) {
         )}
       </div>
 
-      {mode === "drivers" && (
-        <div className="aes-table-wrap">
-          <table className="aes-table">
-            <thead>
-              <tr>
-                <th className="num">#</th><th>Driver</th><th>Team</th><th className="ctr">Class</th>
-                {completedRounds.map((e) => <th key={e.id} className="ctr rnd">R{e.round}</th>)}
-                <th className="ctr">Pts</th><th className="ctr">Gap</th>
-              </tr>
-            </thead>
-            <tbody>
-              {driverRows.map((d, i) => (
-                <tr key={d.id}>
-                  <td className="num mono">{i + 1}{d.mv != null && d.mv !== 0 ? (d.mv > 0 ? <span className="aes-mv-up" title={"Up " + d.mv + " since last round"}> ▲</span> : <span className="aes-mv-dn" title={"Down " + (-d.mv) + " since last round"}> ▼</span>) : null}</td>
-                  <td className="aes-td-driver">
-                    <div className="aes-driver-line"><span className="aes-flag">{d.country}</span> <span className="aes-num-badge mono">{d.num}</span> <button className="aes-link-driver" onClick={() => openDriver && openDriver(d.id)}>{d.name}</button></div>
-                    {d.car && <div className="aes-driver-car">{d.car}</div>}
-                  </td>
-                  <td className="aes-td-team">{d.team ? <button className="aes-link-driver" onClick={() => openTeam(d.team.id)}>{d.team.name}</button> : "—"}</td>
-                  <td className="ctr"><ClassDot cls={d.cls} classes={data.classes} /></td>
-                  {completedRounds.map((e) => <td key={e.id} className="ctr mono dim">{roundPoints(d, e) || "–"}</td>)}
-                  <td className="ctr mono pts">{d.pts}</td>
-                  <td className="ctr mono dim">{i === 0 ? "—" : "-" + (leaderPts - d.pts)}</td>
+      {mode === "drivers" && driverGroups.map((g) => (
+        <div className="aes-stand-group" key={g.cls.id}>
+          <div className="aes-stand-grouphead">
+            <span className="aes-cls-pill" style={{ color: g.cls.color, borderColor: g.cls.color }}>{g.cls.name}</span>
+            <span className="aes-stand-groupsub">{g.rows.length} driver{g.rows.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div className="aes-table-wrap">
+            <table className="aes-table">
+              <thead>
+                <tr>
+                  <th className="num">#</th><th>Driver</th><th>Team</th>
+                  {completedRounds.map((e) => <th key={e.id} className="ctr rnd">R{e.round}</th>)}
+                  <th className="ctr">Pts</th><th className="ctr">Gap</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {g.rows.map((d, i) => (
+                  <tr key={d.id}>
+                    <td className="num mono">{i + 1}{d.mv != null && d.mv !== 0 ? (d.mv > 0 ? <span className="aes-mv-up" title={"Up " + d.mv + " since last round"}> ▲</span> : <span className="aes-mv-dn" title={"Down " + (-d.mv) + " since last round"}> ▼</span>) : null}</td>
+                    <td className="aes-td-driver">
+                      <div className="aes-driver-line"><span className="aes-flag">{d.country}</span> <span className="aes-num-badge mono">{d.num}</span> <button className="aes-link-driver" onClick={() => openDriver && openDriver(d.id)}>{d.name}</button></div>
+                      {d.car && <div className="aes-driver-car">{d.car}</div>}
+                    </td>
+                    <td className="aes-td-team">{d.team ? <button className="aes-link-driver" onClick={() => openTeam(d.team.id)}>{d.team.name}</button> : "—"}</td>
+                    {completedRounds.map((e) => <td key={e.id} className="ctr mono dim">{roundPoints(d, e) || "–"}</td>)}
+                    <td className="ctr mono pts">{d.pts}</td>
+                    <td className="ctr mono dim">{i === 0 ? "—" : "-" + (g.leaderPts - d.pts)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      )}
+      ))}
       {mode === "teams" && (
         <div className="aes-table-wrap">
           <table className="aes-table">
@@ -3060,6 +3084,10 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-toggle button:hover{ color:var(--chalk); }
 .aes-toggle button.on{ background:var(--steel); color:var(--chalk); }
 .aes-table-wrap{ overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:var(--graphite); }
+.aes-stand-group{ margin-bottom:24px; }
+.aes-stand-grouphead{ display:flex; align-items:center; gap:11px; margin:0 0 10px 2px; }
+.aes-stand-grouphead .aes-cls-pill{ font-size:13px; padding:3px 12px; }
+.aes-stand-groupsub{ font-family:var(--mono); font-size:11px; color:var(--mist); }
 .aes-table{ width:100%; border-collapse:collapse; font-size:14px; min-width:560px; }
 .aes-table th{ text-align:left; font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
   color:var(--mist); font-weight:500; padding:13px 14px; border-bottom:1px solid var(--line); background:var(--panel); }
