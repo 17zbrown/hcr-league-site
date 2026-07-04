@@ -476,6 +476,37 @@ function useWeather(url) {
   return st;
 }
 
+/* hourly outlook strip styled after the day/night bar (times are ET) */
+function owlHour(t) {
+  const hh = Number(String(t).slice(11, 13));
+  const lab = hh === 0 ? "12a" : hh < 12 ? `${hh}a` : hh === 12 ? "12p" : `${hh - 12}p`;
+  return { hh, lab };
+}
+function WeatherOutlook({ hours, markerIdx, markerLabel }) {
+  if (!hours || hours.length < 2) return null;
+  return (
+    <div className="aes-owl">
+      {hours.map((h, i) => {
+        const { hh, lab } = owlHour(h.t);
+        const [r, g, b] = skyColor(hh);
+        const { Icon } = condFrom(h);
+        const on = i === markerIdx;
+        const wet = h.precipProb != null && h.precipProb > 0;
+        return (
+          <div key={i} className={"aes-owl-cell" + (on ? " on" : "")}>
+            <div className="aes-owl-tag">{on ? markerLabel : ""}</div>
+            <div className="aes-owl-sky" style={{ background: `rgb(${r},${g},${b})` }} />
+            <div className="aes-owl-hr">{lab}</div>
+            <Icon size={16} className="aes-owl-ic" />
+            <div className="aes-owl-temp">{h.tempF}°</div>
+            <div className={"aes-owl-rain" + (wet ? " wet" : "")}>{wet ? `${h.precipProb}%` : ""}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function LiveWeather({ ev }) {
   const loc = wxLocParam(ev);
   const { loading, data } = useWeather(loc ? `/api/weather?${loc}` : null);
@@ -499,7 +530,8 @@ function LiveWeather({ ev }) {
         <span><Droplets size={13} /> {data.humidity}% humidity</span>
         <span><Wind size={13} /> {data.windMph} mph</span>
       </div>
-      <div className="aes-wx-live-foot">Live conditions at the circuit.</div>
+      <WeatherOutlook hours={data.hourly} markerIdx={data.markerIdx} markerLabel={data.markerLabel || "Now"} />
+      <div className="aes-wx-live-foot">Live conditions at the circuit · hourly outlook around now (ET).</div>
     </div>
   );
 }
@@ -511,37 +543,38 @@ function ForecastWeather({ ev }) {
   if (!loc || !date) return <div className="aes-wx-live-msg">A race date and track location are needed for the forecast.</div>;
   if (loading) return <div className="aes-wx-live-msg"><Loader2 size={14} className="aes-spin" /> Loading race-day forecast…</div>;
   if (!data) return <div className="aes-wx-live-msg">Race-day forecast is unavailable right now.</div>;
-  const { label, Icon } = condFrom(data);
-  const historical = data.mode === "historical";
-  const rain = data.precipProb != null ? `${data.precipProb}% rain`
-    : data.precipSumIn != null ? `${data.precipSumIn}" rain` : "—";
+  if (data.available === false) {
+    const msg = data.reason === "past"
+      ? "This race has already run — no forecast to show."
+      : `The race-day forecast opens about two weeks out${data.daysAhead != null ? ` — about ${data.daysAhead} day${data.daysAhead === 1 ? "" : "s"} to go` : ""}. Check back closer to race day.`;
+    return <div className="aes-wx-live-msg"><CloudSun size={15} /> {msg}</div>;
+  }
+  const at = data.at || {};
+  const { label, Icon } = condFrom(at);
+  const rain = at.precipProb != null ? `${at.precipProb}% rain` : "—";
   return (
     <div className="aes-wx-live">
       <div className="aes-wx-live-head">
         <Icon size={34} style={{ color: "var(--amber)" }} />
         <div className="aes-wx-live-tempwrap">
-          <div className="aes-wx-live-temp">{data.tempF}°<span>F</span></div>
-          <div className="aes-wx-live-label">{label} · at 8 PM</div>
+          <div className="aes-wx-live-temp">{at.tempF}°<span>F</span></div>
+          <div className="aes-wx-live-label">{label} · at 8 PM ET</div>
         </div>
         <div className="aes-wx-live-place"><MapPin size={12} /> {ev.location}</div>
       </div>
       <div className="aes-wx-live-grid">
-        <span><Thermometer size={13} /> High {data.highF}° · Low {data.lowF}°</span>
-        <span><Cloud size={13} /> {data.cloudPct}% cloud</span>
+        <span><Thermometer size={13} /> High {at.highF}° · Low {at.lowF}°</span>
+        <span><Cloud size={13} /> {at.cloudPct}% cloud</span>
         <span><Droplets size={13} /> {rain}</span>
-        <span><Wind size={13} /> {data.windMph} mph</span>
+        <span><Wind size={13} /> {at.windMph} mph</span>
       </div>
-      <div className="aes-wx-live-foot">
-        {historical
-          ? `Seasonal expectation — actual weather here on this date in ${data.sourceYear}.`
-          : "Live forecast for race day at the circuit."}
-      </div>
+      <WeatherOutlook hours={data.hourly} markerIdx={data.markerIdx} markerLabel={data.markerLabel || "Race"} />
+      <div className="aes-wx-live-foot">Forecast for race day · hourly outlook around the 8 PM ET start.</div>
     </div>
   );
 }
 
 function WeatherPanel({ ev }) {
-  const hasSim = ev.weather && ev.weather.length > 0;
   const [tab, setTab] = useState("forecast");
   return (
     <section className="aes-card">
@@ -550,12 +583,9 @@ function WeatherPanel({ ev }) {
         <div className="aes-wx-tabs">
           <button className={"aes-wx-tab" + (tab === "forecast" ? " on" : "")} onClick={() => setTab("forecast")}>Race-day forecast</button>
           <button className={"aes-wx-tab" + (tab === "live" ? " on" : "")} onClick={() => setTab("live")}>Live now</button>
-          {hasSim ? <button className={"aes-wx-tab" + (tab === "sim" ? " on" : "")} onClick={() => setTab("sim")}>In-sim plan</button> : null}
         </div>
       </div>
-      {tab === "forecast" && <ForecastWeather ev={ev} />}
-      {tab === "live" && <LiveWeather ev={ev} />}
-      {tab === "sim" && hasSim && <div className="aes-wx-strip">{ev.weather.map((w, i) => <WeatherCell key={i} w={w} />)}</div>}
+      {tab === "forecast" ? <ForecastWeather ev={ev} /> : <LiveWeather ev={ev} />}
     </section>
   );
 }
@@ -2831,6 +2861,18 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-wx-live-grid span{ display:flex; align-items:center; gap:7px; font-size:13px; color:var(--mist); font-family:var(--mono); }
 .aes-wx-live-grid svg{ color:var(--mist2); flex-shrink:0; }
 .aes-wx-live-foot{ margin-top:12px; font-size:11px; color:var(--mist2); font-style:italic; }
+/* hourly outlook strip (day/night-bar styled) */
+.aes-owl{ display:flex; gap:5px; margin-top:15px; overflow-x:auto; padding-bottom:3px; }
+.aes-owl-cell{ flex:1 0 52px; min-width:52px; display:flex; flex-direction:column; align-items:center; gap:4px;
+  background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:5px 4px 7px; text-align:center; }
+.aes-owl-cell.on{ border-color:var(--signal); box-shadow:0 0 0 1px var(--signal); background:var(--steel); }
+.aes-owl-tag{ font-size:8.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--signal); height:11px; line-height:11px; }
+.aes-owl-sky{ width:100%; height:5px; border-radius:3px; box-shadow:inset 0 0 0 1px rgba(255,255,255,.05); }
+.aes-owl-hr{ font-family:var(--mono); font-size:11px; color:var(--mist); }
+.aes-owl-ic{ color:var(--chalk); }
+.aes-owl-temp{ font-weight:700; font-size:14px; }
+.aes-owl-rain{ font-size:10px; color:transparent; font-family:var(--mono); min-height:12px; line-height:12px; }
+.aes-owl-rain.wet{ color:var(--accent2); }
 
 /* leaders */
 .aes-leader-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:22px; }

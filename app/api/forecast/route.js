@@ -1,15 +1,14 @@
-import { readLoc, geocode, raceDay, wttrForecast, json } from "@/lib/weather";
+import { readLoc, geocode, raceDayOutlook, json } from "@/lib/weather";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/* Race-day forecast for a given date. Accepts ?date=YYYY-MM-DD and either
-   ?lat=&lon=&place=  OR  ?city=
-   Returns a real forecast when the race is within range, otherwise the same
-   calendar date from prior years (seasonal expectation). wttr.in is a fallback. */
+/* Race-day forecast + hourly outlook around the 8 PM ET start. Real forecast only
+   (no prior-year fill); returns { available:false } when the race is >~2 weeks out.
+   Accepts ?date=YYYY-MM-DD and ?lat=&lon=&place=  OR  ?city= . */
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  let { lat, lon, city, place, haveCoords, locStr } = readLoc(searchParams);
+  let { lat, lon, city, place, haveCoords } = readLoc(searchParams);
   const date = searchParams.get("date");
   if (!date) return json({ error: "forecast needs ?date=YYYY-MM-DD" }, 400);
   if (!haveCoords && !city) return json({ error: "Provide lat/lon or city" }, 400);
@@ -20,12 +19,10 @@ export async function GET(request) {
       const g = await geocode(city);
       if (g) { lat = g.lat; lon = g.lon; place = place || g.name; region = g.region; haveCoords = true; }
     }
+    if (!haveCoords) return json({ error: "City not found", city }, 404);
 
-    let f = haveCoords ? await raceDay(lat, lon, date) : null;
-    if (!f && locStr) f = await wttrForecast(locStr, date); // fallback for near-term dates
-    if (!f) return json({ error: "No forecast available" }, 502);
-
-    return json({ place, region, ...f }, 200, "public, s-maxage=3600, stale-while-revalidate=21600");
+    const o = await raceDayOutlook(lat, lon, date);
+    return json({ place, region, ...o }, 200, "public, s-maxage=3600, stale-while-revalidate=21600");
   } catch {
     return json({ error: "Forecast service error" }, 502);
   }
