@@ -1632,9 +1632,24 @@ function Standings({ data, openDriver, openTeam }) {
 
 /* ================================== Info ================================== */
 const RACE_CLASSES = [
-  { id: "GTP", cars: "Hypercar / LMDh prototypes — the fastest cars in the field.", rule: "Open lineup — any driver class permitted." },
-  { id: "LMP2", cars: "The spec Dallara P217 Le Mans Prototype.", rule: "Pro-Am — no Platinum, one Gold maximum, must field a Bronze." },
-  { id: "GTD", cars: "FIA GT3 production-based GT cars.", rule: "Pro-Am — one Platinum maximum, must field a Silver or Bronze." },
+  {
+    id: "GTP",
+    cars: "Hypercar / LMDh prototypes — the fastest cars in the field.",
+    detail: "The premier prototype class. GTP has no driver-category restrictions, so any class from Bronze to Platinum is eligible to be entered. In practice these seats are filled by professional Gold and Platinum drivers chasing outright pace, but no particular category is mandated.",
+    reqs: ["No category restrictions", "Any class, Bronze → Platinum, is eligible"],
+  },
+  {
+    id: "LMP2",
+    cars: "The spec Dallara P217 Le Mans Prototype.",
+    detail: "A Pro-Am prototype class built around amateur participation. Platinum drivers are not permitted at all, and a car may run at most one Gold. Every lineup must include a Bronze, and any remaining seat is filled by a Silver — so a typical crew pairs one quick Silver or Gold with a Bronze.",
+    reqs: ["No Platinum drivers", "Maximum of one Gold", "Must include a Bronze", "Silver fills any remaining seat"],
+  },
+  {
+    id: "GTD",
+    cars: "FIA GT3 production-based GT cars.",
+    detail: "A Pro-Am GT class. A car may run at most one Platinum, and every lineup must include at least one amateur — a Silver- or Bronze-rated driver. Gold and Silver drivers are otherwise unrestricted, so a common pairing is a Platinum or Gold professional alongside a Silver or Bronze Am.",
+    reqs: ["Maximum of one Platinum", "Must include at least one Silver or Bronze (the Am)", "Gold and Silver otherwise unrestricted"],
+  },
 ];
 const TIER_DESC = {
   Platinum: "Elite, professional-level pace with consistently clean racing.",
@@ -1662,17 +1677,20 @@ function Info({ data }) {
 
       <section className="aes-card">
         <div className="aes-card-head"><h2><Flag size={16} /> Race classes</h2></div>
-        <p className="aes-info-lead">The field runs in {data.classes.length} classes together on track, each scored separately. Driver-lineup rules follow IMSA's WeatherTech format.</p>
+        <p className="aes-info-lead">The field runs in {data.classes.length} classes together on track, each scored separately. Driver-lineup rules follow IMSA's WeatherTech format, and reference the same Bronze–Platinum categories the license system assigns.</p>
         <div className="aes-classlist">
           {RACE_CLASSES.map((rc) => {
             const c = data.classes.find((x) => x.id === rc.id || x.name === rc.id);
             const color = c ? c.color : "var(--chalk)";
             return (
-              <div key={rc.id} className="aes-classrow">
+              <div key={rc.id} className="aes-classrow detailed">
                 <span className="aes-cls-pill" style={{ color, borderColor: color }}>{rc.id}</span>
                 <div className="aes-classtext">
                   <span className="aes-classcars">{rc.cars}</span>
-                  <span className="aes-classrule">{rc.rule}</span>
+                  <span className="aes-classdetail">{rc.detail}</span>
+                  <div className="aes-classreqs">
+                    {rc.reqs.map((r, i) => <span key={i} className="aes-classreq">{r}</span>)}
+                  </div>
                 </div>
               </div>
             );
@@ -1682,7 +1700,7 @@ function Info({ data }) {
 
       <section className="aes-card">
         <div className="aes-card-head"><h2><Gauge size={16} /> Driver classes</h2></div>
-        <p className="aes-info-lead">Every driver carries a license class based on the same FIA categorization IMSA uses (Bronze up to Platinum). In HCR it's calculated from your league record — qualifying &amp; pace, race results, and incident points. It's experience-weighted, so everyone starts in Bronze and climbs only by building a proven record over many rounds. Each tier also needs a minimum number of starts: Silver 3, Gold 5, Platinum 8.</p>
+        <p className="aes-info-lead">Every driver carries a license class using the same FIA categorization IMSA uses (Bronze up to Platinum). Your class is set primarily by <b>skill</b> — your iRating, which reflects your whole racing career — or assigned directly by the league. Your in-league record then keeps it honest: a poor incident record over several starts can drop your class a tier, and your current form (qualifying, results, cleanliness) is tracked alongside. Drivers without an iRating on file are rated on their league record until one is added.</p>
         <div className="aes-classlist">
           {LICENSE_TIERS.map((t) => (
             <div key={t.name} className="aes-classrow">
@@ -3122,6 +3140,12 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-classtext{ display:flex; flex-direction:column; gap:2px; }
 .aes-classcars{ font-weight:600; font-size:14px; }
 .aes-classrule{ font-size:12.5px; color:var(--mist); line-height:1.5; }
+.aes-classrow.detailed{ padding:14px 0; border-bottom:1px solid var(--line); }
+.aes-classrow.detailed:last-child{ border-bottom:none; padding-bottom:2px; }
+.aes-classdetail{ font-size:13px; color:var(--mist); line-height:1.6; }
+.aes-classreqs{ display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+.aes-classreq{ font-size:11.5px; color:var(--chalk); background:var(--panel); border:1px solid var(--line);
+  border-radius:6px; padding:3px 9px; line-height:1.35; }
 .aes-classrow .aes-cls-pill{ margin-top:2px; flex-shrink:0; min-width:52px; text-align:center; }
 .aes-info-grid dt{ font-family:var(--mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--mist); }
 .aes-info-grid dd{ margin:3px 0 0; font-weight:500; }

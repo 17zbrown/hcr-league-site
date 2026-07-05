@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 import { CARS } from "@/lib/cars";
-import { driverLicense } from "@/lib/license";
+import { driverLicense, LICENSE_TIERS } from "@/lib/license";
 import { COUNTRIES, flagOf, flagFor } from "@/lib/countries";
 import {
   Lock, Settings, Eye, LogOut, Plus, Trash2, Loader2, ChevronRight, Search,
@@ -235,7 +235,7 @@ async function loadAdminData(sb, seasonId) {
 
   const driverRows = drivers.map((d) => {
     const t = d.team_id ? teamById[d.team_id] : null;
-    return { id: d.id, name: d.name, country: d.country || "", custId: d.iracing_custid || "", teamId: d.team_id || null, num: t ? (t.number ?? "") : "", cls: t ? (t.class_id || "") : "", car: t ? (t.car || "") : "", pts: ptsByDriver[d.id] || 0, createdAt: d.created_at || "" };
+    return { id: d.id, name: d.name, country: d.country || "", custId: d.iracing_custid || "", teamId: d.team_id || null, num: t ? (t.number ?? "") : "", cls: t ? (t.class_id || "") : "", car: t ? (t.car || "") : "", pts: ptsByDriver[d.id] || 0, createdAt: d.created_at || "", irating: d.irating || null, licenseOverride: d.license_override || null };
   });
 
   const trackById = Object.fromEntries(tracks.map((t) => [t.id, t]));
@@ -456,7 +456,7 @@ function DriversTab({ supabase, d, reload }) {
 
   const DESC_FIRST = new Set(["created", "num", "pts", "license"]);
   const onSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: DESC_FIRST.has(key) ? "desc" : "asc" });
-  const licRating = (x) => { const l = driverLicense(x, d.events); return l.rating == null ? -1 : l.rating; };
+  const licRank = (x) => { const l = driverLicense(x, d.events); const i = LICENSE_TIERS.findIndex((t) => t.name === l.tier); return i < 0 ? 0 : LICENSE_TIERS.length - i; };
   const sval = (x, key) => {
     switch (key) {
       case "num": return Number(x.num) || 0;
@@ -465,7 +465,7 @@ function DriversTab({ supabase, d, reload }) {
       case "cls": return x.cls || "";
       case "car": return (x.car || "").toLowerCase();
       case "pts": return x.pts || 0;
-      case "license": return licRating(x);
+      case "license": return licRank(x);
       default: return x.createdAt || "";
     }
   };
@@ -509,10 +509,22 @@ function DriversTab({ supabase, d, reload }) {
             <span className="aes-ro">{x.cls ? className(x.cls) : "—"}</span>
             <span className="aes-ro mono">{x.car || "—"}</span>
             <span className="aes-edit-total mono">{x.pts}</span>
-            <span className="aes-adm-lic" style={{ color: lic.color }}
-              title={lic.rating != null ? `Rating ${lic.rating}/100 · Pace ${lic.pace} · Results ${lic.results} · Safety ${lic.safety} · ${lic.starts} start${lic.starts === 1 ? "" : "s"}${lic.provisional ? " (provisional)" : ""}` : "No starts yet"}>
-              {lic.tier}{lic.rating != null ? <b className="mono"> {lic.rating}</b> : null}
-            </span>
+            <div className="aes-adm-liccell">
+              <span className="aes-adm-lic" style={{ color: lic.color }}
+                title={`Source: ${lic.source === "manual" ? "assigned" : lic.source === "irating" ? "iRating" : lic.source === "league" ? "league form" : "no data"}${lic.nudged ? " · dropped a tier for incidents" : ""}${lic.rating != null ? ` · form ${lic.rating}/100 (pace ${lic.pace} · results ${lic.results} · safety ${lic.safety}) · ${lic.starts} start${lic.starts === 1 ? "" : "s"}` : ""}`}>
+                {lic.tier}{lic.nudged ? <span className="aes-adm-nudge">▾</span> : null}
+                <em className="aes-adm-form">{lic.source === "manual" ? "set" : lic.source === "irating" ? "iR" : lic.source === "league" ? "form" : ""}</em>
+              </span>
+              <div className="aes-adm-licctl">
+                <input type="number" className="aes-input aes-adm-ir" defaultValue={x.irating || ""} placeholder="iR" title="iRating (skill)"
+                  onBlur={(e) => setDriver(x, { irating: e.target.value ? Number(e.target.value) : null })} />
+                <select className="aes-input aes-adm-cat" defaultValue={x.licenseOverride || ""} title="Assign a class (overrides iRating)"
+                  onChange={(e) => { setDriver(x, { license_override: e.target.value || null }); reload(); }}>
+                  <option value="">Auto</option>
+                  <option>Platinum</option><option>Gold</option><option>Silver</option><option>Bronze</option>
+                </select>
+              </div>
+            </div>
             <div className="aes-edit-actions"><button className="aes-icon-btn danger" onClick={() => delDriver(x)}><Trash2 size={15} /></button></div>
           </div>
           );
@@ -855,9 +867,15 @@ textarea.aes-input{ resize:vertical; font-family:var(--body); }
 
 .aes-edit-list{ display:flex; flex-direction:column; gap:8px; }
 .aes-edit-row{ display:grid; gap:8px; align-items:center; background:var(--graphite); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
-.aes-edit-row.driver{ grid-template-columns:50px 1.3fr 90px 1fr 90px 1.05fr 46px 128px auto; }
-.aes-adm-lic{ font-size:11px; font-weight:700; letter-spacing:.02em; text-transform:uppercase; white-space:nowrap; }
+.aes-edit-row.driver{ grid-template-columns:50px 1.2fr 88px 0.95fr 84px 0.9fr 44px 200px auto; }
+.aes-adm-liccell{ display:flex; flex-direction:column; gap:4px; min-width:0; }
+.aes-adm-lic{ font-size:11px; font-weight:700; letter-spacing:.02em; text-transform:uppercase; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
 .aes-adm-lic b{ font-weight:700; }
+.aes-adm-form{ font-style:normal; font-size:8.5px; font-weight:600; color:var(--mist2); letter-spacing:.05em; }
+.aes-adm-nudge{ color:var(--amber); font-size:12px; line-height:1; }
+.aes-adm-licctl{ display:flex; gap:4px; }
+.aes-adm-ir{ width:54px; padding:3px 5px; font-size:11px; }
+.aes-adm-cat{ flex:1; min-width:0; padding:3px 5px; font-size:11px; }
 .aes-edit-row.team{ grid-template-columns:1fr auto auto; }
 .aes-edit-row.head{ background:none; border:none; padding:2px 12px 0; align-items:end; }
 .aes-edit-row.head span{ font-family:var(--mono); font-size:9.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--mist2); }
