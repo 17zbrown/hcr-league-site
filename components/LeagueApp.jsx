@@ -566,7 +566,9 @@ function ForecastWeather({ ev }) {
   if (data.available === false) {
     const msg = data.reason === "past"
       ? "This race has already run — no forecast to show."
-      : `The race-day forecast opens about two weeks out${data.daysAhead != null ? ` — about ${data.daysAhead} day${data.daysAhead === 1 ? "" : "s"} to go` : ""}. Check back closer to race day.`;
+      : data.reason === "unavailable"
+        ? "The race-day forecast is temporarily unavailable — check back shortly."
+        : `The race-day forecast opens about two weeks out${data.daysAhead != null ? ` — about ${data.daysAhead} day${data.daysAhead === 1 ? "" : "s"} to go` : ""}. Check back closer to race day.`;
     return <div className="aes-wx-live-msg"><CloudSun size={15} /> {msg}</div>;
   }
   const at = data.at || {};
