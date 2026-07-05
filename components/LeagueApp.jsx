@@ -1633,7 +1633,7 @@ function Standings({ data, openDriver, openTeam }) {
 /* ================================== Info ================================== */
 const RACE_CLASSES = [
   { id: "GTP", cars: "Hypercar / LMDh prototypes — the fastest cars in the field.", rule: "Open lineup — any driver class permitted." },
-  { id: "LMP2", cars: "Spec Le Mans Prototypes (ORECA, Ligier, Dallara, Riley-Multimatic).", rule: "Pro-Am — no Platinum, one Gold maximum, must field a Bronze." },
+  { id: "LMP2", cars: "The spec Dallara P217 Le Mans Prototype.", rule: "Pro-Am — no Platinum, one Gold maximum, must field a Bronze." },
   { id: "GTD", cars: "FIA GT3 production-based GT cars.", rule: "Pro-Am — one Platinum maximum, must field a Silver or Bronze." },
 ];
 const TIER_DESC = {
