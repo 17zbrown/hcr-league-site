@@ -1669,7 +1669,7 @@ function Info({ data }) {
           <div><dt>Discipline</dt><dd>Multi-class endurance — {data.classes.map((c) => c.name).join(" + ")}</dd></div>
           <div><dt>Rounds</dt><dd>{data.events.length} per season ({L.season})</dd></div>
           <div><dt>Race length</dt><dd>6 to 24 hours</dd></div>
-          <div><dt>Drivers per car</dt><dd>2–6 depending on round</dd></div>
+          <div><dt>Drivers per car</dt><dd>1–6 depending on round</dd></div>
           <div><dt>Schedule</dt><dd>One round roughly every 4 weeks, {L.timezone}</dd></div>
           <div><dt>Scoring</dt><dd>Per-class points; finale pays double</dd></div>
         </div>
@@ -1720,7 +1720,7 @@ function Info({ data }) {
           <li>Minimum driver counts and maximum single-stint length are enforced per event — see each event page.</li>
           <li>Mandatory pit windows and fuel/tyre rules are published in the rulebook before each round.</li>
           <li>Incident points and protests are handled by Race Control; clean racing across class traffic is the priority.</li>
-          <li>Cars must run league liveries and the correct car number for the season.</li>
+          <li>Cars must run the correct car number for the season.</li>
         </ul>
       </section>
 
