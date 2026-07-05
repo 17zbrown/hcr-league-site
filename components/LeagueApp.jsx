@@ -1686,7 +1686,7 @@ function Info({ data }) {
 
       <section className="aes-card">
         <div className="aes-card-head"><h2><Gauge size={16} /> Driver classes</h2></div>
-        <p className="aes-info-lead">Every driver carries a license class using the same FIA categorization IMSA uses (Bronze up to Platinum). Your class is set primarily by <b>skill</b> — your iRating, which reflects your whole racing career — or assigned directly by the league. Your in-league record then keeps it honest: a poor incident record over several starts can drop your class a tier, and your current form (qualifying, results, cleanliness) is tracked alongside. Drivers without an iRating on file are rated on their league record until one is added.</p>
+        <p className="aes-info-lead">Every driver carries a license class based on the same FIA categorization IMSA uses (Bronze up to Platinum). In HCR it's <b>earned</b> from your league record — qualifying &amp; pace, race results, and incident points. It's experience-weighted, so everyone starts in Bronze and climbs only by building a proven record over many rounds; each tier also needs a minimum number of starts (Silver 4, Gold 7, Platinum 10). Race Control can also assign a driver's class directly where a record warrants it.</p>
         <div className="aes-classlist">
           {LICENSE_TIERS.map((t) => (
             <div key={t.name} className="aes-classrow">

@@ -499,19 +499,15 @@ function DriversTab({ supabase, d, reload }) {
             <span className="aes-edit-total mono">{x.pts}</span>
             <div className="aes-adm-liccell">
               <span className="aes-adm-lic" style={{ color: lic.color }}
-                title={`Source: ${lic.source === "manual" ? "assigned" : lic.source === "irating" ? "iRating" : lic.source === "league" ? "league form" : "no data"}${lic.nudged ? " · dropped a tier for incidents" : ""}${lic.rating != null ? ` · form ${lic.rating}/100 (pace ${lic.pace} · results ${lic.results} · safety ${lic.safety}) · ${lic.starts} start${lic.starts === 1 ? "" : "s"}` : ""}`}>
-                {lic.tier}{lic.nudged ? <span className="aes-adm-nudge">▾</span> : null}
-                <em className="aes-adm-form">{lic.source === "manual" ? "set" : lic.source === "irating" ? "iR" : lic.source === "league" ? "form" : ""}</em>
+                title={`${lic.source === "manual" ? "Assigned by the league" : lic.source === "league" ? "Earned from league record" : "No starts yet"}${lic.rating != null ? ` · rating ${lic.rating}/100 (pace ${lic.pace} · results ${lic.results} · safety ${lic.safety}) · ${lic.starts} start${lic.starts === 1 ? "" : "s"}${lic.provisional ? " (provisional)" : ""}` : ""}`}>
+                {lic.tier}{lic.rating != null ? <b className="mono"> {lic.rating}</b> : null}
+                <em className="aes-adm-form">{lic.source === "manual" ? "set" : ""}</em>
               </span>
-              <div className="aes-adm-licctl">
-                <input type="number" className="aes-input aes-adm-ir" defaultValue={x.irating || ""} placeholder="iR" title="iRating (skill)"
-                  onBlur={(e) => setDriver(x, { irating: e.target.value ? Number(e.target.value) : null })} />
-                <select className="aes-input aes-adm-cat" defaultValue={x.licenseOverride || ""} title="Assign a class (overrides iRating)"
-                  onChange={(e) => { setDriver(x, { license_override: e.target.value || null }); reload(); }}>
-                  <option value="">Auto</option>
-                  <option>Platinum</option><option>Gold</option><option>Silver</option><option>Bronze</option>
-                </select>
-              </div>
+              <select className="aes-input aes-adm-cat" defaultValue={x.licenseOverride || ""} title="Assign a class (overrides the earned license)"
+                onChange={(e) => { setDriver(x, { license_override: e.target.value || null }); reload(); }}>
+                <option value="">Earned</option>
+                <option>Platinum</option><option>Gold</option><option>Silver</option><option>Bronze</option>
+              </select>
             </div>
             <div className="aes-edit-actions"><button className="aes-icon-btn danger" aria-label="Delete" onClick={() => delDriver(x)}><Trash2 size={15} /></button></div>
           </div>
@@ -855,14 +851,11 @@ textarea.aes-input{ resize:vertical; font-family:var(--body); }
 
 .aes-edit-list{ display:flex; flex-direction:column; gap:8px; }
 .aes-edit-row{ display:grid; gap:8px; align-items:center; background:var(--graphite); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
-.aes-edit-row.driver{ grid-template-columns:50px 1.2fr 88px 0.95fr 84px 0.9fr 44px 200px auto; }
+.aes-edit-row.driver{ grid-template-columns:50px 1.25fr 88px 1fr 86px 1fr 44px 150px auto; }
 .aes-adm-liccell{ display:flex; flex-direction:column; gap:4px; min-width:0; }
 .aes-adm-lic{ font-size:11px; font-weight:700; letter-spacing:.02em; text-transform:uppercase; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
 .aes-adm-lic b{ font-weight:700; }
 .aes-adm-form{ font-style:normal; font-size:8.5px; font-weight:600; color:var(--mist2); letter-spacing:.05em; }
-.aes-adm-nudge{ color:var(--amber); font-size:12px; line-height:1; }
-.aes-adm-licctl{ display:flex; gap:4px; }
-.aes-adm-ir{ width:54px; padding:3px 5px; font-size:11px; }
 .aes-adm-cat{ flex:1; min-width:0; padding:3px 5px; font-size:11px; }
 .aes-edit-row.team{ grid-template-columns:1fr auto auto; }
 .aes-edit-row.head{ background:none; border:none; padding:2px 12px 0; align-items:end; }
