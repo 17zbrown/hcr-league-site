@@ -564,11 +564,12 @@ function ForecastWeather({ ev }) {
   if (loading) return <div className="aes-wx-live-msg"><Loader2 size={14} className="aes-spin" /> Loading race-day forecast…</div>;
   if (!data) return <div className="aes-wx-live-msg">Race-day forecast is unavailable right now.</div>;
   if (data.available === false) {
+    const where = ev.track || "This race";
     const msg = data.reason === "past"
-      ? "This race has already run — no forecast to show."
+      ? `${where} has already run — no forecast to show.`
       : data.reason === "unavailable"
-        ? "The race-day forecast is temporarily unavailable — check back shortly."
-        : `The race-day forecast opens about two weeks out${data.daysAhead != null ? ` — about ${data.daysAhead} day${data.daysAhead === 1 ? "" : "s"} to go` : ""}. Check back closer to race day.`;
+        ? `${where}'s race-day forecast is temporarily unavailable — check back shortly.`
+        : `${where}'s race-day forecast opens about two weeks out${data.daysAhead != null ? ` — about ${data.daysAhead} day${data.daysAhead === 1 ? "" : "s"} to go` : ""}. Check back closer to race day.`;
     return <div className="aes-wx-live-msg"><CloudSun size={15} /> {msg}</div>;
   }
   const at = data.at || {};

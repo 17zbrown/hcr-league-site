@@ -22,7 +22,7 @@ export async function GET(request) {
     if (!haveCoords) return json({ error: "City not found", city }, 404);
 
     const o = await raceDayOutlook(lat, lon, date);
-    return json({ place, region, ...o }, 200, "public, s-maxage=3600, stale-while-revalidate=21600");
+    return json({ place, region, ...o }, 200, "no-store");
   } catch {
     return json({ error: "Forecast service error" }, 502);
   }
