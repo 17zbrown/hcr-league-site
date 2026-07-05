@@ -7,7 +7,7 @@ import {
   Flag, Clock, CloudRain, Cloud, Sun, CloudSun, Wind, Droplets, Thermometer,
   Trophy, Calendar, Gauge, ChevronRight, X, Lock, Settings, Plus, Trash2,
   Save, Download, Upload, RotateCcw, MapPin, Users, Timer, Moon, Radio,
-  ArrowLeft, CheckCircle2, CircleDot, Eye, FileText, Loader2, AlertTriangle, Search, Menu, Sunrise, Sunset,
+  ArrowLeft, CheckCircle2, CircleDot, Eye, FileText, Loader2, AlertTriangle, Search, Menu, Sunrise, Sunset, CalendarDays,
 } from "lucide-react";
 import { CARS } from "@/lib/cars";
 import { driverLicense, LICENSE_TIERS } from "@/lib/license";
@@ -393,24 +393,6 @@ function skyMeta(w) {
   else if (clouds >= 15) { label = "Partly Cloudy"; Icon = CloudSun; }
   else { label = "Clear"; Icon = Sun; }
   return { clouds, label, Icon };
-}
-function WeatherCell({ w }) {
-  const { clouds, label, Icon } = skyMeta(w);
-  const wet = (Number(w.precip) || 0) >= 40;
-  return (
-    <div className="aes-wx">
-      <div className="aes-wx-top">
-        <Icon size={20} style={{ color: wet ? "var(--accent2)" : "var(--amber)" }} />
-        <span className="aes-wx-hr mono">+{w.atHour}h</span>
-      </div>
-      <div className="aes-wx-sky">{label}</div>
-      <div className="aes-wx-rows">
-        <span><Thermometer size={12} /> {w.air}°F air</span>
-        <span><Cloud size={12} /> {clouds}% cloud cover</span>
-        <span><Droplets size={12} /> {w.precip}% rain</span>
-      </div>
-    </div>
-  );
 }
 
 /* WMO weather code (Open-Meteo) -> label + icon */
@@ -817,6 +799,7 @@ function Schedule({ data, openEvent }) {
       <div className="aes-page-head">
         <h1>Season Schedule</h1>
         <p>{data.league.season} · all times {data.league.timezone}</p>
+        <a className="aes-cal-link" href="/api/calendar"><CalendarDays size={14} /> Add to calendar (.ics)</a>
       </div>
       <div className="aes-timeline">
         {data.events.map((e) => {
@@ -906,6 +889,13 @@ function EventDetail({ data, ev, back, openDriver, openTeam }) {
       </div>
 
       <WeatherPanel ev={ev} />
+
+      {ev.report ? (
+        <section className="aes-card">
+          <div className="aes-card-head"><h2><FileText size={16} /> Race report</h2></div>
+          <div className="aes-report">{ev.report.split(/\n+/).map((p, i) => <p key={i}>{p}</p>)}</div>
+        </section>
+      ) : null}
 
       {ev.notes && (
         <section className="aes-card">
@@ -1018,23 +1008,6 @@ function EventDetail({ data, ev, back, openDriver, openTeam }) {
 }
 
 /* ============================== Driver profile =========================== */
-function LicenseCard({ lic }) {
-  const ranked = lic && lic.tier && lic.tier !== "Unranked";
-  const color = lic?.color || "#6b7686";
-  const desc = ranked ? (TIER_DESC[lic.tier] || "") : "A license is issued after the driver's first race start.";
-  return (
-    <section className="aes-lic">
-      <div className="aes-lic-badge" style={{ borderColor: color, color }}>
-        <span className="aes-lic-label">HCR License</span>
-        <span className="aes-lic-tier">{lic?.tier || "Unranked"}</span>
-      </div>
-      <div className="aes-lic-side">
-        <div className="aes-lic-desc">{desc}</div>
-        {ranked && lic.provisional ? <div className="aes-lic-foot"><span className="aes-lic-prov">Provisional — climbs as they race more</span></div> : null}
-      </div>
-    </section>
-  );
-}
 function LicensePill({ lic }) {
   const color = lic?.color || "#6b7686";
   return (
@@ -1499,7 +1472,7 @@ function Standings({ data, openDriver, openTeam }) {
           <button className={mode === "manufacturers" ? "on" : ""} onClick={() => setMode("manufacturers")}>Manufacturers</button>
           <button className={mode === "clean" ? "on" : ""} onClick={() => setMode("clean")}>Cleanest</button>
         </div>
-        {(mode === "drivers" || mode === "clean" || mode === "manufacturers") && (
+        {(mode === "drivers" || mode === "teams" || mode === "clean" || mode === "manufacturers") && (
           <div className="aes-toggle">
             <button className={clsFilter === "ALL" ? "on" : ""} onClick={() => setClsFilter("ALL")}>All</button>
             {data.classes.map((c) => (
@@ -1520,7 +1493,7 @@ function Standings({ data, openDriver, openTeam }) {
               <thead>
                 <tr>
                   <th className="num">#</th><th>Driver</th><th>Team</th>
-                  {completedRounds.map((e) => <th key={e.id} className="ctr rnd">R{e.round}</th>)}
+                  {completedRounds.map((e, ri) => <th key={e.id} className={"ctr rnd" + (completedRounds.length - ri > 3 ? " rnd-old" : "")}>R{e.round}</th>)}
                   <th className="ctr">Pts</th><th className="ctr">Gap</th>
                 </tr>
               </thead>
@@ -1533,7 +1506,7 @@ function Standings({ data, openDriver, openTeam }) {
                       {d.car && <div className="aes-driver-car">{d.car}</div>}
                     </td>
                     <td className="aes-td-team">{d.team ? <button className="aes-link-driver" onClick={() => openTeam(d.team.id)}>{d.team.name}</button> : "—"}</td>
-                    {completedRounds.map((e) => <td key={e.id} className="ctr mono dim">{roundPoints(d, e) || "–"}</td>)}
+                    {completedRounds.map((e, ri) => <td key={e.id} className={"ctr mono dim" + (completedRounds.length - ri > 3 ? " rnd-old" : "")}>{roundPoints(d, e) || "–"}</td>)}
                     <td className="ctr mono pts">{d.pts}</td>
                     <td className="ctr mono dim">{i === 0 ? "—" : "-" + (g.leaderPts - d.pts)}</td>
                   </tr>
@@ -1543,25 +1516,35 @@ function Standings({ data, openDriver, openTeam }) {
           </div>
         </div>
       ))}
-      {mode === "teams" && (
-        <div className="aes-table-wrap">
+      {mode === "teams" && data.classes.map((c) => {
+        const rows = teamRows.filter((t) => t.cls === c.id || (!t.cls && (t.classes || []).includes(c.id)));
+        if (!rows.length || (clsFilter !== "ALL" && clsFilter !== c.id)) return null;
+        const lead = rows[0].pts;
+        return (
+        <div className="aes-stand-group" key={c.id}>
+          <div className="aes-stand-grouphead">
+            <span className="aes-cls-pill" style={{ color: c.color, borderColor: c.color }}>{c.name}</span>
+            <span className="aes-stand-groupsub">{rows.length} team{rows.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div className="aes-table-wrap">
           <table className="aes-table">
-            <thead><tr><th className="num">#</th><th>Team</th><th className="ctr">Classes</th><th className="ctr">Drivers</th><th className="ctr">Pts</th><th className="ctr">Gap</th></tr></thead>
+            <thead><tr><th className="num">#</th><th>Team</th><th className="ctr">Drivers</th><th className="ctr">Pts</th><th className="ctr">Gap</th></tr></thead>
             <tbody>
-              {teamRows.map((t, i) => (
+              {rows.map((t, i) => (
                 <tr key={t.id}>
                   <td className="num mono">{i + 1}</td>
                   <td className="aes-td-driver"><button className="aes-link-driver" onClick={() => openTeam(t.id)}>{t.name}</button></td>
-                  <td className="ctr">{t.classes.map((c) => <ClassDot key={c} cls={c} classes={data.classes} />)}</td>
                   <td className="ctr mono dim">{t.drivers}</td>
                   <td className="ctr mono pts">{t.pts}</td>
-                  <td className="ctr mono dim">{i === 0 ? "—" : "-" + (leaderTeamPts - t.pts)}</td>
+                  <td className="ctr mono dim">{i === 0 ? "—" : "-" + (lead - t.pts)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
         </div>
-      )}
+        );
+      })}
       {mode === "manufacturers" && (
         <div className="aes-table-wrap">
           <table className="aes-table">
@@ -1809,236 +1792,6 @@ function CountrySelect({ value, onChange }) {
 }
 
 
-function AdminPanel({ data, setData, save, persisted, onClose, resetSample }) {
-  const [tab, setTab] = useState("events");
-  const [savedFlash, setSavedFlash] = useState(false);
-  const [driverQ, setDriverQ] = useState("");
-  const [driverCls, setDriverCls] = useState("ALL");
-  const [teamQ, setTeamQ] = useState("");
-  const fileRef = useRef(null);
-
-  const commit = async (next) => {
-    setData(next);
-    const ok = await save(next);
-    if (ok) { setSavedFlash(true); setTimeout(() => setSavedFlash(false), 1400); }
-  };
-
-  /* ----- events ----- */
-  const updateEvent = (id, patch) => commit({ ...data, events: data.events.map((e) => e.id === id ? { ...e, ...patch } : e) });
-  const addEvent = () => {
-    const round = data.events.length + 1;
-    const ne = { id: uid(), round, track: "New Circuit", location: "TBD", durationH: 6, durationMin: 360,
-      date: new Date().toISOString().slice(0, 19), status: "upcoming", simStartHour: 12, timeMult: 1,
-      entries: 0, minDrivers: 2, maxDrivers: 4,
-      sessions: [{ type: "Race", start: new Date().toISOString().slice(0, 19), durMin: 360 }],
-      weather: [{ atHour: 0, air: 68, sky: "Clear", precip: 0, wind: 6, humidity: 55 }],
-      notes: "", winners: null };
-    commit({ ...data, events: [...data.events, ne] });
-  };
-  const delEvent = (id) => commit({ ...data, events: data.events.filter((e) => e.id !== id) });
-
-  /* apply a deciphered PDF: patch the event + write computed points to matched drivers, in one commit */
-  const importResults = (evId, eventPatch, driverPoints) => {
-    commit({
-      ...data,
-      events: data.events.map((e) => (e.id === evId ? { ...e, ...eventPatch } : e)),
-      drivers: data.drivers.map((d) => (d.id in driverPoints ? { ...d, pointsByRound: driverPoints[d.id] } : d)),
-    });
-  };
-
-  /* ----- drivers ----- */
-  const updateDriver = (id, patch) => commit({ ...data, drivers: data.drivers.map((d) => d.id === id ? { ...d, ...patch } : d) });
-  const addDriver = () => commit({ ...data, drivers: [...data.drivers, { id: uid(), num: 0, name: "New Driver", teamId: data.teams[0]?.id || "", cls: data.classes[0]?.id || "GTP", country: "🏳️", car: "", pointsByRound: [] }] });
-  const delDriver = (id) => commit({ ...data, drivers: data.drivers.filter((x) => x.id !== id) });
-
-  /* ----- teams ----- */
-  const updateTeam = (id, patch) => commit({ ...data, teams: data.teams.map((t) => t.id === id ? { ...t, ...patch } : t) });
-  const addTeam = () => commit({ ...data, teams: [...data.teams, { id: uid(), name: "New Team" }] });
-  const delTeam = (id) => commit({
-    ...data,
-    teams: data.teams.filter((x) => x.id !== id),
-    drivers: data.drivers.map((x) => (x.teamId === id ? { ...x, teamId: null } : x)),
-  });
-
-  const exportJson = () => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "league-data.json"; a.click();
-    URL.revokeObjectURL(url);
-  };
-  const importJson = (e) => {
-    const f = e.target.files?.[0]; if (!f) return;
-    const r = new FileReader();
-    r.onload = () => { try { commit(JSON.parse(r.result)); } catch { alert("Invalid JSON file."); } };
-    r.readAsText(f);
-  };
-
-  const teamNameOf = (id) => { const t = data.teams.find((x) => x.id === id); return t ? t.name : ""; };
-  const dq = driverQ.trim().toLowerCase();
-  const shownDrivers = data.drivers.filter((d) => {
-    if (driverCls !== "ALL" && d.cls !== driverCls) return false;
-    if (!dq) return true;
-    return [d.name, d.num, d.car, d.cls, teamNameOf(d.teamId)].some((v) => String(v == null ? "" : v).toLowerCase().includes(dq));
-  });
-  const tq = teamQ.trim().toLowerCase();
-  const shownTeams = data.teams.filter((t) => !tq || String(t.name || "").toLowerCase().includes(tq));
-
-  return (
-    <div className="aes-admin">
-      <div className="aes-admin-top">
-        <div className="aes-admin-title"><Settings size={18} /> Race Control <span className="aes-admin-mode">ADMIN</span></div>
-        <div className="aes-admin-actions">
-          {savedFlash && <span className="aes-saved"><CheckCircle2 size={14} /> Saved</span>}
-          {!persisted && <span className="aes-warn-pill">Preview only — not persisting</span>}
-          <button className="aes-btn ghost sm" onClick={exportJson}><Download size={14} /> Export</button>
-          <button className="aes-btn ghost sm" onClick={() => fileRef.current?.click()}><Upload size={14} /> Import</button>
-          <input ref={fileRef} type="file" accept="application/json" hidden onChange={importJson} />
-          <button className="aes-btn ghost sm" onClick={resetSample}><RotateCcw size={14} /> Reset</button>
-          <button className="aes-btn primary sm" onClick={onClose}><Eye size={14} /> View site</button>
-        </div>
-      </div>
-
-      <div className="aes-admin-tabs">
-        {[["events", "Events"], ["drivers", "Drivers"], ["teams", "Teams"], ["league", "League"]].map(([id, label]) => (
-          <button key={id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>{label}</button>
-        ))}
-      </div>
-
-      <div className="aes-admin-body">
-        {tab === "events" && (
-          <>
-            <div className="aes-admin-addbar"><button className="aes-btn primary sm" onClick={addEvent}><Plus size={14} /> Add event</button></div>
-            {data.events.map((ev) => (
-              <EventEditor key={ev.id} ev={ev} data={data} classes={data.classes}
-                onChange={(patch) => updateEvent(ev.id, patch)} onImport={(patch, dp) => importResults(ev.id, patch, dp)} onDelete={() => delEvent(ev.id)} />
-            ))}
-          </>
-        )}
-
-        {tab === "drivers" && (
-          <>
-            <div className="aes-admin-addbar">
-              <button className="aes-btn primary sm" onClick={addDriver}><Plus size={14} /> Add driver</button>
-              <div className="aes-filter">
-                <Search size={14} />
-                <input className="aes-filter-input" placeholder="Filter by name, number, car or team…" value={driverQ} onChange={(e) => setDriverQ(e.target.value)} />
-              </div>
-              <select className="aes-input aes-filter-cls" value={driverCls} onChange={(e) => setDriverCls(e.target.value)}>
-                <option value="ALL">All classes</option>
-                {data.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div className="aes-edit-list">
-              <div className="aes-edit-row driver head">
-                <span>#</span><span>Driver name</span><span>Country</span><span>Team</span><span>Class</span><span>Car</span><span>Pts</span><span></span>
-              </div>
-              {shownDrivers.map((d) => (
-                <div key={d.id} className="aes-edit-row driver">
-                  <NumInput value={d.num} onChange={(e) => updateDriver(d.id, { num: +e.target.value })} placeholder="#" />
-                  <TextInput value={d.name} onChange={(e) => updateDriver(d.id, { name: e.target.value })} placeholder="Driver name" />
-                  <CountrySelect value={d.country} onChange={(flag) => updateDriver(d.id, { country: flag })} />
-                  <select className="aes-input" value={d.teamId || ""} onChange={(e) => updateDriver(d.id, { teamId: e.target.value || null })}>
-                    <option value="">— No team —</option>
-                    {data.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                  <select className="aes-input" value={d.cls} onChange={(e) => updateDriver(d.id, { cls: e.target.value })}>
-                    {data.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                  <CarSelect cls={d.cls} value={d.car} onChange={(v) => updateDriver(d.id, { car: v })} />
-                  <span className="aes-edit-total mono">{driverPoints(d, data.events)}</span>
-                  <div className="aes-edit-actions">
-                    <button className="aes-icon-btn danger" onClick={() => delDriver(d.id)}><Trash2 size={15} /></button>
-                  </div>
-                </div>
-              ))}
-              {shownDrivers.length === 0 && <div className="aes-filter-empty">No drivers match “{driverQ}”{driverCls !== "ALL" ? " in " + driverCls : ""}.</div>}
-            </div>
-            <p className="aes-hint">Points are totalled automatically from each event's results (matched by car number). Enter or correct results in the event's “Results &amp; points” section; team totals follow from driver points.</p>
-          </>
-        )}
-
-        {tab === "teams" && (
-          <>
-            <div className="aes-admin-addbar">
-              <button className="aes-btn primary sm" onClick={addTeam}><Plus size={14} /> Add team</button>
-              <div className="aes-filter">
-                <Search size={14} />
-                <input className="aes-filter-input" placeholder="Filter teams…" value={teamQ} onChange={(e) => setTeamQ(e.target.value)} />
-              </div>
-            </div>
-            <div className="aes-edit-list">
-              <div className="aes-edit-row team head">
-                <span>Team name</span><span>Drivers</span><span></span>
-              </div>
-              {shownTeams.map((t) => {
-                const count = data.drivers.filter((d) => d.teamId === t.id).length;
-                return (
-                  <div key={t.id} className="aes-edit-row team">
-                    <TextInput value={t.name} onChange={(e) => updateTeam(t.id, { name: e.target.value })} placeholder="Team name" />
-                    <span className="aes-edit-meta mono">{count} driver{count !== 1 ? "s" : ""}</span>
-                    <div className="aes-edit-actions">
-                      <button className="aes-icon-btn danger" title="Delete team" onClick={() => delTeam(t.id)}><Trash2 size={15} /></button>
-                    </div>
-                  </div>
-                );
-              })}
-              {shownTeams.length === 0 && <div className="aes-filter-empty">No teams match “{teamQ}”.</div>}
-            </div>
-          </>
-        )}
-
-        {tab === "league" && (
-          <div className="aes-edit-card">
-            <div className="aes-edit-grid">
-              <Field label="League name"><TextInput value={data.league.name} onChange={(e) => commit({ ...data, league: { ...data.league, name: e.target.value } })} /></Field>
-              <Field label="Season"><TextInput value={data.league.season} onChange={(e) => commit({ ...data, league: { ...data.league, season: e.target.value } })} /></Field>
-              <Field label="Tagline"><TextInput value={data.league.tagline} onChange={(e) => commit({ ...data, league: { ...data.league, tagline: e.target.value } })} /></Field>
-              <Field label="Timezone label"><TextInput value={data.league.timezone} onChange={(e) => commit({ ...data, league: { ...data.league, timezone: e.target.value } })} /></Field>
-              <Field label="Admin PIN"><TextInput value={data.league.adminPin} onChange={(e) => commit({ ...data, league: { ...data.league, adminPin: e.target.value } })} /></Field>
-              <Field label="Discord link"><TextInput value={data.league.links.discord} onChange={(e) => commit({ ...data, league: { ...data.league, links: { ...data.league.links, discord: e.target.value } } })} /></Field>
-              <Field label="Broadcast link"><TextInput value={data.league.links.broadcast} onChange={(e) => commit({ ...data, league: { ...data.league, links: { ...data.league.links, broadcast: e.target.value } } })} /></Field>
-              <Field label="Rulebook link"><TextInput value={data.league.links.rulebook} onChange={(e) => commit({ ...data, league: { ...data.league, links: { ...data.league.links, rulebook: e.target.value } } })} /></Field>
-            </div>
-            <div className="aes-points-edit">
-              <span className="aes-field-label">Championship points by finishing position</span>
-              <input className="aes-input mono" value={(data.league.pointsTable || []).join(", ")}
-                onChange={(e) => commit({ ...data, league: { ...data.league, pointsTable: e.target.value.split(",").map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n)) } })} />
-              <span className="aes-points-hint">P1 first, comma-separated. Used when a results PDF is imported — each class scores independently, and a round's points multiplier (e.g. a double-points finale) is applied on top. You can still edit any driver's points by hand in the Drivers tab.</span>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ===================== Results PDF import (AI-deciphered) ================= */
-const RESULTS_PROMPT = `You are reading a motorsport endurance race RESULTS pdf produced by race-control / timing software. Extract the official race classification from the main results table — one row per car.
-Return ONLY pipe-delimited text — no prose, no markdown, no code fences.
-The first line must be exactly:
-pos|num|drivers|nat|car|grid|inc|laps|time|gap|best|status
-Then one line per car, ordered by overall finishing position. Columns:
-- pos: overall finishing position (integer)
-- num: car number (digits only, no #)
-- drivers: driver name(s); join co-drivers with " / "
-- nat: nationality / country if shown, else empty
-- car: full car/model name exactly as printed
-- grid: starting grid position if shown, else empty
-- inc: incident count if shown, else empty
-- laps: laps completed (integer) or empty
-- time: total or finishing time, or empty
-- gap: gap to the leader (e.g. "1 LAP", "0:32.865") or empty
-- best: best lap time or empty
-- status: Running, Classified, DNF, DNS, DSQ, Disco, etc. or empty
-Keep all pipe separators even when a field is empty. Use the real classified finishing order. Never invent data.`;
-
-const LAPS_PROMPT_PREFIX = `This is a motorsport results pdf. Find the per-driver lap-by-lap section for the specified car/driver and return that driver's RACE lap times only.
-Return ONLY pipe-delimited text — no prose, no code fences. First line exactly:
-lap|time
-Then one row per completed racing lap, in order: the lap number (integer) and the lap time (e.g. 1:35.433). Ignore sector times and any non-lap lines. Skip laps that have no time.
-Car/driver to extract: `;
-
-/* strip accents + non-alphanumerics for fuzzy matching */
 function slug(s) {
   return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -2219,375 +1972,6 @@ function buildImportRows(parsed, data, ev) {
 }
 
 
-function ResultsImport({ ev, data, onImport }) {
-  const [stage, setStage] = useState(ev.results && ev.results.length ? "done" : "idle"); // idle | parsing | preview | laps | done
-  const [over, setOver] = useState(false);
-  const [err, setErr] = useState("");
-  const [rows, setRows] = useState([]);
-  const [b64, setB64] = useState("");
-  const [pullLaps, setPullLaps] = useState(false);
-  const [lapMsg, setLapMsg] = useState("");
-  const [parseMsg, setParseMsg] = useState("");
-  const inputRef = useRef(null);
-
-  const handleFile = async (file) => {
-    if (!file) return;
-    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-    if (!isPdf) { setErr("That doesn't look like a PDF — drop the results PDF from your race-control software."); return; }
-    setErr(""); setStage("parsing");
-    try {
-      const data64 = await new Promise((resolve, reject) => {
-        const fr = new FileReader();
-        fr.onload = () => resolve(String(fr.result).split(",")[1]);
-        fr.onerror = () => reject(new Error("Couldn't read that file."));
-        fr.readAsDataURL(file);
-      });
-      const parsed = await decipherResultsPDF(data64, data, (m) => setParseMsg(m));
-      if (!parsed.length) {
-        setErr("I couldn't find a classified order in that PDF. If it's a scan or an unusual layout, send me a copy and I'll tune the reader.");
-        setStage("idle"); return;
-      }
-      setB64(data64);
-      setRows(buildImportRows(parsed, data, ev));
-      setStage("preview");
-    } catch (e) {
-      setErr(e.message || "Something went wrong reading that PDF.");
-      setStage("idle");
-    }
-  };
-
-  const onDrop = (e) => { e.preventDefault(); setOver(false); handleFile(e.dataTransfer.files && e.dataTransfer.files[0]); };
-  const setRowPts = (i, v) => setRows(rows.map((r, idx) => (idx === i ? { ...r, points: v === "" ? "" : Math.max(0, +v) } : r)));
-
-  const apply = async () => {
-    const winners = { ...(ev.winners || {}) };
-    data.classes.forEach((c) => {
-      const top = rows.filter((r) => r.cls === c.id).sort((a, b) => a.pos - b.pos)[0];
-      if (top) winners[c.id] = ("#" + top.num + " " + top.drivers).trim();
-    });
-    const ri = (ev.round || 1) - 1;
-    const ptsById = {};
-    rows.forEach((r) => r.matchIds.forEach((id) => { ptsById[id] = Number(r.points || 0); }));
-    const driverPoints = {};
-    data.drivers.forEach((d) => {
-      if (!(d.id in ptsById)) return;
-      const pbr = [...(d.pointsByRound || [])];
-      while (pbr.length <= ri) pbr.push(0);
-      pbr[ri] = ptsById[d.id];
-      driverPoints[d.id] = pbr;
-    });
-
-    let finalRows = rows;
-    if (pullLaps && b64) {
-      setStage("laps");
-      const targets = rows.filter((r) => r.matchIds.length);
-      const updated = rows.slice();
-      for (let i = 0; i < targets.length; i++) {
-        const r = targets[i];
-        setLapMsg(`Reading lap times — ${i + 1}/${targets.length} (#${r.num} ${r.drivers})`);
-        try {
-          const lapChart = await decipherDriverLaps(b64, `car #${r.num}, driver ${r.drivers}`);
-          updated[rows.indexOf(r)] = { ...r, lapChart };
-        } catch (e) { /* skip this driver, keep going */ }
-      }
-      finalRows = updated;
-    }
-
-    const results = finalRows.map((r) => ({
-      pos: r.pos, clsPos: r.clsPos, cls: r.cls, num: r.num, drivers: r.drivers, nat: r.nat, car: r.car,
-      grid: r.grid, inc: r.inc, laps: r.laps, time: r.time, gap: r.gap, best: r.best, status: r.status,
-      points: Number(r.points || 0), lapChart: r.lapChart || [],
-    }));
-    onImport({ results, winners, status: "complete" }, driverPoints);
-    setStage("done");
-  };
-
-  const matched = rows.filter((r) => r.matchIds.length).length;
-
-  return (
-    <div className="aes-edit-sub">
-      <div className="aes-edit-sub-head">
-        <b>Import results from PDF</b>
-        {stage === "done" && <button className="aes-btn ghost xs" onClick={() => { setRows([]); setStage("idle"); setErr(""); }}><Upload size={12} /> Import again</button>}
-      </div>
-
-      {stage === "idle" && (
-        <>
-          <div
-            className={"aes-drop" + (over ? " over" : "")}
-            onClick={() => inputRef.current && inputRef.current.click()}
-            onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-            onDragLeave={() => setOver(false)}
-            onDrop={onDrop}
-          >
-            <FileText size={26} />
-            <div className="aes-drop-title">Drop the race-control results PDF here</div>
-            <div className="aes-drop-sub">or click to choose a file — I'll read the classification, work out each car's class, and assign points</div>
-            <input ref={inputRef} type="file" accept="application/pdf" hidden onChange={(e) => handleFile(e.target.files && e.target.files[0])} />
-          </div>
-          {err && <div className="aes-import-err"><AlertTriangle size={14} /> {err}</div>}
-        </>
-      )}
-
-      {stage === "parsing" && (
-        <div className="aes-drop">
-          <Loader2 size={24} className="aes-spin" />
-          <div className="aes-drop-title">Deciphering results…</div>
-          <div className="aes-drop-sub">{parseMsg || "Reading the classification from your PDF"}</div>
-        </div>
-      )}
-
-      {stage === "laps" && (
-        <div className="aes-drop">
-          <Loader2 size={24} className="aes-spin" />
-          <div className="aes-drop-title">Reading lap charts…</div>
-          <div className="aes-drop-sub">{lapMsg}</div>
-        </div>
-      )}
-
-      {stage === "preview" && (
-        <>
-          <div className="aes-import-note">
-            Read {rows.length} car{rows.length !== 1 ? "s" : ""} · {matched} matched to drivers by car number · class worked out from each car.
-            Points auto-fill from your table{Number(ev.pointsMult || 1) !== 1 ? ` (×${ev.pointsMult} this round)` : ""} — edit any value before applying.
-            Winners fill in automatically; unmatched cars are recorded but score no points until their number matches a driver.
-          </div>
-          <div className="aes-rt-wrap">
-            <table className="aes-results-table">
-              <thead>
-                <tr><th>Pos</th><th>Cls</th><th>#</th><th>Drivers</th><th>Car</th><th>Grid</th><th>Laps</th><th>Best</th><th>Inc</th><th>Status</th><th>Driver</th><th>Pts</th></tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={i} className={r.matchIds.length ? "" : "unmatched"}>
-                    <td className="aes-results-pos">{r.pos}</td>
-                    <td><ClassDot cls={r.cls} classes={data.classes} /></td>
-                    <td className="mono">{r.num}</td>
-                    <td>{r.drivers}</td>
-                    <td className="dim aes-rt-car">{r.car || "—"}</td>
-                    <td className="mono dim">{r.grid !== "" ? r.grid : "—"}</td>
-                    <td className="mono dim">{r.laps !== "" ? r.laps : "—"}</td>
-                    <td className="mono dim">{r.best || "—"}</td>
-                    <td className="mono dim">{r.inc !== "" ? r.inc : "—"}</td>
-                    <td className="mono dim">{r.status || "—"}</td>
-                    <td className="aes-rt-match">{r.matchNames.length ? r.matchNames.join(", ") : <span className="aes-rt-nomatch">no match</span>}</td>
-                    <td><input type="number" className="aes-input aes-rt-pts" value={r.points} onChange={(e) => setRowPts(i, e.target.value)} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <label className="aes-laps-toggle">
-            <input type="checkbox" checked={pullLaps} onChange={(e) => setPullLaps(e.target.checked)} />
-            Also read per-driver lap charts for the {matched} matched car{matched !== 1 ? "s" : ""} (shows in driver profiles — adds about a second per car)
-          </label>
-          <div className="aes-import-actions">
-            <button className="aes-btn primary sm" onClick={apply}><CheckCircle2 size={14} /> Apply to event</button>
-            <button className="aes-btn ghost sm" onClick={() => { setRows([]); setStage("idle"); }}>Discard</button>
-          </div>
-        </>
-      )}
-
-      {stage === "done" && (
-        <div className="aes-import-done"><CheckCircle2 size={15} /> Results applied — {(ev.results || []).length} cars classified, winners and points set. Fine-tune any points in the Drivers tab.</div>
-      )}
-    </div>
-  );
-}
-
-
-function ResultsEditor({ ev, data, onChange, onImport }) {
-  const rows = ev.results || [];
-  const setRows = (next) => onChange({ results: next });
-  const setRow = (i, patch) => setRows(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  const addRow = () => setRows([...rows, { pos: rows.length + 1, cls: (data.classes[0] && data.classes[0].id) || "", num: "", drivers: "", car: "", grid: "", laps: "", best: "", gap: "", inc: "", status: "Running", clsPos: null, points: "", adjust: "" }]);
-  const delRow = (i) => setRows(rows.filter((_, idx) => idx !== i));
-
-  // rank within class by pos; mode "auto" overwrites points, "keep" only fills blanks
-  const ranked = (mode) => {
-    const table = data.league.pointsTable || [];
-    const mult = Number(ev.pointsMult || 1);
-    const order = rows.map((r, i) => ({ i, pos: +r.pos || 999 })).sort((a, b) => a.pos - b.pos);
-    const seen = {};
-    const out = rows.slice();
-    order.forEach(({ i }) => {
-      const r = rows[i];
-      seen[r.cls] = (seen[r.cls] || 0) + 1;
-      const clsPos = seen[r.cls];
-      const auto = pointsForPos(table, clsPos) * mult;
-      const pts = mode === "auto" ? auto : (r.points === "" || r.points == null ? auto : Number(r.points));
-      out[i] = { ...r, clsPos, points: pts };
-    });
-    return out;
-  };
-
-  const autofill = () => setRows(ranked("auto"));
-
-  const apply = () => {
-    const updated = ranked("keep");
-    const winners = { ...(ev.winners || {}) };
-    data.classes.forEach((c) => {
-      const top = updated.filter((r) => r.cls === c.id).sort((a, b) => (a.clsPos || 99) - (b.clsPos || 99))[0];
-      if (top) winners[c.id] = ("#" + top.num + " " + top.drivers).trim();
-    });
-    const ri = (ev.round || 1) - 1;
-    const ptsById = {};
-    updated.forEach((r) => data.drivers.filter((d) => String(d.num) === String(r.num) && d.cls === r.cls).forEach((m) => { ptsById[m.id] = Number(r.points || 0) + Number(r.adjust || 0); }));
-    const driverPoints = {};
-    data.drivers.forEach((d) => {
-      if (!(d.id in ptsById)) return;
-      const pbr = [...(d.pointsByRound || [])];
-      while (pbr.length <= ri) pbr.push(0);
-      pbr[ri] = ptsById[d.id];
-      driverPoints[d.id] = pbr;
-    });
-    onImport({ results: updated, winners, status: "complete" }, driverPoints);
-  };
-
-  return (
-    <div className="aes-edit-sub">
-      <div className="aes-edit-sub-head">
-        <b>Results &amp; points — manual entry</b>
-        <button className="aes-btn ghost xs" onClick={addRow}><Plus size={12} /> Add car</button>
-      </div>
-      {rows.length === 0 ? (
-        <div className="aes-import-note">No results yet. Drop a PDF in the section above, or add cars by hand here.</div>
-      ) : (
-        <>
-          <div className="aes-res-scroll">
-            <div className="aes-res-grid">
-              <div className="aes-res-head">
-                <span>Pos</span><span>Class</span><span>#</span><span>Driver(s)</span><span>Car</span><span>Grid</span><span>Laps</span><span>Best lap</span><span>Inc</span><span>Status</span><span>Pts</span><span>Adj</span><span />
-              </div>
-              {rows.map((r, i) => (
-                <div key={i} className="aes-res-row">
-                  <NumInput value={r.pos} onChange={(e) => setRow(i, { pos: +e.target.value })} />
-                  <select className="aes-input" value={r.cls} onChange={(e) => setRow(i, { cls: e.target.value })}>
-                    {data.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                  <TextInput value={r.num} onChange={(e) => setRow(i, { num: e.target.value })} placeholder="#" />
-                  <TextInput value={r.drivers} onChange={(e) => setRow(i, { drivers: e.target.value })} placeholder="Driver(s)" />
-                  <TextInput value={r.car} onChange={(e) => setRow(i, { car: e.target.value })} placeholder="Car" />
-                  <NumInput value={r.grid} onChange={(e) => setRow(i, { grid: e.target.value === "" ? "" : +e.target.value })} />
-                  <NumInput value={r.laps} onChange={(e) => setRow(i, { laps: e.target.value === "" ? "" : +e.target.value })} />
-                  <TextInput value={r.best} onChange={(e) => setRow(i, { best: e.target.value })} placeholder="1:35.4" />
-                  <NumInput value={r.inc} onChange={(e) => setRow(i, { inc: e.target.value === "" ? "" : +e.target.value })} />
-                  <TextInput value={r.status} onChange={(e) => setRow(i, { status: e.target.value })} placeholder="Running" />
-                  <NumInput value={r.points} onChange={(e) => setRow(i, { points: e.target.value === "" ? "" : +e.target.value })} />
-                  <NumInput value={r.adjust ?? ""} title="Stewards' adjustment (± points). Use for penalties or bonuses." onChange={(e) => setRow(i, { adjust: e.target.value === "" ? "" : +e.target.value })} />
-                  <button className="aes-icon-btn danger" onClick={() => delRow(i)}><Trash2 size={14} /></button>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="aes-import-actions">
-            <button className="aes-btn ghost sm" onClick={autofill}><Gauge size={14} /> Auto-fill points</button>
-            <button className="aes-btn primary sm" onClick={apply}><CheckCircle2 size={14} /> Apply to standings</button>
-          </div>
-          <div className="aes-points-hint">“Auto-fill points” fills each car's Pts from your points table by class position (you can then tweak any value). “Apply to standings” writes those points to the matched drivers by car number, sets the class winners, and marks the round complete.</div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function EventEditor({ ev, data, classes, onChange, onImport, onDelete }) {
-  const [open, setOpen] = useState(false);
-  const setSession = (i, patch) => onChange({ sessions: ev.sessions.map((s, idx) => idx === i ? { ...s, ...patch } : s) });
-  const addSession = () => onChange({ sessions: [...ev.sessions, { type: "Practice", start: ev.date, durMin: 60 }] });
-  const delSession = (i) => onChange({ sessions: ev.sessions.filter((_, idx) => idx !== i) });
-  const setWx = (i, patch) => onChange({ weather: ev.weather.map((w, idx) => idx === i ? { ...w, ...patch } : w) });
-  const addWx = () => onChange({ weather: [...ev.weather, { atHour: 0, air: 68, sky: "Clear", precip: 0, wind: 6, humidity: 55 }] });
-  const delWx = (i) => onChange({ weather: ev.weather.filter((_, idx) => idx !== i) });
-
-  return (
-    <div className="aes-edit-card">
-      <div className="aes-edit-card-head" onClick={() => setOpen(!open)}>
-        <span className="mono aes-edit-round">R{ev.round}</span>
-        <span className="aes-edit-track">{ev.track}</span>
-        <StatusChip status={ev.status} />
-        <span className="aes-edit-spacer" />
-        <button className="aes-icon-btn danger" onClick={(e) => { e.stopPropagation(); onDelete(); }}><Trash2 size={15} /></button>
-        <ChevronRight size={18} className={"aes-edit-chev" + (open ? " open" : "")} />
-      </div>
-      {open && (
-        <div className="aes-edit-card-body">
-          <div className="aes-edit-grid">
-            <Field label="Round #"><NumInput value={ev.round} onChange={(e) => onChange({ round: +e.target.value })} /></Field>
-            <Field label="Track"><TextInput value={ev.track} onChange={(e) => onChange({ track: e.target.value })} /></Field>
-            <Field label="Location"><TextInput value={ev.location} onChange={(e) => onChange({ location: e.target.value })} /></Field>
-            <Field label="Duration (minutes)"><NumInput value={Math.round((ev.durationH || 0) * 60)} onChange={(e) => onChange({ durationH: (+e.target.value) / 60, durationMin: +e.target.value })} /></Field>
-            <Field label="Race date/time"><TextInput type="datetime-local" value={ev.date.slice(0, 16)} onChange={(e) => onChange({ date: e.target.value + ":00" })} /></Field>
-            <Field label="Status">
-              <select className="aes-input" value={ev.status} onChange={(e) => onChange({ status: e.target.value })}>
-                <option value="upcoming">Scheduled</option><option value="next">Next Up</option><option value="complete">Final</option>
-              </select>
-            </Field>
-            <Field label="Sim start hour (0–24)"><NumInput step="0.5" value={ev.simStartHour} onChange={(e) => onChange({ simStartHour: +e.target.value })} /></Field>
-            <Field label="Time multiplier"><NumInput step="0.5" value={ev.timeMult} onChange={(e) => onChange({ timeMult: +e.target.value })} /></Field>
-            <Field label="Entries"><NumInput value={ev.entries} onChange={(e) => onChange({ entries: +e.target.value })} /></Field>
-            <Field label="Min drivers"><NumInput value={ev.minDrivers} onChange={(e) => onChange({ minDrivers: +e.target.value })} /></Field>
-            <Field label="Max drivers"><NumInput value={ev.maxDrivers} onChange={(e) => onChange({ maxDrivers: +e.target.value })} /></Field>
-            <Field label="Points multiplier"><NumInput step="0.5" value={ev.pointsMult ?? 1} onChange={(e) => onChange({ pointsMult: +e.target.value })} /></Field>
-          </div>
-
-          <Field label="Race control notes"><textarea className="aes-input" rows={2} value={ev.notes} onChange={(e) => onChange({ notes: e.target.value })} /></Field>
-
-          <div className="aes-edit-sub">
-            <div className="aes-edit-sub-head"><b>Sessions</b><button className="aes-btn ghost xs" onClick={addSession}><Plus size={12} /> Add</button></div>
-            {ev.sessions.map((s, i) => (
-              <div key={i} className="aes-edit-srow">
-                <select className="aes-input" value={s.type} onChange={(e) => setSession(i, { type: e.target.value })}>
-                  <option>Practice</option><option>Qualifying</option><option>Warmup</option><option>Race</option>
-                </select>
-                <TextInput type="datetime-local" value={s.start.slice(0, 16)} onChange={(e) => setSession(i, { start: e.target.value + ":00" })} />
-                <NumInput value={s.durMin} style={{ width: 90 }} onChange={(e) => setSession(i, { durMin: +e.target.value })} placeholder="min" />
-                <button className="aes-icon-btn danger" onClick={() => delSession(i)}><Trash2 size={14} /></button>
-              </div>
-            ))}
-          </div>
-
-          <div className="aes-edit-sub">
-            <div className="aes-edit-sub-head"><b>Weather points</b><button className="aes-btn ghost xs" onClick={addWx}><Plus size={12} /> Add</button></div>
-            <div className="aes-wx-edit-head"><span>Race hour</span><span>Air °F</span><span>Sky</span><span>Rain %</span><span>Wind (mph)</span><span>Humidity</span><span /></div>
-            {ev.weather.map((w, i) => (
-              <div key={i} className="aes-edit-wrow">
-                <NumInput value={w.atHour} onChange={(e) => setWx(i, { atHour: +e.target.value })} />
-                <NumInput value={w.air} onChange={(e) => setWx(i, { air: +e.target.value })} />
-                <select className="aes-input" value={w.sky} onChange={(e) => setWx(i, { sky: e.target.value })}>
-                  <option>Clear</option><option>Partly Cloudy</option><option>Cloudy</option><option>Light Rain</option><option>Rain</option>
-                </select>
-                <NumInput value={w.precip} onChange={(e) => setWx(i, { precip: +e.target.value })} />
-                <NumInput value={w.wind} onChange={(e) => setWx(i, { wind: +e.target.value })} />
-                <NumInput value={w.humidity} onChange={(e) => setWx(i, { humidity: +e.target.value })} />
-                <button className="aes-icon-btn danger" onClick={() => delWx(i)}><Trash2 size={14} /></button>
-              </div>
-            ))}
-          </div>
-
-          <ResultsImport ev={ev} data={data} onImport={onImport} />
-
-          <ResultsEditor ev={ev} data={data} onChange={onChange} onImport={onImport} />
-
-          <div className="aes-edit-sub">
-            <div className="aes-edit-sub-head"><b>Class winners (results)</b></div>
-            <div className="aes-edit-grid">
-              {classes.map((c) => (
-                <Field key={c.id} label={c.name + " winner"}>
-                  <TextInput value={ev.winners?.[c.id] || ""} placeholder="e.g. #7 Vortex Motorsport"
-                    onChange={(e) => onChange({ winners: { ...(ev.winners || {}), [c.id]: e.target.value } })} />
-                </Field>
-              ))}
-            </div>
-          </div>
-          <div className="aes-edit-preview"><DayNightBar ev={ev} /></div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ================================ Admin gate ============================== */
 function AdminGate({ data, onPass, onClose }) {
   const [pin, setPin] = useState("");
   const [err, setErr] = useState(false);
@@ -2974,7 +2358,6 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-dn.compact .aes-dn-ends{ font-size:10px; }
 
 /* weather */
-.aes-wx-strip{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; }
 .aes-wx{ background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:13px 14px; }
 .aes-wx-top{ display:flex; align-items:center; justify-content:space-between; }
 .aes-wx-hr{ font-size:11px; color:var(--mist); }
@@ -3106,6 +2489,11 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-toggle button.on{ background:var(--steel); color:var(--chalk); }
 .aes-table-wrap{ overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:var(--graphite); }
 .aes-stand-group{ margin-bottom:24px; }
+.aes-report p{ margin:0 0 10px; color:var(--chalk); font-size:14px; line-height:1.65; }
+.aes-report p:last-child{ margin-bottom:0; }
+.aes-cal-link{ display:inline-flex; align-items:center; gap:6px; margin-top:10px; font-size:12.5px; color:var(--mist); border:1px solid var(--line); border-radius:8px; padding:6px 12px; text-decoration:none; }
+.aes-cal-link:hover{ color:var(--signal); border-color:var(--signal); }
+@media (max-width:720px){ .rnd-old{ display:none; } }
 .aes-stand-grouphead{ display:flex; align-items:center; gap:11px; margin:0 0 10px 2px; }
 .aes-stand-grouphead .aes-cls-pill{ font-size:13px; padding:3px 12px; }
 .aes-stand-groupsub{ font-family:var(--mono); font-size:11px; color:var(--mist); }
@@ -3236,23 +2624,6 @@ main{ max-width:1080px; margin:0 auto; padding:0 24px; }
 .aes-prof-car{ color:var(--mist); font-size:12.5px; }
 .aes-prof-stats{ display:grid; grid-template-columns:repeat(auto-fit,minmax(108px,1fr)); gap:10px; margin-bottom:22px; }
 /* racing license */
-.aes-lic{ display:flex; gap:18px; align-items:stretch; background:var(--graphite); border:1px solid var(--line);
-  border-radius:14px; padding:15px 18px; margin-bottom:22px; flex-wrap:wrap; }
-.aes-lic-badge{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
-  min-width:148px; padding:10px 18px; border:1.5px solid; border-radius:12px; background:rgba(255,255,255,.02); }
-.aes-lic-label{ font-size:9.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--mist); font-weight:600; }
-.aes-lic-tier{ font-family:var(--disp); font-weight:800; font-size:25px; line-height:1.05; }
-.aes-lic-rating{ font-size:15px; color:var(--chalk); }
-.aes-lic-rating em{ font-style:normal; color:var(--mist2); font-size:11px; }
-.aes-lic-side{ flex:1; min-width:220px; display:flex; flex-direction:column; justify-content:center; gap:8px; }
-.aes-lic-desc{ font-size:13.5px; color:var(--chalk); line-height:1.5; }
-.aes-lic-bars{ display:flex; flex-direction:column; gap:9px; }
-.aes-lic-bar-top{ display:flex; justify-content:space-between; font-size:11.5px; color:var(--mist); margin-bottom:3px; }
-.aes-lic-bar-top .mono{ color:var(--chalk); }
-.aes-lic-bar-track{ height:6px; border-radius:4px; background:var(--steel); overflow:hidden; }
-.aes-lic-bar-fill{ height:100%; border-radius:4px; background:linear-gradient(90deg, var(--accent2), var(--signal)); }
-.aes-lic-foot{ font-size:11px; color:var(--mist2); }
-.aes-lic-prov{ color:var(--amber); }
 .aes-lic-pill{ display:inline-flex; align-items:center; font-size:9.5px; font-weight:700; letter-spacing:.03em;
   text-transform:uppercase; border:1px solid; border-radius:20px; padding:1px 7px; vertical-align:middle; white-space:nowrap; }
 .aes-roster-driver{ display:inline-block; }

@@ -215,7 +215,7 @@ async function loadAdminData(sb, seasonId) {
     id: ev.id, round: ev.round, name: ev.name || "", track_id: ev.track_id, season_id: ev.season_id, date: ev.date || "",
     status: ev.status || "upcoming", durationH: ev.duration_h ?? "", durationMin: ev.duration_min ?? (ev.duration_h != null ? Math.round(ev.duration_h * 60) : ""), simStartHour: ev.sim_start_hour ?? "",
     timeMult: ev.time_mult ?? 1, pointsMult: ev.points_mult ?? 1, minDrivers: ev.min_drivers ?? "",
-    maxDrivers: ev.max_drivers ?? "", notes: ev.notes || "",
+    maxDrivers: ev.max_drivers ?? "", notes: ev.notes || "", report: ev.report || "",
     sunriseHour: ev.sunrise_hour != null ? Number(ev.sunrise_hour) : 6.6,
     sunsetHour: ev.sunset_hour != null ? Number(ev.sunset_hour) : 18.6,
     sessions: (sBy[ev.id] || []).map((s) => ({ id: s.id, type: s.type || "", start: s.start || "", durMin: s.dur_min ?? "", sort: s.sort ?? 0 })),
@@ -321,7 +321,7 @@ function ResultsBlock({ supabase, d, ev, reload }) {
                 <NumInput defaultValue={r.points} title="Race points" onBlur={(e) => setCell(r, { points: num(e.target.value) || 0 })} />
                 <NumInput defaultValue={r.qpts} title="Qualifying points" onBlur={(e) => setCell(r, { quali_points: num(e.target.value) || 0 })} />
                 <NumInput defaultValue={r.adjust} title="Stewards' adjustment (± points)" onBlur={(e) => setCell(r, { adjust: num(e.target.value) || 0 })} />
-                <button className="aes-icon-btn danger" onClick={() => delRow(r)}><Trash2 size={14} /></button>
+                <button className="aes-icon-btn danger" aria-label="Delete" onClick={() => delRow(r)}><Trash2 size={14} /></button>
               </div>
             ))}
           </div></div>
@@ -345,9 +345,6 @@ function EventCard({ supabase, d, ev, reload }) {
   const addSession = async () => { await supabase.from("sessions").insert({ event_id: ev.id, type: "Practice", dur_min: 60, sort: ev.sessions.length }); reload(); };
   const delSession = async (s) => { await supabase.from("sessions").delete().eq("id", s.id); reload(); };
   const setSession = async (s, patch) => { await supabase.from("sessions").update(patch).eq("id", s.id); };
-  const addWx = async () => { await supabase.from("weather").insert({ event_id: ev.id, at_hour: 0, air_f: 68, clouds: 20, precip: 0, sort: ev.weather.length }); reload(); };
-  const delWx = async (w) => { await supabase.from("weather").delete().eq("id", w.id); reload(); };
-  const setWx = async (w, patch) => { await supabase.from("weather").update(patch).eq("id", w.id); };
   const num = (v) => (v === "" ? null : Number(v));
 
   const StatusChip = ({ s }) => <span className={"aes-chip " + s}>{s === "complete" ? "Final" : s === "next" ? "Next" : "Scheduled"}</span>;
@@ -359,7 +356,7 @@ function EventCard({ supabase, d, ev, reload }) {
         <span className="aes-edit-track">{ev.track}{ev.name ? <span style={{ color: "var(--mist)", fontWeight: 400 }}> · {ev.name}</span> : null}</span>
         <StatusChip s={ev.status} />
         <span className="aes-edit-spacer" />
-        <button className="aes-icon-btn danger" onClick={async (e) => { e.stopPropagation(); if (confirm("Delete this round and its results?")) { await supabase.from("results").delete().eq("event_id", ev.id); await supabase.from("sessions").delete().eq("event_id", ev.id); await supabase.from("weather").delete().eq("event_id", ev.id); await supabase.from("events").delete().eq("id", ev.id); reload(); } }}><Trash2 size={15} /></button>
+        <button className="aes-icon-btn danger" aria-label="Delete" onClick={async (e) => { e.stopPropagation(); if (confirm("Delete this round and its results?")) { await supabase.from("results").delete().eq("event_id", ev.id); await supabase.from("sessions").delete().eq("event_id", ev.id); await supabase.from("weather").delete().eq("event_id", ev.id); await supabase.from("events").delete().eq("id", ev.id); reload(); } }}><Trash2 size={15} /></button>
         <ChevronRight size={18} className={"aes-edit-chev" + (open ? " open" : "")} />
       </div>
       {open && (
@@ -392,6 +389,7 @@ function EventCard({ supabase, d, ev, reload }) {
             <Field label="Points multiplier"><NumInput step="0.5" defaultValue={ev.pointsMult} onBlur={(e) => setField("points_mult", num(e.target.value))} /></Field>
           </div>
           <Field label="Race control notes"><textarea className="aes-input" rows={2} defaultValue={ev.notes} onBlur={(e) => setField("notes", e.target.value)} /></Field>
+          <Field label="Race report (shown on the event page after the round)"><textarea className="aes-input" rows={4} defaultValue={ev.report} onBlur={(e) => setField("report", e.target.value || null)} placeholder="How the race unfolded — battles, incidents, the decisive moment…" /></Field>
 
           <div className="aes-edit-sub">
             <div className="aes-edit-sub-head"><b>Sessions</b><button className="aes-btn ghost xs" onClick={addSession}><Plus size={12} /> Add</button></div>
@@ -402,13 +400,13 @@ function EventCard({ supabase, d, ev, reload }) {
                 </select>
                 <TextInput type="datetime-local" defaultValue={isoToETLocal(s.start)} onBlur={(e) => setSession(s, { start: etLocalToISO(e.target.value) })} />
                 <NumInput defaultValue={s.durMin} onBlur={(e) => setSession(s, { dur_min: num(e.target.value) })} placeholder="min" />
-                <button className="aes-icon-btn danger" onClick={() => delSession(s)}><Trash2 size={14} /></button>
+                <button className="aes-icon-btn danger" aria-label="Delete session" onClick={() => delSession(s)}><Trash2 size={14} /></button>
               </div>
             ))}
           </div>
 
           <div className="aes-edit-sub">
-            <div className="aes-edit-sub-head"><b>Weather points</b><button className="aes-btn ghost xs" onClick={addWx}><Plus size={12} /> Add</button></div>
+            <div className="aes-edit-sub-head"><b>Daylight</b></div>
             <div className="aes-daylight-row">
               <label className="aes-field"><span>Sunrise (sim)</span>
                 <TextInput type="time" defaultValue={hourToHHMM(ev.sunriseHour)} onBlur={(e) => setField("sunrise_hour", hhmmToHour(e.target.value))} /></label>
@@ -416,16 +414,6 @@ function EventCard({ supabase, d, ev, reload }) {
                 <TextInput type="time" defaultValue={hourToHHMM(ev.sunsetHour)} onBlur={(e) => setField("sunset_hour", hhmmToHour(e.target.value))} /></label>
               <span className="aes-daylight-hint">Sets the sunrise/sunset markers and sky colours on the daylight bar for this race.</span>
             </div>
-            <div className="aes-wx-edit-head"><span>Race hour</span><span>Air °F</span><span>Cloud %</span><span>Rain %</span><span /></div>
-            {ev.weather.map((w) => (
-              <div key={w.id} className="aes-edit-wrow">
-                <NumInput defaultValue={w.atHour} onBlur={(e) => setWx(w, { at_hour: num(e.target.value) })} />
-                <NumInput defaultValue={w.air} onBlur={(e) => setWx(w, { air_f: num(e.target.value) })} />
-                <NumInput defaultValue={w.clouds} onBlur={(e) => setWx(w, { clouds: num(e.target.value) })} />
-                <NumInput defaultValue={w.precip} onBlur={(e) => setWx(w, { precip: num(e.target.value) })} />
-                <button className="aes-icon-btn danger" onClick={() => delWx(w)}><Trash2 size={14} /></button>
-              </div>
-            ))}
           </div>
 
           <ResultsBlock supabase={supabase} d={d} ev={ev} reload={reload} />
@@ -525,7 +513,7 @@ function DriversTab({ supabase, d, reload }) {
                 </select>
               </div>
             </div>
-            <div className="aes-edit-actions"><button className="aes-icon-btn danger" onClick={() => delDriver(x)}><Trash2 size={15} /></button></div>
+            <div className="aes-edit-actions"><button className="aes-icon-btn danger" aria-label="Delete" onClick={() => delDriver(x)}><Trash2 size={15} /></button></div>
           </div>
           );
         })}
@@ -589,7 +577,7 @@ function TeamsTab({ supabase, d, reload }) {
             <select className="aes-input" defaultValue={t.class_id || ""} onChange={async (e) => { await setTeam(t, { class_id: e.target.value || null }); reload(); }}><option value="">— class —</option>{d.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
             <CarSelect value={t.car || ""} classId={t.class_id} onSave={(car) => setTeam(t, { car })} />
             <span className="aes-edit-meta mono">{driverCount(t.id)}</span>
-            <div className="aes-edit-actions"><button className="aes-icon-btn danger" onClick={() => delTeam(t)}><Trash2 size={15} /></button></div>
+            <div className="aes-edit-actions"><button className="aes-icon-btn danger" aria-label="Delete" onClick={() => delTeam(t)}><Trash2 size={15} /></button></div>
           </div>
         ))}
         {shown.length === 0 && <div className="aes-filter-empty">No teams match.</div>}
@@ -650,7 +638,7 @@ function LeagueTab({ supabase, d, reload }) {
             <TextInput defaultValue={x.name} onBlur={(e) => supabase.from("seasons").update({ name: e.target.value }).eq("id", x.id)} />
             <NumInput defaultValue={x.year} onBlur={(e) => supabase.from("seasons").update({ year: Number(e.target.value) }).eq("id", x.id)} />
             <label className="aes-mini-check"><input type="checkbox" defaultChecked={x.is_current} onChange={(e) => supabase.from("seasons").update({ is_current: e.target.checked }).eq("id", x.id)} /> current</label>
-            <button className="aes-icon-btn danger" onClick={async () => { if (confirm("Delete season " + x.name + "?")) { await supabase.from("seasons").delete().eq("id", x.id); reload(); } }}><Trash2 size={14} /></button>
+            <button className="aes-icon-btn danger" aria-label="Delete" onClick={async () => { if (confirm("Delete season " + x.name + "?")) { await supabase.from("seasons").delete().eq("id", x.id); reload(); } }}><Trash2 size={14} /></button>
           </div>
         ))}
       </div>
@@ -661,7 +649,7 @@ function LeagueTab({ supabase, d, reload }) {
           <div key={t.id} className="aes-edit-srow" style={{ gridTemplateColumns: "1.3fr 1.3fr 36px" }}>
             <TextInput defaultValue={t.name} onBlur={(e) => setTrack(t, { name: e.target.value })} placeholder="Track name" />
             <TextInput defaultValue={t.location} onBlur={(e) => setTrack(t, { location: e.target.value })} placeholder="Location" />
-            <button className="aes-icon-btn danger" onClick={() => delTrack(t)}><Trash2 size={14} /></button>
+            <button className="aes-icon-btn danger" aria-label="Delete" onClick={() => delTrack(t)}><Trash2 size={14} /></button>
           </div>
         ))}
       </div>
