@@ -24,7 +24,7 @@ export async function GET(request) {
     const wt = wtR.status === "fulfilled" ? wtR.value : null;
     const best = om || (wt ? { ...wt, place: wt.place || place, region: wt.region || "", hourly: [] } : null);
     if (!best) return json({ error: "Weather unavailable" }, 502);
-    return json(best, 200, "public, s-maxage=900, stale-while-revalidate=3600");
+    return json(best, 200, "no-store");
   } catch {
     return json({ error: "Weather service error" }, 502);
   }
