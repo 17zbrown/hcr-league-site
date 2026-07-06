@@ -439,6 +439,13 @@ function DriversTab({ supabase, d, reload }) {
   const teamName = (id) => d.teams.find((t) => t.id === id)?.name || "";
   const className = (id) => d.classes.find((c) => c.id === id)?.name || id || "";
   const setDriver = async (row, patch) => { await supabase.from("drivers").update(patch).eq("id", row.id); };
+  const setAdjust = async (row, val) => {
+    const { error } = await supabase.from("drivers").update({ points_adjust: val }).eq("id", row.id);
+    if (error) setMsg(/points_adjust|column|schema|cache/i.test(error.message)
+      ? "Manual points need the points_adjust column — run the one-line SQL I gave you, then this saves."
+      : error.message);
+    else { setMsg(""); reload(); }
+  };
   const addDriver = async () => { const { error } = await supabase.from("drivers").insert({ name: "New Driver", country: "" }); if (error) setMsg(error.message); else { setSort({ key: "created", dir: "desc" }); reload(); } };
   const delDriver = async (row) => { if (confirm("Delete this driver?")) { await supabase.from("drivers").delete().eq("id", row.id); reload(); } };
 
@@ -496,8 +503,9 @@ function DriversTab({ supabase, d, reload }) {
             <select className="aes-input" defaultValue={x.teamId || ""} onChange={(e) => setDriver(x, { team_id: e.target.value || null })}><option value="">— No team —</option>{d.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
             <span className="aes-ro">{x.cls ? className(x.cls) : "—"}</span>
             <span className="aes-edit-total mono">{x.pts + (x.pointsAdjust || 0)}</span>
-            <input type="number" className="aes-input aes-adm-adj" defaultValue={x.pointsAdjust || ""} placeholder="0" title="Manual points adjustment (+/−), applied to this driver's total"
-              onBlur={(e) => setDriver(x, { points_adjust: e.target.value ? Number(e.target.value) : 0 })} />
+            <input type="text" inputMode="numeric" className="aes-adm-adj" defaultValue={x.pointsAdjust || ""} placeholder="0"
+              title="Manual points adjustment (+ or −)"
+              onBlur={(e) => { const n = parseInt((e.target.value || "").replace(/[^0-9-]/g, ""), 10); setAdjust(x, isNaN(n) ? 0 : n); }} />
             <div className="aes-adm-liccell">
               <span className="aes-adm-lic" style={{ color: lic.color }}
                 title={`${lic.source === "manual" ? "Assigned by the league" : lic.source === "league" ? "Earned from league record" : "No starts yet"}${lic.rating != null ? ` · rating ${lic.rating}/100 (pace ${lic.pace} · results ${lic.results} · safety ${lic.safety}) · ${lic.starts} start${lic.starts === 1 ? "" : "s"}${lic.provisional ? " (provisional)" : ""}` : ""}`}>
@@ -523,8 +531,16 @@ function DriversTab({ supabase, d, reload }) {
 
 function TeamsTab({ supabase, d, reload }) {
   const [q, setQ] = useState("");
+  const [msg, setMsg] = useState("");
   const [sort, setSort] = useState({ key: "created", dir: "desc" });
   const setTeam = async (t, patch) => { await supabase.from("teams").update(patch).eq("id", t.id); };
+  const setAdjust = async (t, val) => {
+    const { error } = await supabase.from("teams").update({ points_adjust: val }).eq("id", t.id);
+    if (error) setMsg(/points_adjust|column|schema|cache/i.test(error.message)
+      ? "Manual points need the points_adjust column — run the one-line SQL I gave you, then this saves."
+      : error.message);
+    else { setMsg(""); reload(); }
+  };
   const addTeam = async () => { await supabase.from("teams").insert({ name: "New Team", number: "0", class_id: d.classes[0]?.id || "GTP", car: "" }); setSort({ key: "created", dir: "desc" }); reload(); };
   const delTeam = async (t) => { if (confirm("Delete this team? Its drivers will be unassigned.")) { await supabase.from("teams").delete().eq("id", t.id); reload(); } };
   const driverCount = (id) => d.driverRows.filter((x) => x.teamId === id).length;
@@ -560,6 +576,7 @@ function TeamsTab({ supabase, d, reload }) {
         <button className="aes-btn primary sm" onClick={addTeam}><Plus size={14} /> Add team</button>
         <div className="aes-filter"><Search size={14} /><input className="aes-filter-input" placeholder="Filter teams…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
       </div>
+      {msg && <div className="aes-import-err">{msg}</div>}
       <div className="aes-edit-list">
         <div className="aes-edit-row head" style={grid}>
           <SortHead label="Car #" sk="number" sort={sort} onSort={onSort} />
@@ -579,8 +596,9 @@ function TeamsTab({ supabase, d, reload }) {
             <CarSelect value={t.car || ""} classId={t.class_id} onSave={(car) => setTeam(t, { car })} />
             <span className="aes-edit-meta mono">{driverCount(t.id)}</span>
             <span className="aes-edit-total mono">{teamBasePts(t) + (t.pointsAdjust || 0)}</span>
-            <input type="number" className="aes-input aes-adm-adj" defaultValue={t.pointsAdjust || ""} placeholder="0" title="Manual points adjustment (+/−), applied to this team's total"
-              onBlur={(e) => setTeam(t, { points_adjust: e.target.value ? Number(e.target.value) : 0 })} />
+            <input type="text" inputMode="numeric" className="aes-adm-adj" defaultValue={t.pointsAdjust || ""} placeholder="0"
+              title="Manual points adjustment (+ or −)"
+              onBlur={(e) => { const n = parseInt((e.target.value || "").replace(/[^0-9-]/g, ""), 10); setAdjust(t, isNaN(n) ? 0 : n); }} />
             <div className="aes-edit-actions"><button className="aes-icon-btn danger" aria-label="Delete" onClick={() => delTeam(t)}><Trash2 size={15} /></button></div>
           </div>
         ))}
@@ -865,7 +883,11 @@ textarea.aes-input{ resize:vertical; font-family:var(--body); }
 .aes-adm-lic b{ font-weight:700; }
 .aes-adm-form{ font-style:normal; font-size:8.5px; font-weight:600; color:var(--mist2); letter-spacing:.05em; }
 .aes-adm-cat{ flex:1; min-width:0; padding:3px 5px; font-size:11px; }
-.aes-adm-adj{ width:52px; padding:4px 6px; font-size:12px; text-align:center; }
+.aes-adm-adj{ width:100%; box-sizing:border-box; padding:5px 4px; font-size:12.5px; font-family:var(--mono); text-align:center;
+  color:var(--chalk); background:var(--panel); border:1px solid var(--line); border-radius:7px; transition:border-color .12s, box-shadow .12s; }
+.aes-adm-adj::placeholder{ color:var(--mist2); }
+.aes-adm-adj:hover{ border-color:var(--mist2); }
+.aes-adm-adj:focus{ outline:none; border-color:var(--signal); box-shadow:0 0 0 1px var(--signal); }
 .aes-edit-row.team{ grid-template-columns:1fr auto auto; }
 .aes-edit-row.head{ background:none; border:none; padding:2px 12px 0; align-items:end; }
 .aes-edit-row.head span{ font-family:var(--mono); font-size:9.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--mist2); }
