@@ -760,22 +760,14 @@ function Shell({ supabase, session }) {
 /* -------------------------------- root ----------------------------------- */
 export default function AdminApp() {
   const supabase = getSupabase();
-  const [session, setSession] = useState(undefined); // undefined = connecting
-  const [authMsg, setAuthMsg] = useState("");
+  const [session, setSession] = useState(undefined); // undefined = still checking
 
   useEffect(() => {
     if (!supabase) { setSession(null); return; }
     let active = true;
     (async () => {
       const { data } = await supabase.auth.getSession();
-      if (data.session) { if (active) setSession(data.session); return; }
-      try {
-        const r = await fetch("/api/admin-session", { method: "POST" });
-        const out = await r.json();
-        if (!r.ok || out.error) { if (active) { setAuthMsg(out.error || "Admin not configured."); setSession(null); } return; }
-        const { data: sd, error } = await supabase.auth.setSession({ access_token: out.access_token, refresh_token: out.refresh_token });
-        if (active) { if (error) { setAuthMsg(error.message); setSession(null); } else setSession(sd.session); }
-      } catch (e) { if (active) { setAuthMsg(String(e?.message || e)); setSession(null); } }
+      if (active) setSession(data.session || null);
     })();
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => { if (active) setSession(s); });
     return () => { active = false; sub.subscription.unsubscribe(); };
@@ -787,12 +779,41 @@ export default function AdminApp() {
       {!supabase ? (
         <div className="aes-gate-wrap"><div className="aes-gate"><p>Database not configured — set the Supabase env vars first.</p></div></div>
       ) : session === undefined ? (
-        <div className="aes-gate-wrap"><div className="aes-gate"><Loader2 size={20} className="aes-spin" style={{ color: "var(--signal)" }} /><p style={{ marginTop: 12 }}>Opening Race Control…</p></div></div>
+        <div className="aes-gate-wrap"><div className="aes-gate"><Loader2 size={20} className="aes-spin" style={{ color: "var(--signal)" }} /><p style={{ marginTop: 12 }}>Loading…</p></div></div>
       ) : !session ? (
-        <div className="aes-gate-wrap"><div className="aes-gate"><Lock size={22} style={{ color: "var(--signal)" }} /><h2>Admin unavailable</h2><p>{authMsg || "Couldn't connect to the admin account. Set ADMIN_EMAIL and ADMIN_PASSWORD in your host's environment variables and redeploy."}</p></div></div>
+        <LoginGate supabase={supabase} />
       ) : (
         <Shell supabase={supabase} session={session} />
       )}
+    </div>
+  );
+}
+
+function LoginGate({ supabase }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true); setErr("");
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error) { setBusy(false); setErr(error.message || "Sign-in failed — check your email and password."); }
+    // on success, onAuthStateChange sets the session and Race Control opens
+  };
+  return (
+    <div className="aes-gate-wrap">
+      <form className="aes-gate aes-login" onSubmit={submit}>
+        <Lock size={22} style={{ color: "var(--signal)" }} />
+        <h2>Race Control</h2>
+        <p>Sign in with your admin account to edit the league.</p>
+        <input className="aes-login-input" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" autoFocus />
+        <input className="aes-login-input" type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
+        {err && <div className="aes-login-err">{err}</div>}
+        <button className="aes-btn primary aes-login-btn" type="submit" disabled={busy || !email || !password}>
+          {busy ? <><Loader2 size={14} className="aes-spin" /> Signing in…</> : "Sign in"}
+        </button>
+      </form>
     </div>
   );
 }
@@ -830,6 +851,16 @@ textarea.aes-input{ resize:vertical; font-family:var(--body); }
 .aes-gate{ width:100%; max-width:360px; background:var(--graphite); border:1px solid var(--line); border-radius:16px; padding:30px 26px; text-align:center; }
 .aes-gate h2{ font-size:22px; font-weight:700; margin:14px 0 6px; }
 .aes-gate p{ color:var(--mist); font-size:13.5px; margin:0 0 18px; }
+.aes-login{ display:flex; flex-direction:column; align-items:stretch; }
+.aes-login > svg{ align-self:center; }
+.aes-login h2, .aes-login p{ text-align:center; }
+.aes-login-input{ width:100%; box-sizing:border-box; background:var(--panel); border:1px solid var(--line); border-radius:9px;
+  padding:11px 13px; font-size:14px; color:var(--chalk); margin-bottom:10px; transition:border-color .12s, box-shadow .12s; }
+.aes-login-input::placeholder{ color:var(--mist2); }
+.aes-login-input:focus{ outline:none; border-color:var(--signal); box-shadow:0 0 0 1px var(--signal); }
+.aes-login-err{ background:rgba(255,90,90,.1); border:1px solid rgba(255,90,90,.35); color:#ff9a9a; font-size:12.5px;
+  border-radius:8px; padding:9px 11px; margin-bottom:10px; text-align:left; }
+.aes-login-btn{ width:100%; justify-content:center; margin-top:2px; padding:11px; }
 .aes-err-msg{ color:var(--signal); font-size:12.5px; margin:8px 0; }
 
 .aes-admin{ max-width:1080px; margin:0 auto; padding:0 24px 60px; }
