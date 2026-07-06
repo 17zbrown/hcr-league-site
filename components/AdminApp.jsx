@@ -235,7 +235,7 @@ async function loadAdminData(sb, seasonId) {
 
   const driverRows = drivers.map((d) => {
     const t = d.team_id ? teamById[d.team_id] : null;
-    return { id: d.id, name: d.name, country: d.country || "", custId: d.iracing_custid || "", teamId: d.team_id || null, num: t ? (t.number ?? "") : "", cls: t ? (t.class_id || "") : "", car: t ? (t.car || "") : "", pts: ptsByDriver[d.id] || 0, createdAt: d.created_at || "", irating: d.irating || null, licenseOverride: d.license_override || null };
+    return { id: d.id, name: d.name, country: d.country || "", custId: d.iracing_custid || "", teamId: d.team_id || null, num: t ? (t.number ?? "") : "", cls: t ? (t.class_id || "") : "", car: t ? (t.car || "") : "", pts: ptsByDriver[d.id] || 0, createdAt: d.created_at || "", irating: d.irating || null, licenseOverride: d.license_override || null, pointsAdjust: d.points_adjust || 0 };
   });
 
   const trackById = Object.fromEntries(tracks.map((t) => [t.id, t]));
@@ -452,7 +452,7 @@ function DriversTab({ supabase, d, reload }) {
       case "team": return teamName(x.teamId).toLowerCase();
       case "cls": return x.cls || "";
       case "car": return (x.car || "").toLowerCase();
-      case "pts": return x.pts || 0;
+      case "pts": return (x.pts || 0) + (x.pointsAdjust || 0);
       case "license": return licRank(x);
       default: return x.createdAt || "";
     }
@@ -481,8 +481,8 @@ function DriversTab({ supabase, d, reload }) {
           <span>Flag</span>
           <SortHead label="Team" sk="team" sort={sort} onSort={onSort} />
           <SortHead label="Class" sk="cls" sort={sort} onSort={onSort} />
-          <SortHead label="Car" sk="car" sort={sort} onSort={onSort} />
           <SortHead label="Pts" sk="pts" sort={sort} onSort={onSort} />
+          <span>Adj</span>
           <SortHead label="License" sk="license" sort={sort} onSort={onSort} />
           <span />
         </div>
@@ -495,8 +495,9 @@ function DriversTab({ supabase, d, reload }) {
             <CountrySelect value={x.country} onSave={(v) => setDriver(x, { country: v })} />
             <select className="aes-input" defaultValue={x.teamId || ""} onChange={(e) => setDriver(x, { team_id: e.target.value || null })}><option value="">— No team —</option>{d.teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
             <span className="aes-ro">{x.cls ? className(x.cls) : "—"}</span>
-            <span className="aes-ro mono">{x.car || "—"}</span>
-            <span className="aes-edit-total mono">{x.pts}</span>
+            <span className="aes-edit-total mono">{x.pts + (x.pointsAdjust || 0)}</span>
+            <input type="number" className="aes-input aes-adm-adj" defaultValue={x.pointsAdjust || ""} placeholder="0" title="Manual points adjustment (+/−), applied to this driver's total"
+              onBlur={(e) => setDriver(x, { points_adjust: e.target.value ? Number(e.target.value) : 0 })} />
             <div className="aes-adm-liccell">
               <span className="aes-adm-lic" style={{ color: lic.color }}
                 title={`${lic.source === "manual" ? "Assigned by the league" : lic.source === "league" ? "Earned from league record" : "No starts yet"}${lic.rating != null ? ` · rating ${lic.rating}/100 (pace ${lic.pace} · results ${lic.results} · safety ${lic.safety}) · ${lic.starts} start${lic.starts === 1 ? "" : "s"}${lic.provisional ? " (provisional)" : ""}` : ""}`}>
@@ -515,7 +516,7 @@ function DriversTab({ supabase, d, reload }) {
         })}
         {shown.length === 0 && <div className="aes-filter-empty">No drivers match.</div>}
       </div>
-      <p className="aes-hint">A driver's number, class and car come from their <b>team</b> — set those on the Teams tab. Assign a driver to a team with the Team dropdown; co-drivers just share the same team. Points total automatically from results. Click any column heading to sort; new drivers appear at the top.</p>
+      <p className="aes-hint">A driver's number, class and car come from their <b>team</b> — set those on the Teams tab. Assign a driver to a team with the Team dropdown; co-drivers just share the same team. Points total automatically from results; use <b>Adj</b> for a manual points correction (positive or negative). Click any column heading to sort; new drivers appear at the top.</p>
     </>
   );
 }
@@ -528,8 +529,9 @@ function TeamsTab({ supabase, d, reload }) {
   const delTeam = async (t) => { if (confirm("Delete this team? Its drivers will be unassigned.")) { await supabase.from("teams").delete().eq("id", t.id); reload(); } };
   const driverCount = (id) => d.driverRows.filter((x) => x.teamId === id).length;
   const className = (id) => d.classes.find((c) => c.id === id)?.name || id || "";
+  const teamBasePts = (t) => d.events.reduce((a, ev) => a + (ev.results || []).filter((r) => String(r.num) === String(t.number) && r.cls === t.class_id).reduce((b, r) => b + (Number(r.points) || 0) + (Number(r.adjust) || 0), 0), 0);
 
-  const DESC_FIRST = new Set(["created", "number", "drivers"]);
+  const DESC_FIRST = new Set(["created", "number", "drivers", "pts"]);
   const onSort = (key) => setSort((s) => s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: DESC_FIRST.has(key) ? "desc" : "asc" });
   const sval = (t, key) => {
     switch (key) {
@@ -538,6 +540,7 @@ function TeamsTab({ supabase, d, reload }) {
       case "cls": return className(t.class_id).toLowerCase();
       case "car": return (t.car || "").toLowerCase();
       case "drivers": return driverCount(t.id);
+      case "pts": return teamBasePts(t) + (t.pointsAdjust || 0);
       default: return t.created_at || "";
     }
   };
@@ -550,7 +553,7 @@ function TeamsTab({ supabase, d, reload }) {
       const cmp = typeof va === "number" ? va - vb : String(va).localeCompare(String(vb));
       return sort.dir === "asc" ? cmp : -cmp;
     });
-  const grid = { gridTemplateColumns: "70px 1.3fr 120px 1.4fr 72px auto" };
+  const grid = { gridTemplateColumns: "62px 1.15fr 104px 1.15fr 54px 48px 56px auto" };
   return (
     <>
       <div className="aes-admin-addbar">
@@ -564,6 +567,8 @@ function TeamsTab({ supabase, d, reload }) {
           <SortHead label="Class" sk="cls" sort={sort} onSort={onSort} />
           <SortHead label="Car model" sk="car" sort={sort} onSort={onSort} />
           <SortHead label="Drivers" sk="drivers" sort={sort} onSort={onSort} />
+          <SortHead label="Pts" sk="pts" sort={sort} onSort={onSort} />
+          <span>Adj</span>
           <span />
         </div>
         {shown.map((t) => (
@@ -573,12 +578,15 @@ function TeamsTab({ supabase, d, reload }) {
             <select className="aes-input" defaultValue={t.class_id || ""} onChange={async (e) => { await setTeam(t, { class_id: e.target.value || null }); reload(); }}><option value="">— class —</option>{d.classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
             <CarSelect value={t.car || ""} classId={t.class_id} onSave={(car) => setTeam(t, { car })} />
             <span className="aes-edit-meta mono">{driverCount(t.id)}</span>
+            <span className="aes-edit-total mono">{teamBasePts(t) + (t.pointsAdjust || 0)}</span>
+            <input type="number" className="aes-input aes-adm-adj" defaultValue={t.pointsAdjust || ""} placeholder="0" title="Manual points adjustment (+/−), applied to this team's total"
+              onBlur={(e) => setTeam(t, { points_adjust: e.target.value ? Number(e.target.value) : 0 })} />
             <div className="aes-edit-actions"><button className="aes-icon-btn danger" aria-label="Delete" onClick={() => delTeam(t)}><Trash2 size={15} /></button></div>
           </div>
         ))}
         {shown.length === 0 && <div className="aes-filter-empty">No teams match.</div>}
       </div>
-      <p className="aes-hint">Each team is one car — its number, class and model. Assign drivers to it on the Drivers tab. When you enter results, you pick the team and points credit all of its drivers. Click any column heading to sort; new teams appear at the top.</p>
+      <p className="aes-hint">Each team is one car — its number, class and model. Assign drivers to it on the Drivers tab. When you enter results, you pick the team and points credit all of its drivers. <b>Pts</b> is the team total; use <b>Adj</b> for a manual correction (+/−). Click any column heading to sort; new teams appear at the top.</p>
     </>
   );
 }
@@ -851,12 +859,13 @@ textarea.aes-input{ resize:vertical; font-family:var(--body); }
 
 .aes-edit-list{ display:flex; flex-direction:column; gap:8px; }
 .aes-edit-row{ display:grid; gap:8px; align-items:center; background:var(--graphite); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
-.aes-edit-row.driver{ grid-template-columns:50px 1.25fr 88px 1fr 86px 1fr 44px 150px auto; }
+.aes-edit-row.driver{ grid-template-columns:50px 1.25fr 88px 1fr 86px 46px 58px 150px auto; }
 .aes-adm-liccell{ display:flex; flex-direction:column; gap:4px; min-width:0; }
 .aes-adm-lic{ font-size:11px; font-weight:700; letter-spacing:.02em; text-transform:uppercase; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
 .aes-adm-lic b{ font-weight:700; }
 .aes-adm-form{ font-style:normal; font-size:8.5px; font-weight:600; color:var(--mist2); letter-spacing:.05em; }
 .aes-adm-cat{ flex:1; min-width:0; padding:3px 5px; font-size:11px; }
+.aes-adm-adj{ width:52px; padding:4px 6px; font-size:12px; text-align:center; }
 .aes-edit-row.team{ grid-template-columns:1fr auto auto; }
 .aes-edit-row.head{ background:none; border:none; padding:2px 12px 0; align-items:end; }
 .aes-edit-row.head span{ font-family:var(--mono); font-size:9.5px; letter-spacing:.07em; text-transform:uppercase; color:var(--mist2); }

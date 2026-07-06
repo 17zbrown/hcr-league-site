@@ -57,7 +57,7 @@ function roundPoints(driver, ev) {
   }
   return Number((driver.pointsByRound || [])[(ev.round || 1) - 1] || 0);
 }
-function driverPoints(d, events) { return (events || []).reduce((a, ev) => a + roundPoints(d, ev), 0); }
+function driverPoints(d, events) { return (events || []).reduce((a, ev) => a + roundPoints(d, ev), 0) + (Number(d.pointsAdjust) || 0); }
 
 /* HCR racing license is computed in @/lib/license (shared with the admin). */
 
@@ -1211,7 +1211,7 @@ function Standings({ data, openDriver, openTeam }) {
       const pts = data.events.reduce((a, ev) => {
         const ms = (ev.results || []).filter((r) => String(r.num) === String(t.number) && r.cls === t.cls);
         return a + ms.reduce((b, r) => b + (Number(r.points) || 0) + (Number(r.adjust) || 0), 0);
-      }, 0);
+      }, 0) + (Number(t.pointsAdjust) || 0);
       const classes = t.cls ? [t.cls] : [...new Set(ds.map((d) => d.cls))];
       return { ...t, pts, drivers: ds.length, classes };
     });
