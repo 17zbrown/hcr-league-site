@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 import logo from '../assets/hcr-logo.png'
+import { useAuth } from '../lib/auth'
 
 const NAV = [
   { to: '/schedule', label: 'Schedule' },
@@ -27,9 +28,9 @@ function Wordmark() {
 export default function Header() {
   const [open, setOpen] = useState(false)
   const location = useLocation()
+  const { session, isAdmin, isManager } = useAuth()
 
   useEffect(() => setOpen(false), [location.pathname])
-
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : ''
     return () => {
@@ -56,64 +57,81 @@ export default function Header() {
               {({ isActive }) => (
                 <>
                   {item.label}
-                  {isActive && (
-                    <span className="absolute -bottom-[26px] left-0 right-0 h-[3px] bg-[var(--color-brand)]" />
-                  )}
+                  {isActive && <span className="absolute -bottom-[26px] left-0 right-0 h-[3px] bg-[var(--color-brand)]" />}
                 </>
               )}
             </NavLink>
           ))}
         </nav>
 
-        <div className="flex items-center gap-2">
-          <Link
-            to="/signup"
-            className="hidden rounded-lg bg-[var(--color-brand)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-0.5 sm:block"
-          >
-            Enter Season
-          </Link>
-
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            aria-label={open ? 'Close menu' : 'Open menu'}
-            aria-expanded={open}
-            className="flex h-11 w-11 items-center justify-center rounded-lg border border-[var(--color-line-2)] lg:hidden"
-          >
-            <div className="relative h-4 w-5">
-              <span className={`absolute left-0 h-0.5 w-5 bg-current transition-all ${open ? 'top-1.5 rotate-45' : 'top-0'}`} />
-              <span className={`absolute left-0 top-1.5 h-0.5 w-5 bg-current transition-all ${open ? 'opacity-0' : 'opacity-100'}`} />
-              <span className={`absolute left-0 h-0.5 w-5 bg-current transition-all ${open ? 'top-1.5 -rotate-45' : 'top-3'}`} />
-            </div>
-          </button>
+        <div className="hidden items-center gap-2 lg:flex">
+          {isAdmin && (
+            <Link to="/commissioner" className="text-[13px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
+              Commissioner
+            </Link>
+          )}
+          {isManager && (
+            <Link to="/manager" className="text-[13px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
+              Team
+            </Link>
+          )}
+          {session ? (
+            <Link to="/account" className="rounded-lg bg-[var(--color-ink)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5">
+              Account
+            </Link>
+          ) : (
+            <>
+              <Link to="/login" className="text-[13px] font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-ink)]">
+                Sign In
+              </Link>
+              <Link to="/signup" className="rounded-lg bg-[var(--color-brand)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-0.5">
+                Enter Season
+              </Link>
+            </>
+          )}
         </div>
+
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-label={open ? 'Close menu' : 'Open menu'}
+          aria-expanded={open}
+          className="flex h-11 w-11 items-center justify-center rounded-lg border border-[var(--color-line-2)] lg:hidden"
+        >
+          <div className="relative h-4 w-5">
+            <span className={`absolute left-0 h-0.5 w-5 bg-current transition-all ${open ? 'top-1.5 rotate-45' : 'top-0'}`} />
+            <span className={`absolute left-0 top-1.5 h-0.5 w-5 bg-current transition-all ${open ? 'opacity-0' : 'opacity-100'}`} />
+            <span className={`absolute left-0 h-0.5 w-5 bg-current transition-all ${open ? 'top-1.5 -rotate-45' : 'top-3'}`} />
+          </div>
+        </button>
       </div>
 
       {open && (
         <div className="fixed inset-x-0 top-[72px] bottom-0 z-40 overflow-y-auto bg-[var(--color-paper)] lg:hidden">
           <nav className="container-hcr flex flex-col py-2" aria-label="Mobile">
-            <NavLink to="/" className="border-b border-[var(--color-line)] py-4 font-display text-2xl font-extrabold uppercase">
-              Home
-            </NavLink>
+            <NavLink to="/" className="border-b border-[var(--color-line)] py-4 font-display text-2xl font-extrabold uppercase">Home</NavLink>
             {NAV.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
-                  `border-b border-[var(--color-line)] py-4 font-display text-2xl font-extrabold uppercase ${
-                    isActive ? 'text-[var(--color-brand-deep)]' : ''
-                  }`
+                  `border-b border-[var(--color-line)] py-4 font-display text-2xl font-extrabold uppercase ${isActive ? 'text-[var(--color-brand-deep)]' : ''}`
                 }
               >
                 {item.label}
               </NavLink>
             ))}
-            <Link
-              to="/signup"
-              className="mt-6 rounded-lg bg-[var(--color-brand)] py-4 text-center font-display text-2xl font-extrabold uppercase text-black"
-            >
-              Enter the Season
-            </Link>
+            {isAdmin && <NavLink to="/commissioner" className="border-b border-[var(--color-line)] py-4 font-display text-2xl font-extrabold uppercase">Commissioner</NavLink>}
+            {isManager && <NavLink to="/manager" className="border-b border-[var(--color-line)] py-4 font-display text-2xl font-extrabold uppercase">Team Manager</NavLink>}
+
+            {session ? (
+              <Link to="/account" className="mt-6 rounded-lg bg-[var(--color-ink)] py-4 text-center font-display text-2xl font-extrabold uppercase text-white">My Account</Link>
+            ) : (
+              <>
+                <Link to="/login" className="mt-6 rounded-lg border border-[var(--color-line-2)] py-4 text-center font-display text-2xl font-extrabold uppercase">Sign In</Link>
+                <Link to="/signup" className="mt-2 rounded-lg bg-[var(--color-brand)] py-4 text-center font-display text-2xl font-extrabold uppercase text-black">Enter the Season</Link>
+              </>
+            )}
           </nav>
         </div>
       )}

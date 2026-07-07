@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useLeagueSettings } from '../lib/queries'
+import { useAuth } from '../lib/auth'
 import { Section } from '../components/ui'
 import { Reveal } from '../components/motion'
 
@@ -12,6 +13,7 @@ const LADDER = [
 
 export default function SignUp() {
   const { data: settings } = useLeagueSettings()
+  const { session } = useAuth()
 
   return (
     <>
@@ -25,26 +27,27 @@ export default function SignUp() {
             <div className="eyebrow mb-5">Season registration</div>
             <h1 className="max-w-3xl text-6xl md:text-8xl">Join the grid</h1>
             <p className="mt-7 max-w-lg text-lg text-[var(--color-muted)]">
-              Registration runs through the league. Your FIA license category sets which classes
-              you're eligible for — Bronze in GTD up to Platinum in GTP.
+              Create a member account, then enter the season from your account page. Your FIA
+              license category sets which classes you're eligible for — Bronze in GTD up to
+              Platinum in GTP. Team managers sign drivers from the free-agent pool.
             </p>
             <div className="mt-9 flex flex-wrap gap-3">
+              <Link
+                to={session ? '/account' : '/login'}
+                className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1"
+              >
+                {session ? 'Enter the Season' : 'Create Account & Enter'}
+              </Link>
               {settings?.discord_url && (
                 <a
                   href={settings.discord_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1"
+                  className="rounded-xl bg-[var(--color-ink)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-1"
                 >
-                  Register on Discord
+                  Join the Discord
                 </a>
               )}
-              <Link
-                to="/schedule"
-                className="rounded-xl bg-[var(--color-ink)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-1"
-              >
-                See the Calendar
-              </Link>
             </div>
           </Reveal>
         </div>
@@ -65,7 +68,8 @@ export default function SignUp() {
             ))}
           </div>
           <p className="mt-6 text-sm text-[var(--color-faint)]">
-            A full in-site registration form is on the way — for now the fastest way in is the Discord.
+            You must be signed in as a member to enter. The commissioner confirms grid slots and
+            can grant team-manager access.
           </p>
         </Section>
       </div>

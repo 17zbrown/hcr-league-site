@@ -10,6 +10,11 @@ import Drivers from './pages/Drivers'
 import Teams from './pages/Teams'
 import News from './pages/News'
 import SignUp from './pages/SignUp'
+import Login from './pages/Login'
+import Account from './pages/Account'
+import CommissionerPortal from './pages/commissioner/CommissionerPortal'
+import ManagerPortal from './pages/manager/ManagerPortal'
+import { RequireAdmin, RequireAuth, RequireManager } from './components/guards'
 import NotFound from './pages/NotFound'
 
 function ScrollToTop() {
@@ -35,6 +40,10 @@ export default function App() {
           <Route path="/teams" element={<Teams />} />
           <Route path="/news" element={<News />} />
           <Route path="/signup" element={<SignUp />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/account" element={<RequireAuth><Account /></RequireAuth>} />
+          <Route path="/commissioner" element={<RequireAdmin><CommissionerPortal /></RequireAdmin>} />
+          <Route path="/manager" element={<RequireManager><ManagerPortal /></RequireManager>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>

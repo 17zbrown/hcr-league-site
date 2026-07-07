@@ -14,7 +14,8 @@ import { CLASS_ORDER, classColor, fmtDate, fmtDateLong } from '../lib/format'
 import type { RaceEvent } from '../lib/types'
 import Countdown from '../components/Countdown'
 import { ClassChip, Section, Skeleton } from '../components/ui'
-import { CountUp, Marquee, Reveal } from '../components/motion'
+import { CountUp, Reveal } from '../components/motion'
+import Ticker from '../components/Ticker'
 
 export default function Home() {
   const { data: season } = useCurrentSeason()
@@ -101,18 +102,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ---------- MARQUEE ---------- */}
-      <Marquee className="border-y border-[var(--color-line)] bg-[var(--color-ink)]">
-        {['GTP', 'LMP2', 'GTD', '11 Rounds', 'One Grid', 'Three Titles'].map((t) => (
-          <span
-            key={t}
-            className="px-7 py-3.5 font-display text-xl font-bold uppercase tracking-wide text-white"
-          >
-            {t}
-            <span className="ml-7 text-[var(--color-brand)]">/</span>
-          </span>
-        ))}
-      </Marquee>
+      {/* ---------- TICKER ---------- */}
+      <Ticker />
 
       {/* ---------- LATEST RESULT — OVERALL ---------- */}
       {lastEvent && (

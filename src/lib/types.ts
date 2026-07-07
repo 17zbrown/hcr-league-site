@@ -137,6 +137,30 @@ export interface Champion {
   sort: number
 }
 
+export interface Profile {
+  id: string
+  email: string | null
+  display_name: string | null
+  is_admin: boolean
+  is_team_manager: boolean
+  managed_team_id: string | null
+  driver_id: string | null
+  created_at: string
+}
+
+export interface SeasonRegistration {
+  id: string
+  season_id: string
+  user_id: string
+  driver_id: string | null
+  display_name: string | null
+  fia_category: string | null
+  preferred_class: string | null
+  notes: string | null
+  status: string
+  created_at: string
+}
+
 // Computed standings row (driver or team) — derived client-side from results.
 export interface StandingRow {
   key: string
