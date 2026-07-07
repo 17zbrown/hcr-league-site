@@ -5,6 +5,7 @@ import Registrations from './Registrations'
 import TeamsAdmin from './TeamsAdmin'
 import DriversAdmin from './DriversAdmin'
 import ScheduleAdmin from './ScheduleAdmin'
+import ResultsAdmin from './ResultsAdmin'
 import LeagueInfo from './LeagueInfo'
 
 const TABS = [
@@ -14,6 +15,7 @@ const TABS = [
   { id: 'teams', label: 'Teams', el: <TeamsAdmin /> },
   { id: 'drivers', label: 'Drivers', el: <DriversAdmin /> },
   { id: 'schedule', label: 'Schedule', el: <ScheduleAdmin /> },
+  { id: 'results', label: 'Import Results', el: <ResultsAdmin /> },
   { id: 'info', label: 'League Info', el: <LeagueInfo /> },
 ]
 

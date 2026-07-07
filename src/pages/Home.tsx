@@ -10,16 +10,15 @@ import {
   useTeams,
 } from '../lib/queries'
 import { computeStandings } from '../lib/standings'
-import { CLASS_ORDER, classColor, fmtDate, fmtDateLong } from '../lib/format'
-import type { RaceEvent } from '../lib/types'
-import Countdown from '../components/Countdown'
+import { CLASS_ORDER, classColor, fmtDate } from '../lib/format'
 import { ClassChip, Section, Skeleton } from '../components/ui'
 import { CountUp, Reveal } from '../components/motion'
 import Ticker from '../components/Ticker'
+import HeroCarousel from '../components/HeroCarousel'
 
 export default function Home() {
   const { data: season } = useCurrentSeason()
-  const { data: events, isLoading: evLoading } = useEvents(season?.id)
+  const { data: events } = useEvents(season?.id)
   const { data: classes } = useClasses()
   const { data: teams } = useTeams()
   const { data: seasonResults } = useSeasonResults(season?.id)
@@ -42,70 +41,10 @@ export default function Home() {
 
   return (
     <>
-      {/* ---------- HERO ---------- */}
-      <section className="relative overflow-hidden">
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              'radial-gradient(58% 55% at 86% -8%, rgba(242,225,20,0.18), transparent 62%), radial-gradient(48% 50% at 4% 6%, rgba(47,107,255,0.09), transparent 60%)',
-          }}
-        />
-        <div className="container-hcr relative grid gap-12 py-16 md:grid-cols-[1.12fr_0.88fr] md:py-24">
-          <div>
-            <Reveal>
-              <div className="mb-6 inline-flex items-center gap-2.5 rounded-full bg-[var(--color-mist)] px-3.5 py-1.5 text-[13px] font-semibold uppercase tracking-wide text-[var(--color-ink-2)]">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-red)] opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-red)]" />
-                </span>
-                {season?.name ?? '2026 Season'} · Round {nextEvent?.round ?? 2} up next
-              </div>
-            </Reveal>
-            <Reveal delay={0.06}>
-              <h1 className="text-6xl leading-[0.9] sm:text-7xl md:text-8xl">
-                Race like{' '}
-                <span className="relative inline-block">
-                  <span className="relative z-10">it's real.</span>
-                  <span className="absolute inset-x-0 bottom-1.5 z-0 h-4 bg-[var(--color-brand)] md:h-5" />
-                </span>
-              </h1>
-            </Reveal>
-            <Reveal delay={0.12}>
-              <p className="mt-7 max-w-md text-lg text-[var(--color-muted)]">
-                A three-class iRacing endurance championship. GTP, LMP2, and GTD share one grid
-                and fight for three titles — broadcast timing, real race control, no arcade
-                shortcuts.
-              </p>
-            </Reveal>
-            <Reveal delay={0.18}>
-              <div className="mt-9 flex flex-wrap gap-3">
-                <Link
-                  to="/signup"
-                  className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1"
-                >
-                  Enter the 2026 Season
-                </Link>
-                <Link
-                  to="/standings"
-                  className="rounded-xl bg-[var(--color-ink)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-1"
-                >
-                  View Standings
-                </Link>
-              </div>
-            </Reveal>
-          </div>
-
-          <Reveal delay={0.14} y={28}>
-            {evLoading || !nextEvent ? <Skeleton className="h-80 w-full" /> : <NextRaceCard event={nextEvent} />}
-          </Reveal>
-        </div>
-      </section>
-
-      {/* ---------- TICKER ---------- */}
+      <HeroCarousel />
       <Ticker />
 
-      {/* ---------- LATEST RESULT — OVERALL ---------- */}
+      {/* ---------- LATEST RESULT ---------- */}
       {lastEvent && (
         <Section
           eyebrow={`Round ${lastEvent.round} · ${lastEvent.name ?? lastEvent.track?.name}`}
@@ -142,24 +81,16 @@ export default function Home() {
                   <div className="shadow-card overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
                     <div className="flex items-center justify-between px-5 py-4" style={{ background: color }}>
                       <span className="font-display text-2xl font-extrabold uppercase text-black">{cls}</span>
-                      <span className="font-mono text-xs font-semibold uppercase tracking-widest text-black/70">
-                        Drivers
-                      </span>
+                      <span className="font-mono text-xs font-semibold uppercase tracking-widest text-black/70">Drivers</span>
                     </div>
                     <ol>
-                      {rows.length === 0 && (
-                        <li className="px-5 py-7 text-sm text-[var(--color-muted)]">No results scored yet.</li>
-                      )}
+                      {rows.length === 0 && <li className="px-5 py-7 text-sm text-[var(--color-muted)]">No results scored yet.</li>}
                       {rows.map((row, i) => (
                         <li key={row.key} className="flex items-center gap-3 border-b border-[var(--color-line)] px-5 py-3.5 last:border-0">
-                          <span className={`tabular w-6 text-lg font-bold ${i === 0 ? 'text-[var(--color-ink)]' : 'text-[var(--color-faint)]'}`}>
-                            {i + 1}
-                          </span>
+                          <span className={`tabular w-6 text-lg font-bold ${i === 0 ? 'text-[var(--color-ink)]' : 'text-[var(--color-faint)]'}`}>{i + 1}</span>
                           <span className="flex-1 truncate font-semibold">{row.name}</span>
                           {row.wins > 0 && <span className="tabular text-xs text-[var(--color-muted)]">{row.wins}W</span>}
-                          <span className="tabular w-14 text-right text-lg font-bold">
-                            <CountUp value={row.points} />
-                          </span>
+                          <span className="tabular w-14 text-right text-lg font-bold"><CountUp value={row.points} /></span>
                         </li>
                       ))}
                     </ol>
@@ -190,9 +121,7 @@ export default function Home() {
                 key={e.id}
                 to="/schedule"
                 className={`group relative min-w-[230px] snap-start rounded-2xl border p-5 transition-all hover:-translate-y-1 ${
-                  isNext
-                    ? 'border-[var(--color-brand)] bg-[var(--color-cloud)] shadow-card'
-                    : 'border-[var(--color-line)] bg-[var(--color-paper)] hover:shadow-card'
+                  isNext ? 'border-[var(--color-brand)] bg-[var(--color-cloud)] shadow-card' : 'border-[var(--color-line)] bg-[var(--color-paper)] hover:shadow-card'
                 } ${done ? 'opacity-60' : ''}`}
               >
                 <div className="flex items-center justify-between">
@@ -211,38 +140,6 @@ export default function Home() {
 
       <Champions />
     </>
-  )
-}
-
-function NextRaceCard({ event }: { event: RaceEvent }) {
-  const { data: classes } = useClasses()
-  return (
-    <div className="shadow-card overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
-      <div className="flex items-center justify-between bg-[var(--color-ink)] px-5 py-3.5">
-        <span className="font-mono text-xs font-bold uppercase tracking-[0.12em] text-[var(--color-brand)]">
-          Next Round · R{event.round}
-        </span>
-        <div className="flex items-center gap-3">
-          {CLASS_ORDER.map((c) => (
-            <span key={c} className="flex items-center gap-1.5 font-mono text-[11px] font-medium uppercase tracking-wider text-white/70">
-              <span className="h-2 w-2 rounded-full" style={{ background: classColor(c, classes) }} />
-              {c}
-            </span>
-          ))}
-        </div>
-      </div>
-      <div className="p-6">
-        <div className="font-mono text-xs uppercase tracking-wide text-[var(--color-muted)]">{event.track?.name}</div>
-        <h2 className="mt-2 text-3xl md:text-4xl">{event.name ?? event.track?.name}</h2>
-        <div className="tabular mt-2 text-sm text-[var(--color-muted)]">
-          {fmtDateLong(event.date)}
-          {event.duration_min ? ` · ${event.duration_min} min` : ''}
-        </div>
-        <div className="mt-6">
-          <Countdown target={event.date} />
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -271,8 +168,7 @@ function LatestOverall({ eventId }: { eventId: string }) {
             <div className="min-w-0">
               <div className="truncate font-semibold">{r.drivers_text}</div>
               <div className="tabular text-xs text-[var(--color-muted)]">
-                #{r.number} · {r.laps} laps
-                {r.best_lap ? ` · ${r.best_lap}` : ''}
+                #{r.number} · {r.laps} laps{r.best_lap ? ` · ${r.best_lap}` : ''}
               </div>
             </div>
             <span className="hidden items-center gap-2 font-mono text-xs uppercase tracking-wider text-[var(--color-ink-2)] sm:inline-flex">
