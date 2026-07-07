@@ -1,7 +1,7 @@
 import { useCurrentSeason, useEvents } from '../lib/queries'
-import { fmtDateLong } from '../lib/format'
+import { CLASS_ORDER, fmtDateLong } from '../lib/format'
 import { ClassChip, Section, Skeleton } from '../components/ui'
-import { CLASS_ORDER } from '../lib/format'
+import { Reveal } from '../components/motion'
 
 export default function Schedule() {
   const { data: season } = useCurrentSeason()
@@ -17,39 +17,40 @@ export default function Schedule() {
         </div>
       ) : (
         <ol className="space-y-3">
-          {(events ?? []).map((e) => {
+          {(events ?? []).map((e, i) => {
             const done = e.status === 'complete'
             const isNext = e.status === 'next'
             return (
-              <li
-                key={e.id}
-                className={`grid items-center gap-4 border bg-[var(--color-ink-2)] p-5 md:grid-cols-[70px_1fr_auto] ${
-                  isNext ? 'border-[var(--color-brand)]' : 'border-[var(--color-line)]'
-                } ${done ? 'opacity-60' : ''}`}
-              >
-                <div className="tabular text-4xl font-bold text-[var(--color-muted)]">
-                  {String(e.round).padStart(2, '0')}
-                </div>
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-2xl md:text-3xl">{e.name ?? e.track?.name}</h3>
-                    {isNext && <span className="eyebrow text-[var(--color-brand)]">Next</span>}
-                    {done && <span className="eyebrow">Final</span>}
+              <Reveal as="li" key={e.id} delay={Math.min(i * 0.04, 0.3)}>
+                <div
+                  className={`grid items-center gap-4 rounded-2xl border p-5 transition-all hover:shadow-card md:grid-cols-[72px_1fr_auto] ${
+                    isNext ? 'border-[var(--color-brand)] bg-[var(--color-cloud)]' : 'border-[var(--color-line)] bg-[var(--color-paper)]'
+                  } ${done ? 'opacity-60' : ''}`}
+                >
+                  <div className="font-display text-4xl font-extrabold text-[var(--color-faint)]">
+                    {String(e.round).padStart(2, '0')}
                   </div>
-                  <div className="mt-1 text-[var(--color-muted)]">
-                    {e.track?.name}
-                    {e.track?.location ? ` · ${e.track.location}` : ''}
+                  <div>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h3 className="text-2xl md:text-3xl">{e.name ?? e.track?.name}</h3>
+                      {isNext && <span className="rounded-full bg-[var(--color-brand)] px-2.5 py-0.5 text-[11px] font-bold uppercase text-black">Next</span>}
+                      {done && <span className="text-[11px] font-bold uppercase tracking-wide text-[var(--color-faint)]">Final</span>}
+                    </div>
+                    <div className="mt-1 text-[var(--color-muted)]">
+                      {e.track?.name}
+                      {e.track?.location ? ` · ${e.track.location}` : ''}
+                    </div>
+                  </div>
+                  <div className="text-left md:text-right">
+                    <div className="tabular font-semibold">{fmtDateLong(e.date)}</div>
+                    <div className="mt-2 flex gap-1.5 md:justify-end">
+                      {CLASS_ORDER.map((c) => (
+                        <ClassChip key={c} classId={c} />
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <div className="text-left md:text-right">
-                  <div className="tabular font-medium">{fmtDateLong(e.date)}</div>
-                  <div className="mt-2 flex gap-1.5 md:justify-end">
-                    {CLASS_ORDER.map((c) => (
-                      <ClassChip key={c} classId={c} />
-                    ))}
-                  </div>
-                </div>
-              </li>
+              </Reveal>
             )
           })}
         </ol>

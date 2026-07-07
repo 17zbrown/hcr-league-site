@@ -28,14 +28,14 @@ export default function Results() {
               <button
                 key={e.id}
                 onClick={() => setEventId(e.id)}
-                className={`border px-4 py-2 text-left transition-colors ${
+                className={`rounded-xl border px-4 py-2.5 text-left transition-all ${
                   e.id === eventId
-                    ? 'border-[var(--color-brand)] bg-[var(--color-ink-2)]'
-                    : 'border-[var(--color-line)] hover:border-[var(--color-line-2)]'
+                    ? 'border-[var(--color-brand)] bg-[var(--color-cloud)] shadow-card'
+                    : 'border-[var(--color-line)] bg-[var(--color-paper)] hover:border-[var(--color-line-2)]'
                 }`}
               >
-                <div className="tabular text-xs text-[var(--color-muted)]">Round {e.round}</div>
-                <div className="font-display text-xl">{e.track?.name}</div>
+                <div className="tabular text-xs font-semibold text-[var(--color-muted)]">ROUND {e.round}</div>
+                <div className="font-display text-xl font-extrabold uppercase">{e.track?.name}</div>
               </button>
             ))}
           </div>
@@ -72,51 +72,49 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
         if (!rows.length) return null
         return (
           <div key={cls}>
-            <div className="mb-3 flex items-center gap-2">
-              <span className="h-4 w-4" style={{ background: color }} />
+            <div className="mb-3 flex items-center gap-2.5">
+              <span className="h-4 w-4 rounded-sm" style={{ background: color }} />
               <h3 className="text-2xl uppercase">{cls}</h3>
               <span className="tabular text-sm text-[var(--color-muted)]">{rows.length} cars</span>
             </div>
-            <div className="overflow-x-auto border border-[var(--color-line)]">
+            <div className="shadow-card overflow-x-auto rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
               <table className="w-full min-w-[820px] border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-[var(--color-line)] bg-[var(--color-ink-2)] text-left font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
-                    <th className="px-3 py-2">Pos</th>
-                    <th className="px-3 py-2">No.</th>
-                    <th className="px-3 py-2">Driver</th>
-                    <th className="px-3 py-2 text-center">Grid</th>
-                    <th className="px-3 py-2 text-center">Laps</th>
-                    <th className="px-3 py-2">Best Lap</th>
-                    <th className="px-3 py-2 text-center">Inc</th>
-                    <th className="px-3 py-2">Status</th>
-                    <th className="px-3 py-2 text-right">Pts</th>
+                  <tr className="border-b border-[var(--color-line)] bg-[var(--color-mist)] text-left font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
+                    <th className="px-4 py-3">Pos</th>
+                    <th className="px-4 py-3">No.</th>
+                    <th className="px-4 py-3">Driver</th>
+                    <th className="px-4 py-3 text-center">Grid</th>
+                    <th className="px-4 py-3 text-center">Laps</th>
+                    <th className="px-4 py-3">Best Lap</th>
+                    <th className="px-4 py-3 text-center">Inc</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Pts</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r) => (
-                    <tr key={r.id} className="border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-ink-2)]">
-                      <td className="px-3 py-2">
+                    <tr key={r.id} className="border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-mist)]">
+                      <td className="px-4 py-3">
                         <span
-                          className="tabular inline-flex h-7 w-7 items-center justify-center font-bold"
-                          style={{ background: r.cls_pos === 1 ? color : 'var(--color-ink-3)', color: r.cls_pos === 1 ? '#000' : undefined }}
+                          className="tabular inline-flex h-7 w-7 items-center justify-center rounded-md font-bold"
+                          style={{ background: r.cls_pos === 1 ? color : 'var(--color-mist)', color: r.cls_pos === 1 ? '#000' : 'var(--color-ink)' }}
                         >
                           {r.cls_pos}
                         </span>
                       </td>
-                      <td className="tabular px-3 py-2 text-[var(--color-muted)]">#{r.number}</td>
-                      <td className="px-3 py-2 font-medium">{r.drivers_text}</td>
-                      <td className="tabular px-3 py-2 text-center">{r.grid ?? '—'}</td>
-                      <td className="tabular px-3 py-2 text-center">{r.laps ?? '—'}</td>
-                      <td className="tabular px-3 py-2">{r.best_lap ?? '—'}</td>
-                      <td className="tabular px-3 py-2 text-center">{r.inc ?? '—'}</td>
-                      <td className="px-3 py-2">
-                        <span className={r.status === 'DNF' ? 'text-[var(--color-live)]' : 'text-[var(--color-muted)]'}>
+                      <td className="tabular px-4 py-3 text-[var(--color-muted)]">#{r.number}</td>
+                      <td className="px-4 py-3 font-semibold">{r.drivers_text}</td>
+                      <td className="tabular px-4 py-3 text-center">{r.grid ?? '—'}</td>
+                      <td className="tabular px-4 py-3 text-center">{r.laps ?? '—'}</td>
+                      <td className="tabular px-4 py-3">{r.best_lap ?? '—'}</td>
+                      <td className="tabular px-4 py-3 text-center">{r.inc ?? '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={r.status === 'DNF' ? 'font-semibold text-[var(--color-red)]' : 'text-[var(--color-muted)]'}>
                           {r.status ?? '—'}
                         </span>
                       </td>
-                      <td className="tabular px-3 py-2 text-right font-bold">
-                        {(r.points ?? 0) + (r.quali_points ?? 0)}
-                      </td>
+                      <td className="tabular px-4 py-3 text-right font-bold">{(r.points ?? 0) + (r.quali_points ?? 0)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -127,9 +125,9 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
       })}
 
       {report && (
-        <div className="border border-[var(--color-line)] bg-[var(--color-ink-2)] p-6">
+        <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-6 md:p-8">
           <h3 className="eyebrow mb-3">Race Report</h3>
-          <div className="max-w-3xl whitespace-pre-line leading-relaxed text-[var(--color-muted)]">{report}</div>
+          <div className="max-w-3xl whitespace-pre-line leading-relaxed text-[var(--color-ink-2)]">{report}</div>
         </div>
       )}
     </div>

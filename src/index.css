@@ -1,47 +1,40 @@
 @import 'tailwindcss';
 
 /* ------------------------------------------------------------------ *
- * HCR League — design tokens
- * Dark, high-contrast broadcast look. One accent: HCR yellow.
- * Class colors live in the database (classes.color) and are applied
- * inline where needed — the palette below stays brand-neutral.
+ * HCR League — design tokens (bright / modern / vibrant)
+ * White grounds, near-black ink, one bold accent (HCR yellow) plus
+ * vibrant racing blue + green. Class colors come from the DB.
  * ------------------------------------------------------------------ */
 @theme {
-  /* Neutrals — a near-black base with layered surfaces */
-  --color-ink: #0b0b0d;
-  --color-ink-2: #131317;
-  --color-ink-3: #1a1a1f;
-  --color-line: #2a2a31;
-  --color-line-2: #3a3a44;
-  --color-paper: #f6f6f3;
-  --color-muted: #9b9ba6;
-  --color-muted-2: #6c6c78;
+  /* Grounds & neutrals */
+  --color-paper: #ffffff;
+  --color-cloud: #fafbfc;
+  --color-mist: #f3f5f9;
+  --color-line: #e6e9ef;
+  --color-line-2: #d6dae2;
 
-  /* Brand accent (HCR yellow) — used sparingly */
-  --color-brand: #f2e114;
-  --color-brand-2: #ffe600;
-  --color-brand-ink: #cbbd00; /* yellow legible on light backgrounds */
+  --color-ink: #0a0c11; /* primary text + dark surfaces */
+  --color-ink-2: #2c3340; /* secondary text */
+  --color-muted: #6b7280; /* muted text */
+  --color-faint: #9aa1ad;
 
-  /* Functional signal colors (status, not decoration) */
-  --color-live: #ff4d4d;
-  --color-go: #37d67a;
+  /* Brand + vibrant accents */
+  --color-brand: #f2e114; /* HCR yellow */
+  --color-brand-deep: #97890a; /* yellow legible on white */
+  --color-blue: #2f6bff;
+  --color-green: #12b981;
+  --color-red: #ff3b47;
 
   /* Type */
-  --font-display: 'Saira Condensed', 'Arial Narrow', sans-serif;
-  --font-body: 'Saira', system-ui, sans-serif;
+  --font-display: 'Archivo', system-ui, sans-serif;
+  --font-body: 'Hanken Grotesk', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
 
-  /* Rhythm */
-  --radius: 4px;
-  --radius-lg: 8px;
+  --radius: 10px;
+  --radius-lg: 16px;
 }
 
-/* ---- base ---- */
 @layer base {
-  * {
-    border-color: var(--color-line);
-  }
-
   html {
     scroll-behavior: smooth;
     -webkit-text-size-adjust: 100%;
@@ -49,26 +42,20 @@
 
   body {
     margin: 0;
-    background: var(--color-ink);
-    color: var(--color-paper);
+    background: var(--color-paper);
+    color: var(--color-ink);
     font-family: var(--font-body);
     font-size: 16px;
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
-    /* Signature backdrop: faint racing-grid lines over near-black */
-    background-image:
-      linear-gradient(to right, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
-    background-size: 46px 46px;
-    background-attachment: fixed;
   }
 
   h1, h2, h3, h4 {
     font-family: var(--font-display);
-    font-weight: 700;
-    line-height: 0.98;
-    letter-spacing: -0.01em;
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.02em;
     text-transform: uppercase;
     margin: 0;
   }
@@ -78,11 +65,10 @@
     text-decoration: none;
   }
 
-  /* Visible keyboard focus everywhere */
   :focus-visible {
-    outline: 2px solid var(--color-brand);
+    outline: 3px solid var(--color-blue);
     outline-offset: 2px;
-    border-radius: 2px;
+    border-radius: 3px;
   }
 
   ::selection {
@@ -90,7 +76,6 @@
     color: #000;
   }
 
-  /* Monospace numerics for timing/results data */
   .tabular {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
@@ -99,35 +84,44 @@
 }
 
 @layer utilities {
-  /* Eyebrow / label — small mono kicker used above section titles */
   .eyebrow {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.22em;
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--color-muted);
-  }
-
-  /* Thin diagonal "speed" hatch used behind hero numbers */
-  .hatch {
-    background-image: repeating-linear-gradient(
-      -45deg,
-      rgba(242, 225, 20, 0.14) 0,
-      rgba(242, 225, 20, 0.14) 2px,
-      transparent 2px,
-      transparent 9px
-    );
+    color: var(--color-blue);
   }
 
   .container-hcr {
     width: 100%;
-    max-width: 1240px;
+    max-width: 1200px;
     margin-inline: auto;
-    padding-inline: 1.25rem;
+    padding-inline: 1.5rem;
+  }
+
+  /* Soft elevation used sparingly on feature cards */
+  .shadow-card {
+    box-shadow: 0 24px 60px -34px rgba(10, 12, 17, 0.35);
+  }
+  .shadow-glow {
+    box-shadow: 0 14px 38px -14px rgba(242, 225, 20, 0.75);
+  }
+
+  /* Kinetic marquee */
+  .marquee-track {
+    display: inline-flex;
+    white-space: nowrap;
+    will-change: transform;
+    animation: hcr-scroll 28s linear infinite;
+  }
+  @keyframes hcr-scroll {
+    to {
+      transform: translateX(-50%);
+    }
   }
 }
 
-/* Respect reduced motion globally */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -136,5 +130,8 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
+  }
+  .marquee-track {
+    animation: none !important;
   }
 }

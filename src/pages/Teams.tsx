@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { useClasses, useTeams } from '../lib/queries'
 import { CLASS_ORDER, classColor } from '../lib/format'
 import { Section, Skeleton } from '../components/ui'
+import { Reveal } from '../components/motion'
 
 export default function Teams() {
   const { data: teams, isLoading } = useTeams()
@@ -25,28 +26,27 @@ export default function Teams() {
             const color = classColor(cls, classes)
             return (
               <div key={cls}>
-                <div className="mb-4 flex items-center gap-2">
-                  <span className="h-4 w-4" style={{ background: color }} />
+                <div className="mb-4 flex items-center gap-2.5">
+                  <span className="h-4 w-4 rounded-sm" style={{ background: color }} />
                   <h3 className="text-3xl uppercase">{cls}</h3>
                   <span className="tabular text-sm text-[var(--color-muted)]">{list.length}</span>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {list.map((t) => (
-                    <div
-                      key={t.id}
-                      className="flex items-center gap-4 border border-[var(--color-line)] bg-[var(--color-ink-2)] p-4"
-                    >
-                      <div
-                        className="tabular flex h-14 w-14 shrink-0 items-center justify-center font-display text-3xl"
-                        style={{ background: 'var(--color-ink-3)', borderLeft: `3px solid ${color}` }}
-                      >
-                        {t.number}
+                  {list.map((t, i) => (
+                    <Reveal key={t.id} delay={Math.min(i * 0.03, 0.25)}>
+                      <div className="flex items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 transition-all hover:-translate-y-1 hover:shadow-card">
+                        <div
+                          className="tabular flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--color-mist)] font-display text-3xl font-extrabold"
+                          style={{ borderLeft: `4px solid ${color}` }}
+                        >
+                          {t.number}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="truncate font-display text-2xl font-extrabold uppercase leading-tight">{t.name}</div>
+                          <div className="truncate text-sm text-[var(--color-muted)]">{t.car}</div>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <div className="truncate font-display text-2xl leading-tight">{t.name}</div>
-                        <div className="truncate text-sm text-[var(--color-muted)]">{t.car}</div>
-                      </div>
-                    </div>
+                    </Reveal>
                   ))}
                 </div>
               </div>

@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { useClasses, useCurrentSeason, useSeasonResults, useTeams } from '../lib/queries'
 import { computeStandings } from '../lib/standings'
 import { CLASS_ORDER, classColor } from '../lib/format'
-import type { ClassId } from '../lib/types'
+import type { ClassId, LeagueClass, StandingRow } from '../lib/types'
 import { Section, Skeleton } from '../components/ui'
+import { CountUp } from '../components/motion'
 
 type Tab = ClassId | 'TEAMS'
 
@@ -31,8 +32,8 @@ export default function Standings() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`relative px-5 py-3 font-display text-2xl uppercase transition-colors ${
-                active ? 'text-[var(--color-paper)]' : 'text-[var(--color-muted)] hover:text-[var(--color-paper)]'
+              className={`relative px-5 py-3 font-display text-2xl font-extrabold uppercase transition-colors ${
+                active ? 'text-[var(--color-ink)]' : 'text-[var(--color-faint)] hover:text-[var(--color-ink)]'
               }`}
             >
               {t.label}
@@ -47,11 +48,7 @@ export default function Standings() {
       ) : (
         <StandingsTable
           rows={tab === 'TEAMS' ? [] : standings.drivers[tab]}
-          teamRows={
-            tab === 'TEAMS'
-              ? CLASS_ORDER.flatMap((c) => standings.teams[c])
-              : undefined
-          }
+          teamRows={tab === 'TEAMS' ? CLASS_ORDER.flatMap((c) => standings.teams[c]).sort((a, b) => b.points - a.points) : undefined}
           color={tab === 'TEAMS' ? undefined : classColor(tab, classes)}
           classes={classes}
         />
@@ -64,11 +61,12 @@ function StandingsTable({
   rows,
   teamRows,
   color,
+  classes,
 }: {
-  rows: import('../lib/types').StandingRow[]
-  teamRows?: import('../lib/types').StandingRow[]
+  rows: StandingRow[]
+  teamRows?: StandingRow[]
   color?: string
-  classes?: import('../lib/types').LeagueClass[]
+  classes?: LeagueClass[]
 }) {
   const data = teamRows ?? rows
   if (!data.length) {
@@ -76,46 +74,47 @@ function StandingsTable({
   }
 
   return (
-    <div className="overflow-x-auto border border-[var(--color-line)]">
+    <div className="shadow-card overflow-x-auto rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
       <table className="w-full min-w-[640px] border-collapse">
         <thead>
-          <tr className="border-b border-[var(--color-line)] bg-[var(--color-ink-2)] text-left">
-            <th className="w-14 px-4 py-3 font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Pos</th>
-            <th className="px-4 py-3 font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
-              {teamRows ? 'Team' : 'Driver'}
-            </th>
-            {teamRows && <th className="px-4 py-3 font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Class</th>}
-            <th className="px-4 py-3 text-center font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Starts</th>
-            <th className="px-4 py-3 text-center font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Wins</th>
-            <th className="px-4 py-3 text-center font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Pod</th>
-            <th className="px-4 py-3 text-right font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Pts</th>
+          <tr className="border-b border-[var(--color-line)] bg-[var(--color-mist)] text-left font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
+            <th className="w-16 px-5 py-3.5">Pos</th>
+            <th className="px-5 py-3.5">{teamRows ? 'Team' : 'Driver'}</th>
+            {teamRows && <th className="px-5 py-3.5">Class</th>}
+            <th className="px-5 py-3.5 text-center">Starts</th>
+            <th className="px-5 py-3.5 text-center">Wins</th>
+            <th className="px-5 py-3.5 text-center">Pod</th>
+            <th className="px-5 py-3.5 text-right">Pts</th>
           </tr>
         </thead>
         <tbody>
           {data.map((r, i) => {
-            const rowColor = color ?? classColor(r.classId)
+            const rowColor = color ?? classColor(r.classId, classes)
             return (
-              <tr key={r.key} className="border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-ink-2)]">
-                <td className="px-4 py-3">
+              <tr key={r.key} className="border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-mist)]">
+                <td className="px-5 py-3.5">
                   <span
-                    className="tabular flex h-8 w-8 items-center justify-center text-sm font-bold"
-                    style={{ background: i === 0 ? rowColor : 'var(--color-ink-3)', color: i === 0 ? '#000' : undefined }}
+                    className="tabular flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold"
+                    style={{ background: i === 0 ? rowColor : 'var(--color-mist)', color: i === 0 ? '#000' : 'var(--color-ink)' }}
                   >
                     {i + 1}
                   </span>
                 </td>
-                <td className="px-4 py-3 font-medium">{r.name}</td>
+                <td className="px-5 py-3.5 font-semibold">{r.name}</td>
                 {teamRows && (
-                  <td className="px-4 py-3">
-                    <span className="font-mono text-xs uppercase" style={{ color: classColor(r.classId) }}>
+                  <td className="px-5 py-3.5">
+                    <span className="inline-flex items-center gap-2 font-mono text-xs uppercase text-[var(--color-ink-2)]">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: classColor(r.classId, classes) }} />
                       {r.classId}
                     </span>
                   </td>
                 )}
-                <td className="tabular px-4 py-3 text-center text-[var(--color-muted)]">{r.starts}</td>
-                <td className="tabular px-4 py-3 text-center">{r.wins || '—'}</td>
-                <td className="tabular px-4 py-3 text-center">{r.podiums || '—'}</td>
-                <td className="tabular px-4 py-3 text-right text-lg font-bold">{r.points}</td>
+                <td className="tabular px-5 py-3.5 text-center text-[var(--color-muted)]">{r.starts}</td>
+                <td className="tabular px-5 py-3.5 text-center">{r.wins || '—'}</td>
+                <td className="tabular px-5 py-3.5 text-center">{r.podiums || '—'}</td>
+                <td className="tabular px-5 py-3.5 text-right text-lg font-bold">
+                  <CountUp value={r.points} />
+                </td>
               </tr>
             )
           })}

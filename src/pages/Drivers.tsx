@@ -1,5 +1,6 @@
 import { useDrivers } from '../lib/queries'
 import { ClassChip, Section, Skeleton } from '../components/ui'
+import { Reveal } from '../components/motion'
 
 export default function Drivers() {
   const { data: drivers, isLoading } = useDrivers()
@@ -14,25 +15,22 @@ export default function Drivers() {
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {(drivers ?? []).map((d) => (
-            <div
-              key={d.id}
-              className="group flex items-center gap-4 border border-[var(--color-line)] bg-[var(--color-ink-2)] p-4 transition-colors hover:border-[var(--color-line-2)]"
-            >
-              <div className="tabular flex h-12 w-12 shrink-0 items-center justify-center bg-[var(--color-ink-3)] font-display text-2xl">
-                {d.team?.number ?? d.name.slice(0, 1)}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-display text-2xl leading-none">{d.name}</span>
-                  {d.country && <span className="text-lg leading-none">{d.country}</span>}
+          {(drivers ?? []).map((d, i) => (
+            <Reveal key={d.id} delay={Math.min(i * 0.03, 0.3)}>
+              <div className="flex items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 transition-all hover:-translate-y-1 hover:shadow-card">
+                <div className="tabular flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-ink)] font-display text-2xl font-extrabold text-white">
+                  {d.team?.number ?? d.name.slice(0, 1)}
                 </div>
-                <div className="mt-1 truncate text-sm text-[var(--color-muted)]">
-                  {d.team?.name ?? 'Free agent'}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate font-display text-2xl font-extrabold uppercase leading-none">{d.name}</span>
+                    {d.country && <span className="text-lg leading-none">{d.country}</span>}
+                  </div>
+                  <div className="mt-1.5 truncate text-sm text-[var(--color-muted)]">{d.team?.name ?? 'Free agent'}</div>
                 </div>
+                {d.team?.class_id && <ClassChip classId={d.team.class_id} />}
               </div>
-              {d.team?.class_id && <ClassChip classId={d.team.class_id} />}
-            </div>
+            </Reveal>
           ))}
         </div>
       )}
