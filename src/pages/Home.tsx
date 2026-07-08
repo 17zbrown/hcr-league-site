@@ -15,6 +15,7 @@ import { ClassChip, Section, Skeleton } from '../components/ui'
 import { CountUp, Reveal } from '../components/motion'
 import Ticker from '../components/Ticker'
 import HeroCarousel from '../components/HeroCarousel'
+import { DriverName } from '../components/links'
 
 export default function Home() {
   const { data: season } = useCurrentSeason()
@@ -166,7 +167,7 @@ function LatestOverall({ eventId }: { eventId: string }) {
           >
             <span className="font-display text-2xl font-extrabold text-[var(--color-ink)]">{r.pos}</span>
             <div className="min-w-0">
-              <div className="truncate font-semibold">{r.drivers_text}</div>
+              <div className="truncate font-semibold"><DriverName text={r.drivers_text} /></div>
               <div className="tabular text-xs text-[var(--color-muted)]">
                 #{r.number} · {r.laps} laps{r.best_lap ? ` · ${r.best_lap}` : ''}
               </div>

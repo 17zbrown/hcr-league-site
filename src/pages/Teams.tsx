@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { useClasses, useTeams } from '../lib/queries'
 import { CLASS_ORDER, classColor } from '../lib/format'
 import { Section, Skeleton } from '../components/ui'
@@ -34,7 +35,7 @@ export default function Teams() {
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {list.map((t, i) => (
                     <Reveal key={t.id} delay={Math.min(i * 0.03, 0.25)}>
-                      <div className="flex items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 transition-all hover:-translate-y-1 hover:shadow-card">
+                      <Link to={`/teams/${t.id}`} className="flex items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 transition-all hover:-translate-y-1 hover:shadow-card">
                         <div
                           className="tabular flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[var(--color-mist)] font-display text-3xl font-extrabold"
                           style={{ borderLeft: `4px solid ${color}` }}
@@ -45,7 +46,7 @@ export default function Teams() {
                           <div className="truncate font-display text-2xl font-extrabold uppercase leading-tight">{t.name}</div>
                           <div className="truncate text-sm text-[var(--color-muted)]">{t.car}</div>
                         </div>
-                      </div>
+                      </Link>
                     </Reveal>
                   ))}
                 </div>

@@ -7,7 +7,8 @@ import { useReducedMotion } from 'framer-motion'
  * If none load (or reduced-motion is on) it silently falls back to the
  * static hero (gradient + 3D logo).
  */
-const CLIPS: string[] = ['/hero/hero-1.mp4', '/hero/hero-2.mp4', '/hero/hero-3.mp4']
+// Dormant for now — add filenames (e.g. '/hero/hero-1.mp4') to enable the video hero.
+const CLIPS: string[] = []
 
 export default function HeroVideo({ onActive }: { onActive: (active: boolean) => void }) {
   const reduce = useReducedMotion() ?? false

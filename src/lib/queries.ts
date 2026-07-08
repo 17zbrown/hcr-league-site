@@ -100,6 +100,24 @@ export function useSeasonResults(seasonId?: string) {
   })
 }
 
+/** Season results joined to their event + track (for driver/team profiles). */
+export function useSeasonResultsFull(seasonId?: string) {
+  return useQuery({
+    enabled: !!seasonId,
+    queryKey: ['results', 'full', seasonId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('results')
+        .select('*, event:events!inner(id, season_id, round, name, date, track:tracks(name))')
+        .eq('event.season_id', seasonId!)
+      if (error) throw error
+      return (data ?? []) as (RaceResult & {
+        event?: { id: string; round: number; name: string | null; date: string; track?: { name: string } | null }
+      })[]
+    },
+  })
+}
+
 export function useTeams() {
   return useQuery({
     queryKey: ['teams'],

@@ -8,6 +8,7 @@ import Countdown from './Countdown'
 import { ClassChip } from './ui'
 import { SafeBoundary } from './SafeBoundary'
 import HeroVideo from './HeroVideo'
+import { DriverName } from './links'
 
 const Hero3D = lazy(() => import('./Hero3D'))
 
@@ -82,7 +83,9 @@ export default function HeroCarousel() {
               {leaders.map(({ cls, row }) => (
                 <div key={cls} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]/90 p-5 backdrop-blur-sm">
                   <ClassChip classId={cls} />
-                  <div className="mt-3 font-display text-2xl font-extrabold uppercase leading-tight">{row!.name}</div>
+                  <div className="mt-3 font-display text-2xl font-extrabold uppercase leading-tight">
+                    <DriverName text={row!.name} />
+                  </div>
                   <div className="tabular mt-1 text-sm text-[var(--color-muted)]">
                     {row!.points} pts{row!.wins ? ` · ${row!.wins}W` : ''}
                   </div>

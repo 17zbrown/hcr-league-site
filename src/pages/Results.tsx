@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useClasses, useCurrentSeason, useEvents, useResults } from '../lib/queries'
 import { CLASS_ORDER, classColor, fmtDateLong } from '../lib/format'
 import { Section, Skeleton } from '../components/ui'
+import { DriverName } from '../components/links'
 
 export default function Results() {
   const { data: season } = useCurrentSeason()
@@ -104,7 +105,7 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
                         </span>
                       </td>
                       <td className="tabular px-4 py-3 text-[var(--color-muted)]">#{r.number}</td>
-                      <td className="px-4 py-3 font-semibold">{r.drivers_text}</td>
+                      <td className="px-4 py-3 font-semibold"><DriverName text={r.drivers_text} /></td>
                       <td className="tabular px-4 py-3 text-center">{r.grid ?? '—'}</td>
                       <td className="tabular px-4 py-3 text-center">{r.laps ?? '—'}</td>
                       <td className="tabular px-4 py-3">{r.best_lap ?? '—'}</td>

@@ -5,6 +5,7 @@ import { CLASS_ORDER, classColor } from '../lib/format'
 import type { ClassId, LeagueClass, StandingRow } from '../lib/types'
 import { Section, Skeleton } from '../components/ui'
 import { CountUp } from '../components/motion'
+import { DriverName, TeamLink } from '../components/links'
 
 type Tab = ClassId | 'TEAMS'
 
@@ -100,7 +101,13 @@ function StandingsTable({
                     {i + 1}
                   </span>
                 </td>
-                <td className="px-5 py-3.5 font-semibold">{r.name}</td>
+                <td className="px-5 py-3.5 font-semibold">
+                  {teamRows ? (
+                    <TeamLink teamId={r.key.startsWith('num-') ? null : r.key}>{r.name}</TeamLink>
+                  ) : (
+                    <DriverName text={r.name} />
+                  )}
+                </td>
                 {teamRows && (
                   <td className="px-5 py-3.5">
                     <span className="inline-flex items-center gap-2 font-mono text-xs uppercase text-[var(--color-ink-2)]">

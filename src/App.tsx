@@ -7,7 +7,9 @@ import Schedule from './pages/Schedule'
 import Standings from './pages/Standings'
 import Results from './pages/Results'
 import Drivers from './pages/Drivers'
+import DriverProfile from './pages/DriverProfile'
 import Teams from './pages/Teams'
+import TeamProfile from './pages/TeamProfile'
 import News from './pages/News'
 import SignUp from './pages/SignUp'
 import Login from './pages/Login'
@@ -37,7 +39,9 @@ export default function App() {
           <Route path="/standings" element={<Standings />} />
           <Route path="/results" element={<Results />} />
           <Route path="/drivers" element={<Drivers />} />
+          <Route path="/drivers/:id" element={<DriverProfile />} />
           <Route path="/teams" element={<Teams />} />
+          <Route path="/teams/:id" element={<TeamProfile />} />
           <Route path="/news" element={<News />} />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/login" element={<Login />} />
