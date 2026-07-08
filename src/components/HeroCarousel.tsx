@@ -189,8 +189,8 @@ export default function HeroCarousel() {
             'radial-gradient(58% 55% at 86% -8%, rgba(242,225,20,0.16), transparent 62%), radial-gradient(48% 50% at 4% 6%, rgba(47,107,255,0.08), transparent 60%)',
         }}
       />
-      {/* Subtle 3D moment, tucked into the top-right corner (desktop only) */}
-      <div className="pointer-events-none absolute -right-8 -top-10 hidden h-[440px] w-[440px] opacity-[0.55] md:block lg:h-[500px] lg:w-[520px]">
+      {/* Subtle 3D logo, right side (desktop only) */}
+      <div className="pointer-events-none absolute right-0 top-0 hidden h-full w-[58%] opacity-[0.65] md:block">
         <SafeBoundary>
           <Suspense fallback={null}>
             <Hero3D />
