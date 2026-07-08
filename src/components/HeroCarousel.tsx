@@ -177,7 +177,7 @@ export default function HeroCarousel() {
         }}
       />
       {/* Subtle 3D logo, right side (desktop only) */}
-      <div className="pointer-events-none absolute right-0 top-0 hidden h-full w-[58%] opacity-[0.65] md:block">
+      <div className="hero-3d-layer pointer-events-none absolute right-0 top-0 hidden h-full w-[58%] opacity-[0.65] md:block">
         <SafeBoundary>
           <Suspense fallback={null}>
             <Hero3D />

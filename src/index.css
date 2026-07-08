@@ -108,6 +108,13 @@
     box-shadow: 0 14px 38px -14px rgba(242, 225, 20, 0.75);
   }
 
+  /* The decorative hero 3D layer must never capture clicks (R3F forces
+     pointer-events:auto on its <canvas>, so override it hard). */
+  .hero-3d-layer,
+  .hero-3d-layer * {
+    pointer-events: none !important;
+  }
+
   /* Kinetic marquee */
   .marquee-track {
     display: inline-flex;
