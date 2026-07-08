@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useReducedMotion } from 'framer-motion'
 import { useClasses, useCurrentSeason, useEvents, useSeasonResults, useTeams } from '../lib/queries'
@@ -154,19 +154,6 @@ export default function HeroCarousel() {
   const count = slides.length
   const active = Math.min(idx, count - 1)
 
-  // Measure the active slide to animate the container height smoothly.
-  const slideRefs = useRef<(HTMLDivElement | null)[]>([])
-  const [height, setHeight] = useState<number | undefined>(undefined)
-  useLayoutEffect(() => {
-    const measure = () => {
-      const el = slideRefs.current[active]
-      if (el) setHeight(el.offsetHeight)
-    }
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [active, slides])
-
   useEffect(() => {
     if (paused || reduce || count <= 1) return
     const id = setInterval(() => setIdx((i) => (i + 1) % count), AUTO_MS)
@@ -199,32 +186,30 @@ export default function HeroCarousel() {
       </div>
 
       <div className="container-hcr relative py-14 md:py-20">
-        <div
-          className="relative transition-[height] duration-500 ease-out"
-          style={{ height }}
-        >
+        <div className="relative min-h-[600px] sm:min-h-[540px] md:min-h-[460px]">
           {slides.map((s, i) => {
             const on = i === active
             return (
               <div
                 key={s.key}
-                ref={(el) => { slideRefs.current[i] = el }}
                 aria-hidden={!on}
-                className="absolute inset-x-0 top-0 transition-all duration-700 ease-out"
+                className="absolute inset-0 flex items-center transition-all duration-700 ease-out"
                 style={{
                   opacity: on ? 1 : 0,
                   transform: on ? 'translateY(0)' : 'translateY(16px)',
                   pointerEvents: on ? 'auto' : 'none',
                 }}
               >
-                <div className="mb-6 flex items-center gap-3">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-red)] opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-red)]" />
-                  </span>
-                  <span className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-ink-2)]">{s.eyebrow}</span>
+                <div className="w-full">
+                  <div className="mb-6 flex items-center gap-3">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-red)] opacity-75" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-red)]" />
+                    </span>
+                    <span className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-ink-2)]">{s.eyebrow}</span>
+                  </div>
+                  {s.render()}
                 </div>
-                {s.render()}
               </div>
             )
           })}
