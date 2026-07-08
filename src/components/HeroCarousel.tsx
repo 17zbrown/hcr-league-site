@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Suspense, lazy, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { motion, useReducedMotion } from 'framer-motion'
+import { useReducedMotion } from 'framer-motion'
 import { useClasses, useCurrentSeason, useEvents, useSeasonResults, useTeams } from '../lib/queries'
 import { computeStandings } from '../lib/standings'
 import { CLASS_ORDER, classColor, fmtDateLong } from '../lib/format'
 import Countdown from './Countdown'
 import { ClassChip } from './ui'
+import { SafeBoundary } from './SafeBoundary'
+
+const Hero3D = lazy(() => import('./Hero3D'))
 
 interface Slide {
   key: string
@@ -13,7 +16,7 @@ interface Slide {
   render: () => ReactNode
 }
 
-const AUTO_MS = 7000
+const AUTO_MS = 5000
 
 export default function HeroCarousel() {
   const { data: season } = useCurrentSeason()
@@ -21,7 +24,7 @@ export default function HeroCarousel() {
   const { data: results } = useSeasonResults(season?.id)
   const { data: teams } = useTeams()
   const { data: classes } = useClasses()
-  const reduce = useReducedMotion()
+  const reduce = useReducedMotion() ?? false
 
   const slides = useMemo<Slide[]>(() => {
     const list: Slide[] = []
@@ -34,7 +37,6 @@ export default function HeroCarousel() {
     const standings = computeStandings(results ?? [], teams ?? [])
     const leaders = CLASS_ORDER.map((c) => ({ cls: c, row: standings.drivers[c]?.[0] })).filter((x) => x.row)
 
-    // 1 — Next race
     if (next) {
       list.push({
         key: 'next',
@@ -52,7 +54,7 @@ export default function HeroCarousel() {
                 <Link to="/schedule" className="rounded-xl bg-[var(--color-ink)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-1">Schedule</Link>
               </div>
             </div>
-            <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 shadow-card">
+            <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]/90 p-6 shadow-card backdrop-blur-sm">
               <div className="mb-4 flex items-center justify-between">
                 <span className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-blue)]">Green flag in</span>
                 <div className="flex gap-2">
@@ -68,7 +70,6 @@ export default function HeroCarousel() {
       })
     }
 
-    // 2 — Drivers on a roll (championship leaders)
     if (leaders.length) {
       list.push({
         key: 'roll',
@@ -78,7 +79,7 @@ export default function HeroCarousel() {
             <h1 className="text-5xl leading-[0.9] sm:text-6xl md:text-7xl">Drivers<br />on a roll</h1>
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               {leaders.map(({ cls, row }) => (
-                <div key={cls} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
+                <div key={cls} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]/90 p-5 backdrop-blur-sm">
                   <ClassChip classId={cls} />
                   <div className="mt-3 font-display text-2xl font-extrabold uppercase leading-tight">{row!.name}</div>
                   <div className="tabular mt-1 text-sm text-[var(--color-muted)]">
@@ -93,7 +94,6 @@ export default function HeroCarousel() {
       })
     }
 
-    // 3 — Latest winner
     const lastResults = (results ?? []).filter((r) => r.event_id === last?.id)
     const winner = lastResults.find((r) => r.pos === 1)
     if (last && winner) {
@@ -112,7 +112,7 @@ export default function HeroCarousel() {
               <Link to="/results" className="mt-8 inline-block rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1 shadow-glow">Race Results</Link>
             </div>
             <div className="hidden md:block">
-              <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-8 text-center shadow-card">
+              <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]/90 p-8 text-center shadow-card backdrop-blur-sm">
                 <div className="font-display text-[9rem] font-extrabold leading-none text-[var(--color-brand)]">1</div>
                 <div className="font-mono text-xs uppercase tracking-widest text-[var(--color-muted)]">Overall Victory</div>
               </div>
@@ -122,7 +122,6 @@ export default function HeroCarousel() {
       })
     }
 
-    // Fallback / brand slide
     list.push({
       key: 'brand',
       eyebrow: `${season?.name ?? '2026 Season'} · IMSA-style endurance`,
@@ -153,7 +152,20 @@ export default function HeroCarousel() {
   const [idx, setIdx] = useState(0)
   const [paused, setPaused] = useState(false)
   const count = slides.length
-  const current = slides[Math.min(idx, count - 1)]
+  const active = Math.min(idx, count - 1)
+
+  // Measure the active slide to animate the container height smoothly.
+  const slideRefs = useRef<(HTMLDivElement | null)[]>([])
+  const [height, setHeight] = useState<number | undefined>(undefined)
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = slideRefs.current[active]
+      if (el) setHeight(el.offsetHeight)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [active, slides])
 
   useEffect(() => {
     if (paused || reduce || count <= 1) return
@@ -161,7 +173,7 @@ export default function HeroCarousel() {
     return () => clearInterval(id)
   }, [paused, reduce, count])
 
-  if (!current) return null
+  if (!count) return null
 
   return (
     <section
@@ -177,23 +189,45 @@ export default function HeroCarousel() {
             'radial-gradient(58% 55% at 86% -8%, rgba(242,225,20,0.16), transparent 62%), radial-gradient(48% 50% at 4% 6%, rgba(47,107,255,0.08), transparent 60%)',
         }}
       />
+      {/* Subtle 3D moment, tucked into the top-right corner (desktop only) */}
+      <div className="pointer-events-none absolute -right-8 -top-10 hidden h-[440px] w-[440px] opacity-[0.55] md:block lg:h-[500px] lg:w-[520px]">
+        <SafeBoundary>
+          <Suspense fallback={null}>
+            <Hero3D />
+          </Suspense>
+        </SafeBoundary>
+      </div>
+
       <div className="container-hcr relative py-14 md:py-20">
-        <div className="min-h-[420px] md:min-h-[460px]">
-            <motion.div
-              key={current.key}
-              initial={reduce ? false : { opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, ease: [0.2, 0.7, 0.2, 1] }}
-            >
-              <div className="mb-6 flex items-center gap-3">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-red)] opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-red)]" />
-                </span>
-                <span className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-ink-2)]">{current.eyebrow}</span>
+        <div
+          className="relative transition-[height] duration-500 ease-out"
+          style={{ height }}
+        >
+          {slides.map((s, i) => {
+            const on = i === active
+            return (
+              <div
+                key={s.key}
+                ref={(el) => { slideRefs.current[i] = el }}
+                aria-hidden={!on}
+                className="absolute inset-x-0 top-0 transition-all duration-700 ease-out"
+                style={{
+                  opacity: on ? 1 : 0,
+                  transform: on ? 'translateY(0)' : 'translateY(16px)',
+                  pointerEvents: on ? 'auto' : 'none',
+                }}
+              >
+                <div className="mb-6 flex items-center gap-3">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--color-red)] opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--color-red)]" />
+                  </span>
+                  <span className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-[var(--color-ink-2)]">{s.eyebrow}</span>
+                </div>
+                {s.render()}
               </div>
-              {current.render()}
-            </motion.div>
+            )
+          })}
         </div>
 
         {count > 1 && (
@@ -203,15 +237,12 @@ export default function HeroCarousel() {
                 key={s.key}
                 onClick={() => setIdx(i)}
                 aria-label={`Go to slide ${i + 1}`}
-                className="group h-2.5 rounded-full transition-all"
-                style={{
-                  width: i === idx ? 34 : 10,
-                  background: i === idx ? 'var(--color-ink)' : 'var(--color-line-2)',
-                }}
+                className="h-2.5 rounded-full transition-all duration-300"
+                style={{ width: i === active ? 34 : 10, background: i === active ? 'var(--color-ink)' : 'var(--color-line-2)' }}
               />
             ))}
             <span className="tabular ml-2 font-mono text-xs text-[var(--color-faint)]">
-              {String(idx + 1).padStart(2, '0')} / {String(count).padStart(2, '0')}
+              {String(active + 1).padStart(2, '0')} / {String(count).padStart(2, '0')}
             </span>
           </div>
         )}
