@@ -16,7 +16,7 @@
   --color-ink: #0a0c11; /* primary text + dark surfaces */
   --color-ink-2: #2c3340; /* secondary text */
   --color-muted: #6b7280; /* muted text */
-  --color-faint: #9aa1ad;
+  --color-faint: #767d89; /* darkened for legibility (was #9aa1ad, ~2.6:1 on white) */
 
   /* Brand + vibrant accents */
   --color-brand: #f2e114; /* HCR yellow */
