@@ -15,9 +15,6 @@ const NAV = [
   { to: '/news', label: 'News' },
 ]
 
-// Links shown inline on desktop (the primary set).
-const TOP = NAV.slice(1, 7)
-
 function Wordmark() {
   return (
     <Link to="/" className="flex items-center gap-2.5" aria-label="HCR League home">
@@ -50,27 +47,6 @@ export default function Header() {
       <header className="sticky top-0 z-50 border-b border-[var(--color-line)] bg-[var(--color-paper)]/85 backdrop-blur-md">
         <div className="container-hcr flex h-[72px] items-center justify-between gap-4">
           <Wordmark />
-
-          <nav className="hidden items-center gap-7 lg:flex" aria-label="Primary">
-            {TOP.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  `relative text-[15px] font-medium transition-colors ${
-                    isActive ? 'text-[var(--color-ink)]' : 'text-[var(--color-ink-2)] hover:text-[var(--color-ink)]'
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {item.label}
-                    {isActive && <span className="absolute -bottom-[26px] left-0 right-0 h-[3px] bg-[var(--color-brand)]" />}
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </nav>
 
           <div className="flex items-center gap-2">
             {session ? (

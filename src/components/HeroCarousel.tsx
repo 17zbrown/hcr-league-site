@@ -7,6 +7,7 @@ import { CLASS_ORDER, classColor, fmtDateLong } from '../lib/format'
 import Countdown from './Countdown'
 import { ClassChip } from './ui'
 import { SafeBoundary } from './SafeBoundary'
+import HeroVideo from './HeroVideo'
 
 const Hero3D = lazy(() => import('./Hero3D'))
 
@@ -151,6 +152,7 @@ export default function HeroCarousel() {
 
   const [idx, setIdx] = useState(0)
   const [paused, setPaused] = useState(false)
+  const [videoActive, setVideoActive] = useState(false)
   const count = slides.length
   const active = Math.min(idx, count - 1)
 
@@ -169,6 +171,23 @@ export default function HeroCarousel() {
       onMouseLeave={() => setPaused(false)}
       aria-roledescription="carousel"
     >
+      {/* Background race footage (falls back to the static hero if no clips) */}
+      <div className={`pointer-events-none absolute inset-0 overflow-hidden ${videoActive ? 'bg-[var(--color-ink)]' : ''}`}>
+        <HeroVideo onActive={setVideoActive} />
+      </div>
+
+      {/* Legibility scrim — only when a clip is playing. Strong on the left
+          (text) fading right (cars stay visible). */}
+      {videoActive && (
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(100deg, rgba(255,255,255,0.94) 0%, rgba(255,255,255,0.80) 38%, rgba(255,255,255,0.36) 72%, rgba(255,255,255,0.12) 100%)',
+          }}
+        />
+      )}
+
       <div
         className="pointer-events-none absolute inset-0"
         style={{
@@ -176,14 +195,16 @@ export default function HeroCarousel() {
             'radial-gradient(58% 55% at 86% -8%, rgba(242,225,20,0.16), transparent 62%), radial-gradient(48% 50% at 4% 6%, rgba(47,107,255,0.08), transparent 60%)',
         }}
       />
-      {/* Subtle 3D logo, right side (desktop only) */}
-      <div className="hero-3d-layer pointer-events-none absolute right-0 top-0 hidden h-full w-[58%] opacity-[0.65] md:block">
-        <SafeBoundary>
-          <Suspense fallback={null}>
-            <Hero3D />
-          </Suspense>
-        </SafeBoundary>
-      </div>
+      {/* Subtle 3D logo, right side (desktop only) — hidden when video plays */}
+      {!videoActive && (
+        <div className="hero-3d-layer pointer-events-none absolute right-0 top-0 hidden h-full w-[58%] opacity-[0.65] md:block">
+          <SafeBoundary>
+            <Suspense fallback={null}>
+              <Hero3D />
+            </Suspense>
+          </SafeBoundary>
+        </div>
+      )}
 
       <div className="container-hcr relative py-14 md:py-20">
         <div className="relative min-h-[600px] sm:min-h-[540px] md:min-h-[460px]">
