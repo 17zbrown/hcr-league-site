@@ -22,10 +22,9 @@ export default function DriverProfile() {
 
   const rows = useMemo(() => {
     if (!driver || !results) return []
-    const name = driver.name.trim().toLowerCase()
-    return results
-      .filter((r) => (r.drivers_text ?? '').toLowerCase().includes(name))
-      .sort((a, b) => (a.event?.round ?? 0) - (b.event?.round ?? 0))
+    return resultsForDriver(results, driver.name).sort(
+      (a, b) => (a.event?.round ?? 0) - (b.event?.round ?? 0),
+    )
   }, [driver, results])
 
   const stats = useMemo(() => computeEntityStats(rows as RaceResult[]), [rows])

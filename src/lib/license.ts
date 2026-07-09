@@ -179,9 +179,6 @@ export function computeLicense(rows: LicenseRow[], paceIndex?: PaceIndex, overri
   return { effective, computed, isOverride, credits: Math.round(credits), next, toNext, progress }
 }
 
-/** Rows attributable to a driver by name (same fuzzy match as standings/profiles). */
-export function resultsForDriver<T extends LicenseRow>(all: T[], driverName: string): T[] {
-  const name = driverName.trim().toLowerCase()
-  if (!name) return []
-  return all.filter((r) => (r.drivers_text ?? '').toLowerCase().includes(name))
-}
+// Robust name attribution lives in one place (handles co-drivers + avoids
+// substring false-positives); re-exported so existing imports keep working.
+export { resultsForDriver } from './attribution'
