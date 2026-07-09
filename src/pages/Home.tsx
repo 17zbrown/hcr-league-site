@@ -11,6 +11,7 @@ import {
 } from '../lib/queries'
 import { computeStandings } from '../lib/standings'
 import { CLASS_ORDER, classColor, fmtDate } from '../lib/format'
+import type { ClassId } from '../lib/types'
 import { ClassChip, Section, Skeleton } from '../components/ui'
 import { CountUp, Reveal } from '../components/motion'
 import Ticker from '../components/Ticker'
@@ -56,9 +57,7 @@ export default function Home() {
             </Link>
           }
         >
-          <Reveal>
-            <LatestOverall eventId={lastEvent.id} />
-          </Reveal>
+          <LatestByClass eventId={lastEvent.id} />
         </Section>
       )}
 
@@ -144,42 +143,73 @@ export default function Home() {
   )
 }
 
-function LatestOverall({ eventId }: { eventId: string }) {
+/** Convert a #rrggbb hex to an rgba() string at the given alpha. */
+function tint(hex: string, a: number): string {
+  const h = hex.replace('#', '')
+  const n = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
+  const r = parseInt(n.slice(0, 2), 16)
+  const g = parseInt(n.slice(2, 4), 16)
+  const b = parseInt(n.slice(4, 6), 16)
+  return `rgba(${r}, ${g}, ${b}, ${a})`
+}
+
+function LatestByClass({ eventId }: { eventId: string }) {
   const { data: results, isLoading } = useResults(eventId)
   const { data: classes } = useClasses()
 
-  if (isLoading) return <Skeleton className="h-96 w-full" />
+  if (isLoading) {
+    return (
+      <div className="grid gap-5 lg:grid-cols-3">
+        {CLASS_ORDER.map((c) => (
+          <Skeleton key={c} className="h-72 w-full" />
+        ))}
+      </div>
+    )
+  }
 
-  const overall = (results ?? [])
-    .filter((r) => r.pos !== null)
-    .sort((a, b) => (a.pos ?? 99) - (b.pos ?? 99))
-    .slice(0, 6)
+  const byClass = (cls: ClassId) =>
+    (results ?? [])
+      .filter((r) => r.class_id === cls && r.cls_pos !== null)
+      .sort((a, b) => (a.cls_pos ?? 99) - (b.cls_pos ?? 99))
+      .slice(0, 5)
 
   return (
-    <div className="shadow-card overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
-      {overall.map((r, i) => {
-        const color = classColor(r.class_id, classes)
+    <div className="grid gap-5 lg:grid-cols-3">
+      {CLASS_ORDER.map((cls, ci) => {
+        const rows = byClass(cls)
+        const color = classColor(cls, classes)
         return (
-          <div
-            key={r.id}
-            className="grid grid-cols-[52px_1fr_auto_92px] items-center gap-4 border-b border-[var(--color-line)] px-5 py-4 transition-colors last:border-0 hover:bg-[var(--color-mist)]"
-            style={i === 0 ? { background: 'linear-gradient(90deg, rgba(242,225,20,0.16), transparent 55%)' } : undefined}
-          >
-            <span className="font-display text-2xl font-extrabold text-[var(--color-ink)]">{r.pos}</span>
-            <div className="min-w-0">
-              <div className="truncate font-semibold"><DriverName text={r.drivers_text} /></div>
-              <div className="tabular text-xs text-[var(--color-muted)]">
-                #{r.number} · {r.laps} laps{r.best_lap ? ` · ${r.best_lap}` : ''}
+          <Reveal key={cls} delay={ci * 0.08}>
+            <div className="shadow-card overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+              <div className="flex items-center justify-between px-5 py-4" style={{ background: color }}>
+                <span className="font-display text-2xl font-extrabold uppercase text-black">{cls}</span>
+                <span className="font-mono text-xs font-semibold uppercase tracking-widest text-black/70">Result</span>
               </div>
+              <ol>
+                {rows.length === 0 && (
+                  <li className="px-5 py-7 text-sm text-[var(--color-muted)]">No result scored.</li>
+                )}
+                {rows.map((r, i) => (
+                  <li
+                    key={r.id}
+                    className="flex items-center gap-3 border-b border-[var(--color-line)] px-5 py-3.5 last:border-0"
+                    style={i === 0 ? { background: `linear-gradient(90deg, ${tint(color, 0.16)}, transparent 60%)` } : undefined}
+                  >
+                    <span className={`tabular w-6 text-lg font-bold ${i === 0 ? 'text-[var(--color-ink)]' : 'text-[var(--color-faint)]'}`}>{r.cls_pos}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold"><DriverName text={r.drivers_text} /></div>
+                      <div className="tabular text-xs text-[var(--color-muted)]">
+                        #{r.number} · {r.laps} laps
+                      </div>
+                    </div>
+                    <span className="tabular w-12 text-right text-lg font-bold">
+                      <CountUp value={(r.points ?? 0) + (r.quali_points ?? 0)} />
+                    </span>
+                  </li>
+                ))}
+              </ol>
             </div>
-            <span className="hidden items-center gap-2 font-mono text-xs uppercase tracking-wider text-[var(--color-ink-2)] sm:inline-flex">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-              {r.class_id} P{r.cls_pos}
-            </span>
-            <span className="tabular text-right text-xl font-bold">
-              <CountUp value={(r.points ?? 0) + (r.quali_points ?? 0)} />
-            </span>
-          </div>
+          </Reveal>
         )
       })}
     </div>
