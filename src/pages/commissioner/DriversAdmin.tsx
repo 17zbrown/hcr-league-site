@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useDrivers, useLicenseResults, useTeams } from '../../lib/queries'
-import { computeLicense, resultsForDriver } from '../../lib/license'
+import { buildPaceIndex, computeLicense, resultsForDriver } from '../../lib/license'
 import type { Driver, Team } from '../../lib/types'
 import { Skeleton } from '../../components/ui'
 import { LicenseBadge } from '../../components/LicenseBadge'
@@ -14,6 +14,7 @@ export default function DriversAdmin() {
   const { data: drivers, isLoading } = useDrivers()
   const { data: licenseResults } = useLicenseResults()
   const { data: teams } = useTeams()
+  const paceIndex = buildPaceIndex(licenseResults ?? [])
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['drivers'] })
     qc.invalidateQueries({ queryKey: ['free-agents'] })
@@ -42,7 +43,7 @@ export default function DriversAdmin() {
             key={d.id}
             driver={d}
             teams={teams ?? []}
-            computed={computeLicense(resultsForDriver(licenseResults ?? [], d.name), null).computed}
+            computed={computeLicense(resultsForDriver(licenseResults ?? [], d.name), paceIndex, null).computed}
             onChange={invalidate}
           />
         ))}

@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useClasses, useCurrentSeason, useDrivers, useLicenseResults, useSeasonResultsFull } from '../lib/queries'
 import { computeEntityStats } from '../lib/profileStats'
-import { computeLicense, resultsForDriver } from '../lib/license'
+import { buildPaceIndex, computeLicense, resultsForDriver } from '../lib/license'
 import { classColor } from '../lib/format'
 import { Skeleton } from '../components/ui'
 import { LicenseBadge, LicenseProgress } from '../components/LicenseBadge'
@@ -30,10 +30,12 @@ export default function DriverProfile() {
 
   const stats = useMemo(() => computeEntityStats(rows as RaceResult[]), [rows])
 
+  const paceIndex = useMemo(() => buildPaceIndex(licenseResults ?? []), [licenseResults])
+
   const license = useMemo(() => {
     if (!driver) return null
-    return computeLicense(resultsForDriver(licenseResults ?? [], driver.name), driver.license_override)
-  }, [driver, licenseResults])
+    return computeLicense(resultsForDriver(licenseResults ?? [], driver.name), paceIndex, driver.license_override)
+  }, [driver, licenseResults, paceIndex])
 
   if (isLoading) {
     return <div className="container-hcr py-16"><Skeleton className="h-96 w-full" /></div>

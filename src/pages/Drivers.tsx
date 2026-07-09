@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useDrivers, useLicenseResults } from '../lib/queries'
-import { computeLicense, resultsForDriver, type LicenseInfo } from '../lib/license'
+import { buildPaceIndex, computeLicense, resultsForDriver, type LicenseInfo } from '../lib/license'
 import { ClassChip, Section, Skeleton } from '../components/ui'
 import { LicenseBadge } from '../components/LicenseBadge'
 import { Reveal } from '../components/motion'
@@ -11,9 +11,10 @@ export default function Drivers() {
   const { data: licenseResults } = useLicenseResults()
 
   const licenseByDriver = useMemo(() => {
+    const paceIndex = buildPaceIndex(licenseResults ?? [])
     const map: Record<string, LicenseInfo> = {}
     for (const d of drivers ?? []) {
-      map[d.id] = computeLicense(resultsForDriver(licenseResults ?? [], d.name), d.license_override)
+      map[d.id] = computeLicense(resultsForDriver(licenseResults ?? [], d.name), paceIndex, d.license_override)
     }
     return map
   }, [drivers, licenseResults])

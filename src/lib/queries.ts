@@ -227,7 +227,7 @@ export function useLicenseResults() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('results')
-        .select('drivers_text, cls_pos, quali_pos, grid, inc, laps, status')
+        .select('drivers_text, event_id, class_id, cls_pos, quali_pos, grid, inc, laps, best_lap, status')
       if (error) throw error
       return data ?? []
     },
