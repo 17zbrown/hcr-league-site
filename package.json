@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/gen-og.mjs && tsc -b && vite build",
     "preview": "vite preview",
     "lint": "tsc -b --noEmit",
     "og": "node scripts/gen-og.mjs"

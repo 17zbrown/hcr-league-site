@@ -34,3 +34,6 @@ screencapture-*.pdf
 
 # OSM raw cache for track-map generator (derived)
 scripts/.osm-cache/
+
+# Build-generated per-entity OG cards
+public/og/

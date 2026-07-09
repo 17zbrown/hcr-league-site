@@ -26,25 +26,38 @@ const SECTIONS: Record<string, Meta> = {
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-async function raceName(id: string): Promise<string | null> {
+async function sbOne(pathAndQuery: string): Promise<Record<string, unknown> | null> {
   const base = Netlify.env.get('VITE_SUPABASE_URL') || Netlify.env.get('SUPABASE_URL')
   const key = Netlify.env.get('VITE_SUPABASE_ANON_KEY') || Netlify.env.get('SUPABASE_ANON_KEY')
   if (!base || !key) return null
   try {
     const ctrl = new AbortController()
     const t = setTimeout(() => ctrl.abort(), 1500)
-    const res = await fetch(
-      `${base}/rest/v1/events?id=eq.${encodeURIComponent(id)}&select=name,track:tracks(name)`,
-      { headers: { apikey: key, authorization: `Bearer ${key}` }, signal: ctrl.signal },
-    )
+    const res = await fetch(`${base}/rest/v1/${pathAndQuery}`, {
+      headers: { apikey: key, authorization: `Bearer ${key}` },
+      signal: ctrl.signal,
+    })
     clearTimeout(t)
     if (!res.ok) return null
     const rows = await res.json()
-    const row = Array.isArray(rows) ? rows[0] : null
-    return row?.name || row?.track?.name || null
+    return Array.isArray(rows) ? (rows[0] ?? null) : null
   } catch {
     return null
   }
+}
+
+/** Use the per-entity card if it was generated at build time, else fall back. */
+async function pickImage(origin: string, candidate: string, fallback: string): Promise<string> {
+  try {
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), 1000)
+    const res = await fetch(`${origin}${candidate}`, { method: 'HEAD', signal: ctrl.signal })
+    clearTimeout(t)
+    if (res.ok) return `${origin}${candidate}`
+  } catch {
+    // ignore — fall through to fallback
+  }
+  return `${origin}/${fallback}.png`
 }
 
 export default async function handler(request: Request, context: Context) {
@@ -58,14 +71,25 @@ export default async function handler(request: Request, context: Context) {
   const section = parts[0] ?? ''
 
   let meta: Meta = SECTIONS[section] ?? SECTIONS['']
+  let imageUrl = `${origin}/${meta.image}.png`
 
-  // Race detail: /schedule/:id -> use the event name, keep the schedule card.
+  // Race detail: /schedule/:id -> event name + its own card.
   if (section === 'schedule' && parts[1]) {
-    const name = await raceName(parts[1])
+    const row = await sbOne(`events?id=eq.${encodeURIComponent(parts[1])}&select=name,track:tracks(name)`)
+    const name = (row?.name as string) || ((row?.track as { name?: string })?.name ?? null)
     if (name) meta = { ...meta, title: `${name} — ${SITE}`, description: `Session times, weather, grid and results for ${name}.` }
+    imageUrl = await pickImage(origin, `/og/race-${parts[1]}.png`, meta.image)
+  } else if (section === 'drivers' && parts[1]) {
+    const row = await sbOne(`drivers?id=eq.${encodeURIComponent(parts[1])}&select=name,team:teams(name,class_id)`)
+    const name = row?.name as string | undefined
+    const team = row?.team as { name?: string; class_id?: string } | undefined
+    if (name) {
+      const sub = [team?.class_id, team?.name].filter(Boolean).join(' · ')
+      meta = { ...meta, title: `${name} — ${SITE}`, description: sub ? `${sub} · HCR League driver profile, stats and license.` : `HCR League driver profile, stats and license.` }
+    }
+    imageUrl = await pickImage(origin, `/og/driver-${parts[1]}.png`, meta.image)
   }
 
-  const imageUrl = `${origin}/${meta.image}.png`
   const pageUrl = `${origin}${url.pathname}`
   const T = esc(meta.title)
   const D = esc(meta.description)

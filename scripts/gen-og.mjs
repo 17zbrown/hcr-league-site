@@ -55,7 +55,10 @@ function card({ eyebrow, title, subtitle, chips = true }) {
 
   // title can wrap onto 2 lines (split on the space closest to middle if long)
   const titleLines = title.length > 15 ? wrap(title, 15) : [title]
-  const titleFS = titleLines.length > 1 ? 96 : 128
+  // shrink to fit: keep the longest line inside the content width
+  const base = titleLines.length > 1 ? 96 : 128
+  const maxChars = Math.max(...titleLines.map((l) => l.length))
+  const titleFS = Math.max(52, Math.min(base, Math.floor(980 / (maxChars * 0.68))))
   let titleSvg = ''
   titleLines.forEach((ln, i) => {
     titleSvg += `<text x="90" y="${300 + i * (titleFS + 6)}" font-family="Archivo" font-weight="900" font-size="${titleFS}" letter-spacing="-2" fill="${WHITE}">${esc(ln.toUpperCase())}</text>`
@@ -144,3 +147,79 @@ const CARDS = {
 for (const [name, cfg] of Object.entries(CARDS)) {
   render(card(cfg), join(root, `public/${name}.png`))
 }
+
+// ---- Per-entity cards (races + drivers), pulled from Supabase ----
+// Best-effort: if env/DB is unavailable the build still succeeds with section
+// cards only, and the edge function falls back to those.
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function fmtDate(iso) {
+  try {
+    const d = new Date(iso)
+    return `${MON[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`
+  } catch {
+    return ''
+  }
+}
+
+function loadEnv() {
+  let url = process.env.VITE_SUPABASE_URL
+  let key = process.env.VITE_SUPABASE_ANON_KEY
+  if (!url || !key) {
+    try {
+      for (const line of readFileSync(join(root, '.env'), 'utf8').split('\n')) {
+        const m = line.match(/^\s*([A-Z_]+)\s*=\s*(.+?)\s*$/)
+        if (!m) continue
+        const val = m[2].replace(/^["']|["']$/g, '')
+        if (m[1] === 'VITE_SUPABASE_URL' && !url) url = val
+        if (m[1] === 'VITE_SUPABASE_ANON_KEY' && !key) key = val
+      }
+    } catch {}
+  }
+  return { url, key }
+}
+
+async function sb(path, url, key) {
+  const res = await fetch(`${url}/rest/v1/${path}`, { headers: { apikey: key, authorization: `Bearer ${key}` } })
+  if (!res.ok) throw new Error(`REST ${res.status}`)
+  return res.json()
+}
+
+async function genEntities() {
+  const { url, key } = loadEnv()
+  if (!url || !key) {
+    console.log('og: no Supabase env — skipping per-entity cards')
+    return
+  }
+  try {
+    const events = await sb('events?select=id,round,name,date,track:tracks(name,location)&order=round', url, key)
+    for (const e of events) {
+      const t = e.track || {}
+      render(
+        card({
+          eyebrow: `Round ${e.round} · ${fmtDate(e.date)}`,
+          title: e.name || t.name || `Round ${e.round}`,
+          subtitle: [t.name, t.location].filter(Boolean).join(' · '),
+        }),
+        join(root, `public/og/race-${e.id}.png`),
+      )
+    }
+    const drivers = await sb('drivers?select=id,name,team:teams(name,number,class_id)', url, key)
+    for (const d of drivers) {
+      const t = d.team || {}
+      render(
+        card({
+          eyebrow: t.number ? `HCR League · #${t.number}` : 'HCR League · Driver',
+          title: d.name,
+          subtitle: [t.class_id, t.name].filter(Boolean).join(' · ') || 'Free agent',
+          chips: false,
+        }),
+        join(root, `public/og/driver-${d.id}.png`),
+      )
+    }
+    console.log(`og: wrote ${events.length} race + ${drivers.length} driver cards`)
+  } catch (e) {
+    console.log('og: per-entity cards skipped —', String(e?.message || e))
+  }
+}
+
+await genEntities()
