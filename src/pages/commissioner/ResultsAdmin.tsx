@@ -118,6 +118,8 @@ export default function ResultsAdmin() {
     qc.invalidateQueries({ queryKey: ['results'] })
     qc.invalidateQueries({ queryKey: ['events'] })
     qc.invalidateQueries({ queryKey: ['drivers'] })
+    // Push any license/role changes to Discord (no-op if the integration is off).
+    supabase.functions.invoke('discord-sync').catch(() => {})
     setNote(`Saved ${inserts.length} results. Standings updated.`)
     setRows([])
     setBusy(false)
