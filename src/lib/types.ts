@@ -127,6 +127,19 @@ export interface RaceResult {
   quali_points: number | null
 }
 
+export interface WeatherRow {
+  id: string
+  event_id: string
+  at_hour: number | null
+  air_f: number | null
+  sky: string | null
+  precip: number | null
+  wind_mph: number | null
+  humidity: number | null
+  clouds: number | null
+  sort: number
+}
+
 export interface Champion {
   id: string
   season_name: string

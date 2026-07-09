@@ -1,5 +1,6 @@
 import { useCurrentSeason, useEvents } from '../lib/queries'
 import { CLASS_ORDER, fmtDateLong } from '../lib/format'
+import { Link } from 'react-router-dom'
 import { ClassChip, Section, Skeleton } from '../components/ui'
 import { Reveal } from '../components/motion'
 
@@ -22,10 +23,11 @@ export default function Schedule() {
             const isNext = e.status === 'next'
             return (
               <Reveal as="li" key={e.id} delay={Math.min(i * 0.04, 0.3)}>
-                <div
-                  className={`grid items-center gap-4 rounded-2xl border p-5 transition-all hover:shadow-card md:grid-cols-[72px_1fr_auto] ${
+                <Link
+                  to={`/schedule/${e.id}`}
+                  className={`grid items-center gap-4 rounded-2xl border p-5 transition-all hover:-translate-y-0.5 hover:shadow-card md:grid-cols-[72px_1fr_auto] ${
                     isNext ? 'border-[var(--color-brand)] bg-[var(--color-cloud)]' : 'border-[var(--color-line)] bg-[var(--color-paper)]'
-                  } ${done ? 'opacity-60' : ''}`}
+                  } ${done ? 'opacity-70' : ''}`}
                 >
                   <div className="font-display text-4xl font-extrabold text-[var(--color-faint)]">
                     {String(e.round).padStart(2, '0')}
@@ -49,7 +51,7 @@ export default function Schedule() {
                       ))}
                     </div>
                   </div>
-                </div>
+                </Link>
               </Reveal>
             )
           })}

@@ -4,6 +4,7 @@ import Header from './components/Header'
 import Footer from './components/Footer'
 import Home from './pages/Home'
 import Schedule from './pages/Schedule'
+import RaceDetail from './pages/RaceDetail'
 import Standings from './pages/Standings'
 import Results from './pages/Results'
 import Drivers from './pages/Drivers'
@@ -36,6 +37,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/schedule" element={<Schedule />} />
+          <Route path="/schedule/:id" element={<RaceDetail />} />
           <Route path="/standings" element={<Standings />} />
           <Route path="/results" element={<Results />} />
           <Route path="/drivers" element={<Drivers />} />

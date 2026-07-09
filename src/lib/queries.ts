@@ -68,6 +68,95 @@ export function useEvents(seasonId?: string) {
   })
 }
 
+/** Single event with its track (for the race detail page). */
+export function useEvent(id?: string) {
+  return useQuery({
+    enabled: !!id,
+    queryKey: ['event', id],
+    queryFn: async (): Promise<RaceEvent | null> => {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*, track:tracks(*)')
+        .eq('id', id!)
+        .maybeSingle()
+      if (error) throw error
+      return data as RaceEvent | null
+    },
+  })
+}
+
+export function useSessions(eventId?: string) {
+  return useQuery({
+    enabled: !!eventId,
+    queryKey: ['sessions', eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('sessions').select('*').eq('event_id', eventId!).order('sort')
+      if (error) throw error
+      return (data ?? []) as import('./types').RaceSession[]
+    },
+  })
+}
+
+export function useWeather(eventId?: string) {
+  return useQuery({
+    enabled: !!eventId,
+    queryKey: ['weather', eventId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('weather').select('*').eq('event_id', eventId!).order('sort')
+      if (error) throw error
+      return (data ?? []) as import('./types').WeatherRow[]
+    },
+  })
+}
+
+/** Class winners (cls_pos = 1) from completed events at a given track. */
+export function useTrackWinners(trackId?: string) {
+  return useQuery({
+    enabled: !!trackId,
+    queryKey: ['track-winners', trackId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('results')
+        .select('*, event:events!inner(id, round, name, date, status, track_id)')
+        .eq('event.track_id', trackId!)
+        .eq('event.status', 'complete')
+        .eq('cls_pos', 1)
+      if (error) throw error
+      return (data ?? []) as (RaceResult & {
+        event?: { id: string; round: number; name: string | null; date: string; status: string }
+      })[]
+    },
+  })
+}
+
+/** Live real-world weather at the track (Open-Meteo — free, no key). */
+export function useLiveWeather(lat?: number | null, lon?: number | null) {
+  return useQuery({
+    enabled: lat != null && lon != null,
+    queryKey: ['live-weather', lat, lon],
+    staleTime: 1000 * 60 * 15,
+    retry: 1,
+    queryFn: async () => {
+      const url =
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+        `&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m` +
+        `&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`
+      const res = await fetch(url)
+      if (!res.ok) throw new Error('weather unavailable')
+      return (await res.json()) as {
+        current?: {
+          temperature_2m: number
+          apparent_temperature: number
+          relative_humidity_2m: number
+          precipitation: number
+          weather_code: number
+          wind_speed_10m: number
+        }
+      }
+    },
+  })
+}
+
 export function useResults(eventId?: string) {
   return useQuery({
     enabled: !!eventId,
