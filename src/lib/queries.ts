@@ -157,6 +157,52 @@ export function useLiveWeather(lat?: number | null, lon?: number | null) {
   })
 }
 
+interface OMHourly {
+  utc_offset_seconds?: number
+  hourly?: {
+    time: string[]
+    temperature_2m: number[]
+    weather_code: number[]
+    wind_speed_10m: number[]
+    relative_humidity_2m: number[]
+    precipitation?: number[]
+    precipitation_probability?: number[]
+  }
+}
+
+/**
+ * Real-world hourly weather for a race's date at the track. Uses Open-Meteo's
+ * forecast endpoint for upcoming dates (≤16 days out) and the historical
+ * archive for past dates.
+ */
+export function useRaceForecast(opts: {
+  lat?: number | null
+  lon?: number | null
+  dateStr?: string
+  past?: boolean
+  tooFar?: boolean
+}) {
+  const { lat, lon, dateStr, past, tooFar } = opts
+  return useQuery({
+    enabled: lat != null && lon != null && !!dateStr && !tooFar,
+    queryKey: ['race-forecast', lat, lon, dateStr, past],
+    staleTime: 1000 * 60 * 30,
+    retry: 1,
+    queryFn: async (): Promise<OMHourly> => {
+      const base = past ? 'https://archive-api.open-meteo.com/v1/archive' : 'https://api.open-meteo.com/v1/forecast'
+      const hourly = past
+        ? 'temperature_2m,precipitation,weather_code,wind_speed_10m,relative_humidity_2m'
+        : 'temperature_2m,precipitation_probability,weather_code,wind_speed_10m,relative_humidity_2m'
+      const url =
+        `${base}?latitude=${lat}&longitude=${lon}&start_date=${dateStr}&end_date=${dateStr}` +
+        `&hourly=${hourly}&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto`
+      const res = await fetch(url)
+      if (!res.ok) throw new Error('forecast unavailable')
+      return (await res.json()) as OMHourly
+    },
+  })
+}
+
 export function useResults(eventId?: string) {
   return useQuery({
     enabled: !!eventId,

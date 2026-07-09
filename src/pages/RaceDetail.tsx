@@ -4,6 +4,7 @@ import {
   useClasses,
   useEvent,
   useLiveWeather,
+  useRaceForecast,
   useResults,
   useSessions,
   useTrackWinners,
@@ -21,6 +22,11 @@ function sessionTime(iso: string) {
   })
 }
 
+function hourLabel(h: number) {
+  const hr = h % 12 === 0 ? 12 : h % 12
+  return `${hr}${h < 12 ? 'am' : 'pm'}`
+}
+
 export default function RaceDetail() {
   const { id } = useParams()
   const { data: event, isLoading } = useEvent(id)
@@ -34,6 +40,41 @@ export default function RaceDetail() {
 
   const done = event?.status === 'complete'
   const upcoming = !!event && !done
+
+  // Race-day forecast window, centered on the in-sim start hour.
+  const raceDate = event ? new Date(event.date) : null
+  const dateStr = raceDate ? raceDate.toLocaleDateString('en-CA') : undefined
+  const daysUntil = dateStr
+    ? Math.round((new Date(`${dateStr}T00:00:00`).getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000)
+    : 0
+  const pastRace = daysUntil < 0
+  const tooFar = daysUntil > 15
+  const centerHour = event?.sim_start_hour != null ? Math.round(event.sim_start_hour) : 13
+  const { data: fc, isLoading: fcLoading, isError: fcError } = useRaceForecast({
+    lat: track?.lat, lon: track?.lon, dateStr, past: pastRace, tooFar,
+  })
+
+  const forecastHours = useMemo(() => {
+    const h = fc?.hourly
+    if (!h?.time?.length) return []
+    const found = h.time.findIndex((t) => parseInt(t.slice(11, 13), 10) === centerHour)
+    const center = found >= 0 ? found : Math.min(13, h.time.length - 1)
+    const out: {
+      hour: number; temp?: number; code?: number; precipProb?: number; precip?: number; isCenter: boolean
+    }[] = []
+    for (let i = center - 3; i <= center + 3; i++) {
+      if (i < 0 || i >= h.time.length) continue
+      out.push({
+        hour: parseInt(h.time[i].slice(11, 13), 10),
+        temp: h.temperature_2m?.[i],
+        code: h.weather_code?.[i],
+        precipProb: h.precipitation_probability?.[i],
+        precip: h.precipitation?.[i],
+        isCenter: i === center,
+      })
+    }
+    return out
+  }, [fc, centerHour])
 
   const winners = useMemo(
     () =>
@@ -159,6 +200,44 @@ export default function RaceDetail() {
                 </div>
               )}
             </div>
+
+            {/* Real-world race-day forecast, centered on the in-sim start hour */}
+            {track?.lat != null && (
+              <div className="mt-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
+                <div className="eyebrow mb-3">
+                  {pastRace ? 'Conditions on race day' : 'Race-day forecast'} · sim start {hourLabel(centerHour)}
+                </div>
+                {tooFar ? (
+                  <p className="text-sm text-[var(--color-muted)]">Available closer to race day (within ~2 weeks).</p>
+                ) : fcLoading ? (
+                  <Skeleton className="h-24 w-full" />
+                ) : fcError || !forecastHours.length ? (
+                  <p className="text-sm text-[var(--color-muted)]">Forecast unavailable right now.</p>
+                ) : (
+                  <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                    {forecastHours.map((h) => (
+                      <div
+                        key={h.hour}
+                        className={`min-w-[62px] flex-1 rounded-xl border p-2 text-center ${
+                          h.isCenter ? 'border-[var(--color-brand)] bg-[var(--color-cloud)]' : 'border-[var(--color-line)]'
+                        }`}
+                      >
+                        <div className="font-mono text-[11px] text-[var(--color-muted)]">{hourLabel(h.hour)}</div>
+                        <div className="my-0.5 text-2xl">{h.code != null ? wmo(h.code).icon : '—'}</div>
+                        <div className="tabular font-display text-lg font-extrabold leading-none">
+                          {h.temp != null ? `${Math.round(h.temp)}°` : '—'}
+                        </div>
+                        <div className="tabular mt-1 text-[10px] text-[var(--color-blue)]">
+                          {pastRace
+                            ? h.precip != null ? `${h.precip.toFixed(1)}mm` : ''
+                            : h.precipProb != null ? `${h.precipProb}%` : ''}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* In-sim race-day forecast */}
             {!!simWeather?.length && (
