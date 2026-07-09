@@ -120,16 +120,16 @@ export default function Home() {
               <Link
                 key={e.id}
                 to="/schedule"
-                className={`group relative min-w-[230px] snap-start rounded-2xl border p-5 transition-all hover:-translate-y-1 ${
+                className={`group relative w-max min-w-[230px] shrink-0 snap-start rounded-2xl border p-5 transition-all hover:-translate-y-1 ${
                   isNext ? 'border-[var(--color-brand)] bg-[var(--color-cloud)] shadow-card' : 'border-[var(--color-line)] bg-[var(--color-paper)] hover:shadow-card'
                 } ${done ? 'opacity-60' : ''}`}
               >
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-4">
                   <span className="tabular text-xs font-semibold text-[var(--color-muted)]">ROUND {e.round}</span>
                   {isNext && <span className="rounded-full bg-[var(--color-brand)] px-2 py-0.5 text-[10px] font-bold uppercase text-black">Next</span>}
                   {done && <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--color-faint)]">Final</span>}
                 </div>
-                <div className="mt-3 font-display text-2xl font-extrabold uppercase leading-tight">{e.track?.name ?? e.name}</div>
+                <div className="mt-3 whitespace-nowrap font-display text-2xl font-extrabold uppercase leading-tight">{e.track?.name ?? e.name}</div>
                 <div className="mt-1 text-sm text-[var(--color-muted)]">{e.track?.location}</div>
                 <div className="tabular mt-4 text-sm font-medium">{fmtDate(e.date)}</div>
               </Link>
