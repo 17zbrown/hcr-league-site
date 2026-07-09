@@ -16,7 +16,7 @@ const Drivers = lazy(() => import('./pages/Drivers'))
 const DriverProfile = lazy(() => import('./pages/DriverProfile'))
 const Teams = lazy(() => import('./pages/Teams'))
 const TeamProfile = lazy(() => import('./pages/TeamProfile'))
-const News = lazy(() => import('./pages/News'))
+const Reports = lazy(() => import('./pages/Reports'))
 const SignUp = lazy(() => import('./pages/SignUp'))
 const Login = lazy(() => import('./pages/Login'))
 const Account = lazy(() => import('./pages/Account'))
@@ -57,7 +57,8 @@ export default function App() {
             <Route path="/drivers/:id" element={<DriverProfile />} />
             <Route path="/teams" element={<Teams />} />
             <Route path="/teams/:id" element={<TeamProfile />} />
-            <Route path="/news" element={<News />} />
+            <Route path="/reports" element={<Reports />} />
+          <Route path="/news" element={<Reports />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/login" element={<Login />} />
             <Route path="/account" element={<RequireAuth><Account /></RequireAuth>} />

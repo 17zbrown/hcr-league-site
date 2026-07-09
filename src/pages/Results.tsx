@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useClasses, useCurrentSeason, useEvents, useResults } from '../lib/queries'
 import { CLASS_ORDER, classColor, fmtDateLong } from '../lib/format'
 import { lapToSeconds } from '../lib/license'
+import { useAuth } from '../lib/auth'
+import { resultListsDriver } from '../lib/attribution'
 import { Section, Skeleton } from '../components/ui'
 import { DriverName } from '../components/links'
 
@@ -61,6 +63,8 @@ export default function Results() {
 function ResultsTable({ eventId, report }: { eventId: string; report: string | null }) {
   const { data: results, isLoading } = useResults(eventId)
   const { data: classes } = useClasses()
+  const { profile } = useAuth()
+  const meName = profile?.display_name ?? null
 
   if (isLoading) return <Skeleton className="h-96 w-full" />
 
@@ -86,7 +90,9 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
               <h3 className="text-2xl uppercase">{cls}</h3>
               <span className="tabular text-sm text-[var(--color-muted)]">{rows.length} cars</span>
             </div>
-            <div className="shadow-card overflow-x-auto rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+            <div className="shadow-card relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[var(--color-paper)] sm:hidden" aria-hidden />
+              <div className="overflow-x-auto">
               <table className="w-full min-w-[820px] border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-[var(--color-line)] bg-[var(--color-mist)] text-left font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
@@ -102,8 +108,11 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.id} className="border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-mist)]">
+                  {rows.map((r) => {
+                    const isMe = !!meName && resultListsDriver(r.drivers_text, meName)
+                    const delta = r.grid != null && r.pos != null ? r.grid - r.pos : null
+                    return (
+                    <tr key={r.id} className={`border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-mist)] ${isMe ? 'bg-[var(--color-brand)]/[0.09]' : ''}`}>
                       <td className="px-4 py-3">
                         <span
                           className="tabular inline-flex h-7 w-7 items-center justify-center rounded-md font-bold"
@@ -113,8 +122,22 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
                         </span>
                       </td>
                       <td className="tabular px-4 py-3 text-[var(--color-muted)]">#{r.number}</td>
-                      <td className="px-4 py-3 font-semibold"><DriverName text={r.drivers_text} /></td>
-                      <td className="tabular px-4 py-3 text-center">{r.grid ?? '—'}</td>
+                      <td className="px-4 py-3 font-semibold">
+                        <span className="inline-flex items-center gap-2">
+                          <DriverName text={r.drivers_text} />
+                          {isMe && <span className="rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-black">You</span>}
+                        </span>
+                      </td>
+                      <td className="tabular px-4 py-3 text-center">
+                        <span className="inline-flex items-center gap-1.5">
+                          {r.grid ?? '—'}
+                          {delta != null && delta !== 0 && (
+                            <span className={`text-[11px] font-bold ${delta > 0 ? 'text-[var(--color-green)]' : 'text-[var(--color-red)]'}`}>
+                              {delta > 0 ? `▲${delta}` : `▼${-delta}`}
+                            </span>
+                          )}
+                        </span>
+                      </td>
                       <td className="tabular px-4 py-3 text-center">{r.laps ?? '—'}</td>
                       <td className="tabular px-4 py-3">
                         {r.best_lap ? (
@@ -136,9 +159,11 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
                       </td>
                       <td className="tabular px-4 py-3 text-right font-bold">{(r.points ?? 0) + (r.quali_points ?? 0)}</td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
+              </div>
             </div>
           </div>
         )

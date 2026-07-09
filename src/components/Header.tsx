@@ -12,7 +12,7 @@ const NAV = [
   { to: '/results', label: 'Results' },
   { to: '/drivers', label: 'Drivers' },
   { to: '/teams', label: 'Teams' },
-  { to: '/news', label: 'News' },
+  { to: '/reports', label: 'Reports' },
 ]
 
 function Wordmark() {

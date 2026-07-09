@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { useClasses, useCurrentSeason, useSeasonResults, useSeasonResultsFull, useTeams } from '../lib/queries'
 import { computeProgression, computeStandings } from '../lib/standings'
 import { CLASS_ORDER, classColor, classLineColor } from '../lib/format'
+import { useAuth } from '../lib/auth'
+import { resultListsDriver } from '../lib/attribution'
 import type { ClassId, LeagueClass, StandingRow } from '../lib/types'
 import { Section, Skeleton } from '../components/ui'
 import { CountUp } from '../components/motion'
@@ -91,6 +93,8 @@ function StandingsTable({
   color?: string
   classes?: LeagueClass[]
 }) {
+  const { profile } = useAuth()
+  const meName = profile?.display_name ?? null
   const data = teamRows ?? rows
   if (!data.length) {
     return <p className="text-[var(--color-muted)]">No results scored yet this season.</p>
@@ -98,7 +102,9 @@ function StandingsTable({
   const leaderPts = data[0]?.points ?? 0
 
   return (
-    <div className="shadow-card overflow-x-auto rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+    <div className="shadow-card relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+      <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[var(--color-paper)] sm:hidden" aria-hidden />
+      <div className="overflow-x-auto">
       <table className="w-full min-w-[640px] border-collapse">
         <thead>
           <tr className="border-b border-[var(--color-line)] bg-[var(--color-mist)] text-left font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
@@ -115,8 +121,9 @@ function StandingsTable({
         <tbody>
           {data.map((r, i) => {
             const rowColor = color ?? classColor(r.classId, classes)
+            const isMe = !teamRows && !!meName && resultListsDriver(r.name, meName)
             return (
-              <tr key={r.key} className="border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-mist)]">
+              <tr key={r.key} className={`border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-mist)] ${isMe ? 'bg-[var(--color-brand)]/[0.09]' : ''}`}>
                 <td className="px-5 py-3.5">
                   <span
                     className="tabular flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold"
@@ -129,7 +136,10 @@ function StandingsTable({
                   {teamRows ? (
                     <TeamLink teamId={r.key.startsWith('num-') ? null : r.key}>{r.name}</TeamLink>
                   ) : (
-                    <DriverName text={r.name} />
+                    <span className="inline-flex items-center gap-2">
+                      <DriverName text={r.name} />
+                      {isMe && <span className="rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-black">You</span>}
+                    </span>
                   )}
                 </td>
                 {teamRows && (
@@ -154,6 +164,7 @@ function StandingsTable({
           })}
         </tbody>
       </table>
+      </div>
     </div>
   )
 }
