@@ -12,6 +12,18 @@ export function classColor(classId: string, classes?: LeagueClass[]): string {
   return fromDb || CLASS_FALLBACK[classId] || '#ffffff'
 }
 
+/** Legible-on-white variants of the class colors — for thin strokes / text
+ * where the bright chip colors (esp. GTP yellow) wash out. */
+export const CLASS_LINE: Record<string, string> = {
+  GTP: '#97890a', // brand-deep
+  LMP2: '#2f6bff',
+  GTD: '#12b981',
+}
+
+export function classLineColor(classId: string): string {
+  return CLASS_LINE[classId] || '#97890a'
+}
+
 export const CLASS_ORDER: ClassId[] = ['GTP', 'LMP2', 'GTD']
 
 const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']

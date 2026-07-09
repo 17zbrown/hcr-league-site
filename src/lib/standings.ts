@@ -83,3 +83,97 @@ export function computeStandings(
 export function emptyStandings() {
   return { GTP: [], LMP2: [], GTD: [] } as Record<ClassId, StandingRow[]>
 }
+
+export type FullResult = RaceResult & {
+  event?: { id: string; round: number; name: string | null; date: string; track?: { name: string } | null }
+}
+
+export interface ProgressionRound {
+  round: number
+  label: string
+  short: string
+}
+
+export interface ProgressionSeries {
+  key: string
+  name: string
+  /** Cumulative points after each round in `rounds` (same length/order). */
+  cumulative: number[]
+  total: number
+}
+
+export interface Progression {
+  rounds: ProgressionRound[]
+  series: ProgressionSeries[]
+}
+
+/** Short track label for a round tick (e.g. "Daytona Road Course" -> "DAYTONA"). */
+function shortTrack(name?: string | null, fallback = ''): string {
+  const base = (name || fallback || '').trim()
+  if (!base) return fallback
+  const first = base.split(/[\s/·-]/).find((w) => w.length > 1) ?? base
+  return first.slice(0, 3).toUpperCase()
+}
+
+/**
+ * Cumulative championship points per driver (or team) across completed rounds,
+ * for one class. Every series starts at 0 (season open) so a single completed
+ * round already draws a proper line. Sorted by final total; drivers who miss a
+ * round carry their previous total forward.
+ */
+export function computeProgression(
+  full: FullResult[],
+  classId: ClassId,
+  teams: Team[] = [],
+  mode: 'drivers' | 'teams' = 'drivers',
+): Progression {
+  const teamById = new Map(teams.map((t) => [t.id, t]))
+  const rows = full.filter((r) => r.class_id === classId && r.event)
+
+  // Distinct rounds, ordered.
+  const roundMap = new Map<number, ProgressionRound>()
+  for (const r of rows) {
+    const rd = r.event!.round
+    if (!roundMap.has(rd)) {
+      roundMap.set(rd, {
+        round: rd,
+        label: `Round ${rd}`,
+        short: shortTrack(r.event!.track?.name, `R${rd}`),
+      })
+    }
+  }
+  const rounds = Array.from(roundMap.values()).sort((a, b) => a.round - b.round)
+  if (!rounds.length) return { rounds: [], series: [] }
+  const roundIndex = new Map(rounds.map((r, i) => [r.round, i]))
+
+  // per-series per-round point totals
+  const seriesMap = new Map<string, { name: string; perRound: number[] }>()
+  for (const r of rows) {
+    const pts = (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)
+    let key: string
+    let name: string
+    if (mode === 'teams') {
+      key = r.team_id ?? `num-${r.number}`
+      name = (r.team_id ? teamById.get(r.team_id)?.name : undefined) ?? `#${r.number}`
+    } else {
+      name = (r.drivers_text || '').trim() || `#${r.number}`
+      key = name.toLowerCase()
+    }
+    const s = seriesMap.get(key) ?? { name, perRound: new Array(rounds.length).fill(0) }
+    s.perRound[roundIndex.get(r.event!.round)!] += pts
+    seriesMap.set(key, s)
+  }
+
+  const series: ProgressionSeries[] = Array.from(seriesMap.entries()).map(([key, s]) => {
+    const cumulative: number[] = []
+    let run = 0
+    for (let i = 0; i < rounds.length; i++) {
+      run += s.perRound[i]
+      cumulative.push(run)
+    }
+    return { key, name: s.name, cumulative, total: run }
+  })
+  series.sort((a, b) => b.total - a.total)
+
+  return { rounds, series }
+}

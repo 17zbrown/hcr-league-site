@@ -1,22 +1,36 @@
 import { useMemo, useState } from 'react'
-import { useClasses, useCurrentSeason, useSeasonResults, useTeams } from '../lib/queries'
-import { computeStandings } from '../lib/standings'
-import { CLASS_ORDER, classColor } from '../lib/format'
+import { useClasses, useCurrentSeason, useSeasonResults, useSeasonResultsFull, useTeams } from '../lib/queries'
+import { computeProgression, computeStandings } from '../lib/standings'
+import { CLASS_ORDER, classColor, classLineColor } from '../lib/format'
 import type { ClassId, LeagueClass, StandingRow } from '../lib/types'
 import { Section, Skeleton } from '../components/ui'
 import { CountUp } from '../components/motion'
 import { DriverName, TeamLink } from '../components/links'
+import { ProgressionChart } from '../components/ProgressionChart'
 
 type Tab = ClassId | 'TEAMS'
 
 export default function Standings() {
   const { data: season } = useCurrentSeason()
   const { data: results, isLoading } = useSeasonResults(season?.id)
+  const { data: fullResults } = useSeasonResultsFull(season?.id)
   const { data: teams } = useTeams()
   const { data: classes } = useClasses()
   const [tab, setTab] = useState<Tab>('GTP')
 
   const standings = useMemo(() => computeStandings(results ?? [], teams ?? []), [results, teams])
+
+  const progression = useMemo(() => {
+    if (!fullResults) return null
+    if (tab === 'TEAMS') {
+      // Merge all classes' team series for an overall team-points battle.
+      const merged = CLASS_ORDER.map((c) => computeProgression(fullResults, c, teams ?? [], 'teams'))
+      const rounds = merged.find((m) => m.rounds.length)?.rounds ?? []
+      const series = merged.flatMap((m) => m.series).sort((a, b) => b.total - a.total)
+      return { rounds, series }
+    }
+    return computeProgression(fullResults, tab, teams ?? [], 'drivers')
+  }, [fullResults, tab, teams])
 
   const tabs: { id: Tab; label: string }[] = [
     ...CLASS_ORDER.map((c) => ({ id: c as Tab, label: c })),
@@ -47,12 +61,20 @@ export default function Standings() {
       {isLoading ? (
         <Skeleton className="h-96 w-full" />
       ) : (
+        <div className="space-y-8">
+        {progression && progression.rounds.length > 0 && progression.series.length > 0 && (
+          <ProgressionChart
+            data={progression}
+            color={tab === 'TEAMS' ? '#97890a' : classLineColor(tab)}
+          />
+        )}
         <StandingsTable
           rows={tab === 'TEAMS' ? [] : standings.drivers[tab]}
           teamRows={tab === 'TEAMS' ? CLASS_ORDER.flatMap((c) => standings.teams[c]).sort((a, b) => b.points - a.points) : undefined}
           color={tab === 'TEAMS' ? undefined : classColor(tab, classes)}
           classes={classes}
         />
+        </div>
       )}
     </Section>
   )
