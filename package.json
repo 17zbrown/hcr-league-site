@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "tsc -b --noEmit"
+    "lint": "tsc -b --noEmit",
+    "og": "node scripts/gen-og.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^9.114.0",
@@ -23,6 +24,7 @@
     "three": "^0.169.0"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "@tailwindcss/vite": "^4.0.0",
     "@types/papaparse": "^5.5.2",
     "@types/react": "^18.3.12",
