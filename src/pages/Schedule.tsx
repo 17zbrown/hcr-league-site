@@ -2,6 +2,7 @@ import { useCurrentSeason, useEvents } from '../lib/queries'
 import { CLASS_ORDER, fmtDateLong } from '../lib/format'
 import { Link } from 'react-router-dom'
 import { ClassChip, Section, Skeleton } from '../components/ui'
+import { TrackMap, hasTrackMap } from '../components/TrackMap'
 import { Reveal } from '../components/motion'
 
 export default function Schedule() {
@@ -29,8 +30,13 @@ export default function Schedule() {
                     isNext ? 'border-[var(--color-brand)] bg-[var(--color-cloud)]' : 'border-[var(--color-line)] bg-[var(--color-paper)]'
                   } ${done ? 'opacity-70' : ''}`}
                 >
-                  <div className="font-display text-4xl font-extrabold text-[var(--color-faint)]">
-                    {String(e.round).padStart(2, '0')}
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="font-display text-4xl font-extrabold text-[var(--color-faint)]">
+                      {String(e.round).padStart(2, '0')}
+                    </div>
+                    {hasTrackMap(e.track?.name) && (
+                      <TrackMap name={e.track?.name} className="h-9 w-full" strokeWidth={1.5} showStart={false} />
+                    )}
                   </div>
                   <div>
                     <div className="flex flex-wrap items-center gap-3">

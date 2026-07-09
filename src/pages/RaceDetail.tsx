@@ -13,6 +13,7 @@ import {
 import { CLASS_ORDER, classColor, fmtDateLong, wmo } from '../lib/format'
 import { ClassChip, Skeleton } from '../components/ui'
 import { DriverName } from '../components/links'
+import { TrackMap, hasTrackMap } from '../components/TrackMap'
 import Countdown from '../components/Countdown'
 import { Reveal } from '../components/motion'
 
@@ -115,7 +116,8 @@ export default function RaceDetail() {
       </Link>
 
       {/* Header */}
-      <div className="border-b border-[var(--color-line)] pb-8">
+      <div className="flex flex-col gap-8 border-b border-[var(--color-line)] pb-8 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-3">
           <span className="tabular font-mono text-sm text-[var(--color-muted)]">ROUND {event.round}</span>
           {done && <span className="rounded-full bg-[var(--color-ink)] px-2.5 py-0.5 text-[11px] font-bold uppercase text-white">Final</span>}
@@ -144,6 +146,12 @@ export default function RaceDetail() {
           )}
           {done && <Link to="/results" className="hcr-btn hcr-btn-primary">Full Results</Link>}
         </div>
+        </div>
+        {hasTrackMap(track?.name) && (
+          <div className="shrink-0 md:w-[360px]">
+            <TrackMap name={track?.name} className="h-auto w-full" strokeWidth={2.5} />
+          </div>
+        )}
       </div>
 
       <div className="mt-10 grid gap-8 lg:grid-cols-2">
