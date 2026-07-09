@@ -167,6 +167,8 @@ export interface SeasonRegistration {
   user_id: string
   driver_id: string | null
   display_name: string | null
+  iracing_name: string | null
+  iracing_custid: string | null
   fia_category: string | null
   preferred_class: string | null
   notes: string | null

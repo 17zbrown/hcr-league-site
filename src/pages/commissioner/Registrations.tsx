@@ -36,6 +36,8 @@ export default function Registrations() {
             <thead>
               <tr className="border-b border-[var(--color-line)] bg-[var(--color-mist)] text-left font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
                 <th className="px-4 py-3">Driver</th>
+                <th className="px-4 py-3">iRacing name</th>
+                <th className="px-4 py-3">Cust ID#</th>
                 <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3">Class</th>
                 <th className="px-4 py-3">On team?</th>
@@ -46,6 +48,8 @@ export default function Registrations() {
               {(regs as any[]).map((r) => (
                 <tr key={r.id} className="border-b border-[var(--color-line)] last:border-0">
                   <td className="px-4 py-3 font-semibold">{r.driver?.name ?? r.display_name}</td>
+                  <td className="px-4 py-3">{r.iracing_name ?? '—'}</td>
+                  <td className="tabular px-4 py-3">{r.iracing_custid ?? '—'}</td>
                   <td className="px-4 py-3">{r.fia_category ?? '—'}</td>
                   <td className="px-4 py-3">
                     {r.preferred_class ? (

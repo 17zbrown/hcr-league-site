@@ -16,6 +16,8 @@ export default function Account() {
   const [loading, setLoading] = useState(true)
 
   const [displayName, setDisplayName] = useState('')
+  const [iracingName, setIracingName] = useState('')
+  const [iracingCustid, setIracingCustid] = useState('')
   const [category, setCategory] = useState('Bronze')
   const [preferredClass, setPreferredClass] = useState('GTD')
   const [notes, setNotes] = useState('')
@@ -40,6 +42,8 @@ export default function Account() {
         if (!active) return
         setReg(data as SeasonRegistration | null)
         if (data) {
+          setIracingName(data.iracing_name ?? '')
+          setIracingCustid(data.iracing_custid ?? '')
           setCategory(data.fia_category ?? 'Bronze')
           setPreferredClass(data.preferred_class ?? 'GTD')
           setNotes(data.notes ?? '')
@@ -63,6 +67,8 @@ export default function Account() {
       p_fia_category: category,
       p_preferred_class: preferredClass,
       p_notes: notes,
+      p_iracing_name: iracingName.trim(),
+      p_iracing_custid: iracingCustid.trim(),
     })
     if (error) {
       setError(error.message)
@@ -124,6 +130,35 @@ export default function Account() {
             </label>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
+                <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
+                  iRacing full name <span className="text-[var(--color-red)]">*</span>
+                </span>
+                <input
+                  className="hcr-input"
+                  value={iracingName}
+                  onChange={(e) => setIracingName(e.target.value)}
+                  placeholder="Exactly as on your iRacing account"
+                  autoComplete="name"
+                  required
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
+                  iRacing customer ID# <span className="text-[var(--color-red)]">*</span>
+                </span>
+                <input
+                  className="hcr-input"
+                  value={iracingCustid}
+                  onChange={(e) => setIracingCustid(e.target.value.replace(/[^0-9]/g, ''))}
+                  inputMode="numeric"
+                  pattern="[0-9]+"
+                  placeholder="e.g. 123456"
+                  required
+                />
+              </label>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="block">
                 <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">FIA category</span>
                 <select className="hcr-select" value={category} onChange={(e) => setCategory(e.target.value)}>
                   {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
@@ -138,7 +173,7 @@ export default function Account() {
             </div>
             <label className="block">
               <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Notes (optional)</span>
-              <textarea className="hcr-textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="iRacing ID, team preference, availability…" />
+              <textarea className="hcr-textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Team preference, availability…" />
             </label>
 
             {error && <p className="rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">{error}</p>}
