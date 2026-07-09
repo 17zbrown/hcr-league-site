@@ -31,3 +31,6 @@ yarn-error.log*
 
 # misc reference material (not part of the app)
 screencapture-*.pdf
+
+# OSM raw cache for track-map generator (derived)
+scripts/.osm-cache/
