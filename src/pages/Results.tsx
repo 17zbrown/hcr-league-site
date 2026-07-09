@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useClasses, useCurrentSeason, useEvents, useResults } from '../lib/queries'
 import { CLASS_ORDER, classColor, fmtDateLong } from '../lib/format'
+import { lapToSeconds } from '../lib/license'
 import { Section, Skeleton } from '../components/ui'
 import { DriverName } from '../components/links'
 
@@ -71,6 +72,13 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
           .filter((r) => r.class_id === cls)
           .sort((a, b) => (a.cls_pos ?? 99) - (b.cls_pos ?? 99))
         if (!rows.length) return null
+        // fastest lap in class (F1-style highlight)
+        let flId: string | null = null
+        let flSec = Infinity
+        for (const r of rows) {
+          const s = lapToSeconds(r.best_lap)
+          if (s != null && s < flSec) { flSec = s; flId = r.id }
+        }
         return (
           <div key={cls}>
             <div className="mb-3 flex items-center gap-2.5">
@@ -108,7 +116,18 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
                       <td className="px-4 py-3 font-semibold"><DriverName text={r.drivers_text} /></td>
                       <td className="tabular px-4 py-3 text-center">{r.grid ?? '—'}</td>
                       <td className="tabular px-4 py-3 text-center">{r.laps ?? '—'}</td>
-                      <td className="tabular px-4 py-3">{r.best_lap ?? '—'}</td>
+                      <td className="tabular px-4 py-3">
+                        {r.best_lap ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className={r.id === flId ? 'font-bold text-[var(--color-brand-deep)]' : ''}>{r.best_lap}</span>
+                            {r.id === flId && (
+                              <span className="rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-black" title="Fastest lap in class">FL</span>
+                            )}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                       <td className="tabular px-4 py-3 text-center">{r.inc ?? '—'}</td>
                       <td className="px-4 py-3">
                         <span className={r.status === 'DNF' ? 'font-semibold text-[var(--color-red)]' : 'text-[var(--color-muted)]'}>

@@ -95,6 +95,7 @@ function StandingsTable({
   if (!data.length) {
     return <p className="text-[var(--color-muted)]">No results scored yet this season.</p>
   }
+  const leaderPts = data[0]?.points ?? 0
 
   return (
     <div className="shadow-card overflow-x-auto rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
@@ -108,6 +109,7 @@ function StandingsTable({
             <th className="px-5 py-3.5 text-center">Wins</th>
             <th className="px-5 py-3.5 text-center">Pod</th>
             <th className="px-5 py-3.5 text-right">Pts</th>
+            <th className="hidden px-5 py-3.5 text-right sm:table-cell">Gap</th>
           </tr>
         </thead>
         <tbody>
@@ -143,6 +145,9 @@ function StandingsTable({
                 <td className="tabular px-5 py-3.5 text-center">{r.podiums || '—'}</td>
                 <td className="tabular px-5 py-3.5 text-right text-lg font-bold">
                   <CountUp value={r.points} />
+                </td>
+                <td className="tabular hidden px-5 py-3.5 text-right text-[var(--color-faint)] sm:table-cell">
+                  {i === 0 ? '—' : `−${leaderPts - r.points}`}
                 </td>
               </tr>
             )

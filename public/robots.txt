@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+Disallow: /commissioner
+Disallow: /manager
+Disallow: /account
+Disallow: /login
+
+Sitemap: https://hcrleague.com/sitemap.xml
