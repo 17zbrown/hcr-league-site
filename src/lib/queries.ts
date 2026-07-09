@@ -220,6 +220,20 @@ export function useResults(eventId?: string) {
 }
 
 /** Every result row for a season (via inner join on events). Used for standings. */
+/** Minimal result columns across ALL seasons, for career license computation. */
+export function useLicenseResults() {
+  return useQuery({
+    queryKey: ['results', 'license'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('results')
+        .select('drivers_text, cls_pos, quali_pos, grid, inc, laps, status')
+      if (error) throw error
+      return data ?? []
+    },
+  })
+}
+
 export function useSeasonResults(seasonId?: string) {
   return useQuery({
     enabled: !!seasonId,

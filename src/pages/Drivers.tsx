@@ -1,10 +1,22 @@
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useDrivers } from '../lib/queries'
+import { useDrivers, useLicenseResults } from '../lib/queries'
+import { computeLicense, resultsForDriver, type LicenseInfo } from '../lib/license'
 import { ClassChip, Section, Skeleton } from '../components/ui'
+import { LicenseBadge } from '../components/LicenseBadge'
 import { Reveal } from '../components/motion'
 
 export default function Drivers() {
   const { data: drivers, isLoading } = useDrivers()
+  const { data: licenseResults } = useLicenseResults()
+
+  const licenseByDriver = useMemo(() => {
+    const map: Record<string, LicenseInfo> = {}
+    for (const d of drivers ?? []) {
+      map[d.id] = computeLicense(resultsForDriver(licenseResults ?? [], d.name), d.license_override)
+    }
+    return map
+  }, [drivers, licenseResults])
 
   return (
     <Section eyebrow={`${drivers?.length ?? 0} registered`} title="Drivers" titleTag="h1">
@@ -27,7 +39,10 @@ export default function Drivers() {
                     <span className="truncate font-display text-2xl font-extrabold uppercase leading-none">{d.name}</span>
                     {d.country && <span className="text-lg leading-none">{d.country}</span>}
                   </div>
-                  <div className="mt-1.5 truncate text-sm text-[var(--color-muted)]">{d.team?.name ?? 'Free agent'}</div>
+                  <div className="mt-1.5 flex items-center gap-2 truncate text-sm text-[var(--color-muted)]">
+                    <span className="truncate">{d.team?.name ?? 'Free agent'}</span>
+                    {licenseByDriver[d.id] && <LicenseBadge tier={licenseByDriver[d.id].effective} size="xs" />}
+                  </div>
                 </div>
                 {d.team?.class_id && <ClassChip classId={d.team.class_id} />}
               </Link>

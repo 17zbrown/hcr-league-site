@@ -1,9 +1,11 @@
 import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { useClasses, useCurrentSeason, useDrivers, useSeasonResultsFull } from '../lib/queries'
+import { useClasses, useCurrentSeason, useDrivers, useLicenseResults, useSeasonResultsFull } from '../lib/queries'
 import { computeEntityStats } from '../lib/profileStats'
+import { computeLicense, resultsForDriver } from '../lib/license'
 import { classColor } from '../lib/format'
 import { Skeleton } from '../components/ui'
+import { LicenseBadge, LicenseProgress } from '../components/LicenseBadge'
 import { TeamLink } from '../components/links'
 import { Reveal } from '../components/motion'
 import type { RaceResult } from '../lib/types'
@@ -14,6 +16,7 @@ export default function DriverProfile() {
   const { data: classes } = useClasses()
   const { data: season } = useCurrentSeason()
   const { data: results } = useSeasonResultsFull(season?.id)
+  const { data: licenseResults } = useLicenseResults()
 
   const driver = drivers?.find((d) => d.id === id)
 
@@ -26,6 +29,11 @@ export default function DriverProfile() {
   }, [driver, results])
 
   const stats = useMemo(() => computeEntityStats(rows as RaceResult[]), [rows])
+
+  const license = useMemo(() => {
+    if (!driver) return null
+    return computeLicense(resultsForDriver(licenseResults ?? [], driver.name), driver.license_override)
+  }, [driver, licenseResults])
 
   if (isLoading) {
     return <div className="container-hcr py-16"><Skeleton className="h-96 w-full" /></div>
@@ -73,11 +81,7 @@ export default function DriverProfile() {
                   {cls}
                 </span>
               )}
-              {driver.license_override && (
-                <span className="rounded-full bg-[var(--color-mist)] px-2.5 py-1 font-mono text-xs uppercase text-[var(--color-ink-2)]">
-                  {driver.license_override}
-                </span>
-              )}
+              {license && <LicenseBadge tier={license.effective} title={license.isOverride ? 'Set by commissioner' : `${license.credits} license credits`} />}
               {driver.irating != null && <span className="tabular text-sm">iR {driver.irating}</span>}
             </div>
           </div>
@@ -96,6 +100,12 @@ export default function DriverProfile() {
           ['Points', stats.points],
         ]}
       />
+
+      {license && (
+        <div className="mt-4 max-w-md">
+          <LicenseProgress info={license} />
+        </div>
+      )}
 
       <ResultsTable rows={rows} classes={classes} emptyLabel={`No scored results yet for ${driver.name}.`} />
     </div>

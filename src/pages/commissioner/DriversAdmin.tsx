@@ -1,15 +1,18 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
-import { useDrivers, useTeams } from '../../lib/queries'
+import { useDrivers, useLicenseResults, useTeams } from '../../lib/queries'
+import { computeLicense, resultsForDriver } from '../../lib/license'
 import type { Driver, Team } from '../../lib/types'
 import { Skeleton } from '../../components/ui'
+import { LicenseBadge } from '../../components/LicenseBadge'
 
 const CATS = ['', 'Bronze', 'Silver', 'Gold', 'Platinum']
 
 export default function DriversAdmin() {
   const qc = useQueryClient()
   const { data: drivers, isLoading } = useDrivers()
+  const { data: licenseResults } = useLicenseResults()
   const { data: teams } = useTeams()
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['drivers'] })
@@ -29,16 +32,26 @@ export default function DriversAdmin() {
         <h2 className="text-3xl">Drivers</h2>
         <button onClick={addDriver} className="hcr-btn hcr-btn-primary !py-2 !text-xs">+ Add Driver</button>
       </div>
+      <p className="mb-4 text-sm text-[var(--color-muted)]">
+        Licenses are computed automatically from race results. Leave a driver on <strong>Auto</strong>
+        {' '}to use the earned tier (shown in each row), or pick a tier to override it for special cases.
+      </p>
       <div className="space-y-2">
         {(drivers ?? []).map((d) => (
-          <DriverRow key={d.id} driver={d} teams={teams ?? []} onChange={invalidate} />
+          <DriverRow
+            key={d.id}
+            driver={d}
+            teams={teams ?? []}
+            computed={computeLicense(resultsForDriver(licenseResults ?? [], d.name), null).computed}
+            onChange={invalidate}
+          />
         ))}
       </div>
     </div>
   )
 }
 
-function DriverRow({ driver, teams, onChange }: { driver: Driver; teams: Team[]; onChange: () => void }) {
+function DriverRow({ driver, teams, computed, onChange }: { driver: Driver; teams: Team[]; computed: import('../../lib/license').License; onChange: () => void }) {
   const [name, setName] = useState(driver.name)
   const [country, setCountry] = useState(driver.country ?? '')
   const [irating, setIrating] = useState(driver.irating?.toString() ?? '')
@@ -78,7 +91,7 @@ function DriverRow({ driver, teams, onChange }: { driver: Driver; teams: Team[];
   }
 
   return (
-    <div className="grid items-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-3 md:grid-cols-[1.4fr_60px_90px_1.4fr_110px_auto_auto]">
+    <div className="grid items-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-3 md:grid-cols-[1.4fr_60px_90px_1.4fr_150px_88px_auto_auto]">
       <input className="hcr-input !py-2" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" />
       <input className="hcr-input !py-2 text-center" value={country} onChange={(e) => setCountry(e.target.value)} placeholder="🏳️" aria-label="Country" />
       <input className="hcr-input !py-2 tabular" value={irating} onChange={(e) => setIrating(e.target.value)} placeholder="iR" aria-label="iRating" />
@@ -86,9 +99,13 @@ function DriverRow({ driver, teams, onChange }: { driver: Driver; teams: Team[];
         <option value="">— Free agent —</option>
         {teams.map((t) => <option key={t.id} value={t.id}>#{t.number} {t.name}</option>)}
       </select>
-      <select className="hcr-select !py-2" value={cat} onChange={(e) => setCat(e.target.value)} aria-label="Category">
-        {CATS.map((c) => <option key={c} value={c}>{c || '— Cat —'}</option>)}
+      <select className="hcr-select !py-2" value={cat} onChange={(e) => setCat(e.target.value)} aria-label="License">
+        <option value="">Auto ({computed})</option>
+        {CATS.filter(Boolean).map((c) => <option key={c} value={c}>{c} (override)</option>)}
       </select>
+      <div className="flex justify-center">
+        <LicenseBadge tier={cat ? (cat as import('../../lib/license').License) : computed} size="xs" title={cat ? 'Commissioner override' : 'Auto (earned)'} />
+      </div>
       <button onClick={save} disabled={!dirty || busy} className="hcr-btn hcr-btn-dark !py-2 !text-xs">{saved ? '✓' : 'Save'}</button>
       <button onClick={del} className="hcr-btn hcr-btn-ghost !py-2 !text-xs">Del</button>
     </div>
