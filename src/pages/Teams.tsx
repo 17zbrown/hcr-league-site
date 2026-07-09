@@ -16,7 +16,7 @@ export default function Teams() {
   }, [teams])
 
   return (
-    <Section eyebrow={`${teams?.length ?? 0} entries`} title="Teams">
+    <Section eyebrow={`${teams?.length ?? 0} entries`} title="Teams" titleTag="h1">
       {isLoading ? (
         <Skeleton className="h-96 w-full" />
       ) : (

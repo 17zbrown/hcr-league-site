@@ -108,11 +108,16 @@
     box-shadow: 0 14px 38px -14px rgba(242, 225, 20, 0.75);
   }
 
-  /* The decorative hero 3D layer must never capture clicks (R3F forces
-     pointer-events:auto on its <canvas>, so override it hard). */
-  .hero-3d-layer,
-  .hero-3d-layer * {
-    pointer-events: none !important;
+  /* Hero gradient gridline — a subtle telemetry grid that fades out via a
+     radial mask (toward the top-right, where the brand-yellow glow sits).
+     Neutral lines + the single yellow accent, per the design rules. */
+  .hero-grid {
+    background-image:
+      linear-gradient(to right, rgba(10, 12, 17, 0.055) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(10, 12, 17, 0.055) 1px, transparent 1px);
+    background-size: 46px 46px;
+    -webkit-mask-image: radial-gradient(118% 96% at 86% -6%, #000 26%, transparent 72%);
+    mask-image: radial-gradient(118% 96% at 86% -6%, #000 26%, transparent 72%);
   }
 
   /* Kinetic marquee */

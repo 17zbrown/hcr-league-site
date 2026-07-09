@@ -19,7 +19,7 @@ export default function Results() {
   const active = completed.find((e) => e.id === eventId)
 
   return (
-    <Section eyebrow={`${season?.name ?? 'Season'} · Race results`} title="Results">
+    <Section eyebrow={`${season?.name ?? 'Season'} · Race results`} title="Results" titleTag="h1">
       {completed.length === 0 ? (
         <p className="text-[var(--color-muted)]">No races have been run yet this season.</p>
       ) : (

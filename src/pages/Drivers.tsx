@@ -7,7 +7,7 @@ export default function Drivers() {
   const { data: drivers, isLoading } = useDrivers()
 
   return (
-    <Section eyebrow={`${drivers?.length ?? 0} registered`} title="Drivers">
+    <Section eyebrow={`${drivers?.length ?? 0} registered`} title="Drivers" titleTag="h1">
       {isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 9 }).map((_, i) => (

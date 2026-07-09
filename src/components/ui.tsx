@@ -22,12 +22,14 @@ export function ClassChip({ classId, size = 'sm' }: { classId: string; size?: 's
 export function Section({
   eyebrow,
   title,
+  titleTag: TitleTag = 'h2',
   action,
   children,
   className = '',
 }: {
   eyebrow?: string
   title?: ReactNode
+  titleTag?: 'h1' | 'h2'
   action?: ReactNode
   children: ReactNode
   className?: string
@@ -38,7 +40,7 @@ export function Section({
         <div className="mb-9 flex flex-wrap items-end justify-between gap-4">
           <div>
             {eyebrow && <div className="eyebrow mb-2">{eyebrow}</div>}
-            {title && <h2 className="text-4xl md:text-5xl">{title}</h2>}
+            {title && <TitleTag className="text-4xl md:text-5xl">{title}</TitleTag>}
           </div>
           {action}
         </div>

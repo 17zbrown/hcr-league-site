@@ -24,7 +24,7 @@ export default function Standings() {
   ]
 
   return (
-    <Section eyebrow={`${season?.name ?? 'Season'} · Championship`} title="Standings">
+    <Section eyebrow={`${season?.name ?? 'Season'} · Championship`} title="Standings" titleTag="h1">
       <div className="mb-8 flex flex-wrap gap-1 border-b border-[var(--color-line)]">
         {tabs.map((t) => {
           const active = tab === t.id

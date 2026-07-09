@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useReducedMotion } from 'framer-motion'
 import { useClasses, useCurrentSeason, useEvents, useSeasonResults, useTeams } from '../lib/queries'
@@ -6,11 +6,8 @@ import { computeStandings } from '../lib/standings'
 import { CLASS_ORDER, classColor, fmtDateLong } from '../lib/format'
 import Countdown from './Countdown'
 import { ClassChip } from './ui'
-import { SafeBoundary } from './SafeBoundary'
 import HeroVideo from './HeroVideo'
 import { DriverName } from './links'
-
-const Hero3D = lazy(() => import('./Hero3D'))
 
 interface Slide {
   key: string
@@ -198,16 +195,8 @@ export default function HeroCarousel() {
             'radial-gradient(58% 55% at 86% -8%, rgba(242,225,20,0.16), transparent 62%), radial-gradient(48% 50% at 4% 6%, rgba(47,107,255,0.08), transparent 60%)',
         }}
       />
-      {/* Subtle 3D logo, right side (desktop only) — hidden when video plays */}
-      {!videoActive && (
-        <div className="hero-3d-layer pointer-events-none absolute right-0 top-0 hidden h-full w-[58%] opacity-[0.65] md:block">
-          <SafeBoundary>
-            <Suspense fallback={null}>
-              <Hero3D />
-            </Suspense>
-          </SafeBoundary>
-        </div>
-      )}
+      {/* Gradient gridline backdrop (telemetry grid) — hidden when video plays */}
+      {!videoActive && <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden="true" />}
 
       <div className="container-hcr relative py-14 md:py-20">
         <div className="relative min-h-[600px] sm:min-h-[540px] md:min-h-[460px]">

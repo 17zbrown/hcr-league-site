@@ -8,7 +8,7 @@ export default function Schedule() {
   const { data: events, isLoading } = useEvents(season?.id)
 
   return (
-    <Section eyebrow={`${season?.name ?? 'Season'} · ${events?.length ?? 0} rounds`} title="Schedule">
+    <Section eyebrow={`${season?.name ?? 'Season'} · ${events?.length ?? 0} rounds`} title="Schedule" titleTag="h1">
       {isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 6 }).map((_, i) => (
