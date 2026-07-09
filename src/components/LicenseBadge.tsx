@@ -1,4 +1,4 @@
-import { LICENSE_COLOR, type License, type LicenseInfo } from '../lib/license'
+import { LICENSE_CLASSES, LICENSE_COLOR, LICENSE_ORDER, type License, type LicenseInfo } from '../lib/license'
 
 /** Small tinted chip showing a driver's license tier. */
 export function LicenseBadge({ tier, size = 'sm', title }: { tier: License; size?: 'sm' | 'xs'; title?: string }) {
@@ -37,6 +37,37 @@ export function LicenseProgress({ info }: { info: LicenseInfo }) {
           <>Top tier reached · {info.credits} credits</>
         )}
       </div>
+
+      {/* tier ladder */}
+      <div className="mt-4 flex gap-1">
+        {LICENSE_ORDER.map((t) => {
+          const active = t === info.effective
+          const c = LICENSE_COLOR[t]
+          return (
+            <div
+              key={t}
+              className="flex-1 rounded-md py-1 text-center font-mono text-[10px] font-bold uppercase tracking-wide"
+              style={{
+                background: active ? c : 'var(--color-mist)',
+                color: active ? '#fff' : 'var(--color-faint)',
+              }}
+              title={`${t} — eligible for ${LICENSE_CLASSES[t]}`}
+            >
+              {t.slice(0, 3)}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* how credits are earned */}
+      <p className="mt-3 text-xs leading-relaxed text-[var(--color-muted)]">
+        Licenses are earned automatically from race results — every round adds credits for
+        <strong className="text-[var(--color-ink-2)]"> finishing position</strong>,
+        <strong className="text-[var(--color-ink-2)]"> pace vs. the class field</strong>,
+        <strong className="text-[var(--color-ink-2)]"> qualifying</strong> and
+        <strong className="text-[var(--color-ink-2)]"> clean, low-incident racing</strong>.
+        Climb from Bronze to Platinum over a couple of seasons of strong, safe pace.
+      </p>
     </div>
   )
 }
