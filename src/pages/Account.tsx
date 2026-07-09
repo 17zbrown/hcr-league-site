@@ -6,7 +6,6 @@ import { useCurrentSeason } from '../lib/queries'
 import type { SeasonRegistration } from '../lib/types'
 import { Section } from '../components/ui'
 
-const CATEGORIES = ['Bronze', 'Silver', 'Gold', 'Platinum']
 const CLASSES = ['GTP', 'LMP2', 'GTD']
 
 export default function Account() {
@@ -119,8 +118,9 @@ export default function Account() {
             )}
           </div>
           <p className="mt-2 text-sm text-[var(--color-muted)]">
-            Register your interest for the season. Your FIA category sets which classes you're
-            eligible for; team managers can then sign you from the free-agent pool.
+            Register your interest for the season. Every driver starts on a Bronze license and
+            earns upgrades from race results — pace, safety and finishing position. Team managers
+            can then sign you from the free-agent pool.
           </p>
 
           <form onSubmit={enter} className="mt-6 space-y-4">
@@ -157,20 +157,12 @@ export default function Account() {
                 />
               </label>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="block">
-                <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">FIA category</span>
-                <select className="hcr-select" value={category} onChange={(e) => setCategory(e.target.value)}>
-                  {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-                </select>
-              </label>
-              <label className="block">
-                <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Preferred class</span>
-                <select className="hcr-select" value={preferredClass} onChange={(e) => setPreferredClass(e.target.value)}>
-                  {CLASSES.map((c) => <option key={c}>{c}</option>)}
-                </select>
-              </label>
-            </div>
+            <label className="block">
+              <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Preferred class</span>
+              <select className="hcr-select" value={preferredClass} onChange={(e) => setPreferredClass(e.target.value)}>
+                {CLASSES.map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </label>
             <label className="block">
               <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Notes (optional)</span>
               <textarea className="hcr-textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Team preference, availability…" />

@@ -27,9 +27,10 @@ export default function SignUp() {
             <div className="eyebrow mb-5">Season registration</div>
             <h1 className="max-w-3xl text-6xl md:text-8xl">Join the grid</h1>
             <p className="mt-7 max-w-lg text-lg text-[var(--color-muted)]">
-              Create a member account, then enter the season from your account page. Your FIA
-              license category sets which classes you're eligible for — Bronze in GTD up to
-              Platinum in GTP. Team managers sign drivers from the free-agent pool.
+              Create a member account, then enter the season from your account page. Every driver
+              starts on a Bronze license and earns upgrades from race results — pace, safety and
+              finishing position — climbing from GTD up to GTP. Team managers sign drivers from the
+              free-agent pool.
             </p>
             <div className="mt-9 flex flex-wrap gap-3">
               <Link
