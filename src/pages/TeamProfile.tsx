@@ -2,11 +2,12 @@ import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useClasses, useCurrentSeason, useDrivers, useSeasonResultsFull, useTeams } from '../lib/queries'
 import { computeEntityStats } from '../lib/profileStats'
+import { resultListsDriver } from '../lib/attribution'
 import { classColor } from '../lib/format'
 import { Skeleton } from '../components/ui'
 import { Reveal } from '../components/motion'
 import { StatRow, ResultsTable } from './DriverProfile'
-import type { RaceResult } from '../lib/types'
+import type { Driver, RaceResult } from '../lib/types'
 
 export default function TeamProfile() {
   const { id } = useParams()
@@ -18,10 +19,38 @@ export default function TeamProfile() {
 
   const team = teams?.find((t) => t.id === id)
 
-  const roster = useMemo(
-    () => (drivers ?? []).filter((d) => d.team_id === id),
-    [drivers, id],
-  )
+  // Roster = drivers registered to this team, PLUS anyone who actually raced for
+  // it (from results), matched to their profile so they stay clickable. Names
+  // without a profile still show, just not as a link.
+  const roster = useMemo(() => {
+    const out: { key: string; driver?: Driver; name: string }[] = []
+    const seen = new Set<string>()
+    for (const d of drivers ?? []) {
+      if (d.team_id === id) {
+        out.push({ key: d.id, driver: d, name: d.name })
+        seen.add(d.id)
+      }
+    }
+    const racedNames = Array.from(
+      new Set((results ?? []).filter((r) => r.team_id === id).map((r) => (r.drivers_text ?? '').trim()).filter(Boolean)),
+    )
+    for (const nm of racedNames) {
+      const match = (drivers ?? []).find((d) => resultListsDriver(nm, d.name))
+      if (match) {
+        if (!seen.has(match.id)) {
+          out.push({ key: match.id, driver: match, name: match.name })
+          seen.add(match.id)
+        }
+      } else {
+        const k = 'name:' + nm.toLowerCase()
+        if (!seen.has(k)) {
+          out.push({ key: k, name: nm })
+          seen.add(k)
+        }
+      }
+    }
+    return out
+  }, [drivers, results, id])
   const rows = useMemo(() => {
     if (!results) return []
     return results
@@ -79,15 +108,22 @@ export default function TeamProfile() {
           <p className="text-[var(--color-muted)]">No drivers signed to this team yet.</p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {roster.map((d, i) => (
-              <Reveal key={d.id} delay={i * 0.04}>
-                <Link
-                  to={`/drivers/${d.id}`}
-                  className="flex items-center gap-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 transition-all hover:-translate-y-1 hover:shadow-card"
-                >
-                  <span className="font-display text-xl font-extrabold uppercase">{d.name}</span>
-                  {d.country && <span>{d.country}</span>}
-                </Link>
+            {roster.map((m, i) => (
+              <Reveal key={m.key} delay={i * 0.04}>
+                {m.driver ? (
+                  <Link
+                    to={`/drivers/${m.driver.id}`}
+                    className="flex items-center gap-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 transition-all hover:-translate-y-1 hover:shadow-card"
+                  >
+                    <span className="font-display text-xl font-extrabold uppercase">{m.driver.name}</span>
+                    {m.driver.country && <span>{m.driver.country}</span>}
+                    <span className="ml-auto text-[var(--color-faint)]" aria-hidden>→</span>
+                  </Link>
+                ) : (
+                  <div className="flex items-center gap-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4">
+                    <span className="font-display text-xl font-extrabold uppercase">{m.name}</span>
+                  </div>
+                )}
               </Reveal>
             ))}
           </div>
