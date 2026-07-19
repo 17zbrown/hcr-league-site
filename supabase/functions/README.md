@@ -2,56 +2,65 @@
 
 Serverless integration between the website and the Discord server, running as
 Supabase Edge Functions. The bot **token never touches the repo or the browser**
-— it lives only as a Supabase secret.
+— it lives only as a Supabase secret. Non-secret IDs (server, roles, channels)
+are edited in **Admin → Discord**.
 
 ## Functions
 
 | Function | What it does | Trigger |
 |---|---|---|
-| `discord-sync` | Recomputes every driver's license from results; for anyone whose tier changed, swaps their Discord license role (Bronze→Silver…) and announces promotions in `#license-ups`. | Auto after a race is saved in the commissioner portal; also a manual "Sync now". Admin-only. |
-| `discord-announce` *(next)* | Posts race podiums + updated standings to `#results` / `#standings`. | After a race import. |
+| `discord-role-sync` | Reads the signed-in user's roles in your Discord server and sets their portal access (Admin / Race Control / Member). | Automatically on Discord sign-in. |
+| `discord-sync` | Recomputes every driver's license from results, swaps their Discord license role (Bronze→Silver…) and announces promotions. | Automatically after a race is saved; admin-only. |
+| `discord-announce` *(not built yet)* | Posts race podiums + standings to `#results` / `#standings`. | After a race import. |
 
-## One-time setup (things only you can do)
+## One-time setup (only you can do these)
 
 ### 1. Create the Discord application + bot
-1. https://discord.com/developers/applications → **New Application** → name it "HCR League".
-2. **Bot** tab → **Add Bot**. Copy the **Bot Token** (you'll paste it into Supabase, step 4).
-3. **Bot** tab → enable **Server Members Intent**.
-4. **OAuth2 → URL Generator**: scopes `bot` + `applications.commands`; bot permissions
-   **Manage Roles**, **Send Messages**, **Embed Links**. Open the generated URL and invite
-   the bot to your server.
+1. https://discord.com/developers/applications → **New Application** → "HCR League".
+2. **Bot** tab → **Add Bot**, copy the **Bot Token** (step 5).
+3. **Bot** tab → enable **Server Members Intent** (required to read member roles).
+4. **OAuth2 → General**: copy the **Client ID** and **Client Secret** (step 3), and add this
+   **Redirect URL**:
+   `https://hcaduzaxviadzogmetcu.supabase.co/auth/v1/callback`
+5. **OAuth2 → URL Generator**: scopes `bot` + `applications.commands`; bot permissions
+   **Manage Roles**, **Send Messages**, **Embed Links**. Open the URL and invite the bot.
 
-### 2. Create the roles (in Discord: Server Settings → Roles)
-Create **Bronze / Silver / Gold / Platinum** (and optionally **Driver**). Then drag the
-bot's own role **above** all four license roles — Discord only lets a bot manage roles
-below its own.
+### 2. Create the roles (Server Settings → Roles)
+- Access roles: **Admin**, **Race Control**
+- License roles: **Bronze / Silver / Gold / Platinum**
 
-### 3. Collect the IDs (enable Developer Mode → right-click → Copy ID)
-- The **Server (guild) ID**
-- Each **role ID** (Bronze/Silver/Gold/Platinum/Driver)
-- The **channel IDs** for `#results`, `#standings`, `#license-ups`, `#race-week`, `#signups-feed`
+Then drag the **bot's own role above all of them** — Discord won't let a bot manage roles
+positioned above its own.
 
-Put these in the `discord_config` row (a Discord settings tab in the commissioner portal
-edits this — or update the row directly). Set `enabled = true` when ready.
+### 3. Turn on Discord login in Supabase
+Supabase dashboard → **Authentication → Providers → Discord** → enable, paste the
+**Client ID** and **Client Secret** from step 1. Under **URL Configuration**, make sure
+`https://hcrleague.com` is in the allowed redirect list.
 
-### 4. Add the secret + deploy
+### 4. Fill in the IDs on the site
+Enable Discord **Developer Mode** (User Settings → Advanced), then right-click to
+**Copy ID** for the server, each role and each channel. Paste them into
+**Admin → Discord**, tick **Enabled**, and save.
+
+### 5. Add the bot token + deploy
 ```bash
-# from the repo root, with the Supabase CLI linked to the project
 supabase secrets set DISCORD_BOT_TOKEN=your-bot-token-here
+supabase functions deploy discord-role-sync
 supabase functions deploy discord-sync
 ```
-`SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` are injected
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected
 automatically — don't set them.
 
-### 5. Link drivers to Discord
-Role-swaps target a driver's `drivers.discord_user_id`. Members can add their Discord ID
-on their account page (or the commissioner sets it). Announcements work without it; only
-the automatic role-swap needs it.
+### 6. Verify, then (optionally) retire email login
+1. Sign in with Discord in a private window.
+2. Confirm you land in the **Admin** portal (your Discord Admin role mapped through).
+3. Only once that works, remove the email/password form from `src/pages/Login.tsx`.
 
-## How it runs
-- Save a race → `discord-sync` recomputes licenses, updates `drivers.license_current`,
-  swaps roles for linked drivers, and posts promotions.
-- First sync just initialises everyone's `license_current` and roles **without** spamming
-  announcements (only genuine tier *increases* are announced afterward).
-- The whole thing is a no-op while `discord_config.enabled = false`, so nothing breaks
-  before setup is finished.
+> **Don't skip step 6.** Until Discord sign-in is proven to grant you admin, email/password
+> is your only way into the Admin portal. Removing it early locks you out of your own site.
+
+## How access is decided
+On each Discord sign-in, `discord-role-sync` looks up the member in your server and maps:
+**Admin role → `admin`**, **Race Control role → `race_control`**, otherwise **`member`**
+(highest wins). Anyone not in the server is refused. Roles can still be set by hand in
+**Admin → Members**, which is the fallback whenever the integration is off.

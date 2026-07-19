@@ -7,6 +7,7 @@ import DriversAdmin from './DriversAdmin'
 import ScheduleAdmin from './ScheduleAdmin'
 import ResultsAdmin from './ResultsAdmin'
 import LeagueInfo from './LeagueInfo'
+import DiscordSettings from './DiscordSettings'
 
 const TABS = [
   { id: 'overview', label: 'Overview', el: <Overview /> },
@@ -17,6 +18,7 @@ const TABS = [
   { id: 'schedule', label: 'Schedule', el: <ScheduleAdmin /> },
   { id: 'results', label: 'Import Results', el: <ResultsAdmin /> },
   { id: 'info', label: 'League Info', el: <LeagueInfo /> },
+  { id: 'discord', label: 'Discord', el: <DiscordSettings /> },
 ]
 
 export default function CommissionerPortal() {

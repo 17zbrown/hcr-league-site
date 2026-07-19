@@ -45,9 +45,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     })
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, next) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, next) => {
       setSession(next)
       if (next?.user) {
+        // On a fresh Discord sign-in, resolve portal access from server roles
+        // before we read the profile. No-op unless the integration is configured.
+        const viaDiscord = (next.user.identities ?? []).some((i) => i.provider === 'discord')
+        if (event === 'SIGNED_IN' && viaDiscord) {
+          try {
+            await supabase.functions.invoke('discord-role-sync')
+          } catch {
+            /* non-fatal — fall back to whatever role is already stored */
+          }
+        }
         setProfile(await fetchProfile(next.user.id))
       } else {
         setProfile(null)
