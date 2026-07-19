@@ -88,7 +88,7 @@ export default function Home() {
                       {rows.map((row, i) => (
                         <li key={row.key} className="flex items-center gap-3 border-b border-[var(--color-line)] px-5 py-3.5 last:border-0">
                           <span className={`tabular w-6 text-lg font-bold ${i === 0 ? 'text-[var(--color-ink)]' : 'text-[var(--color-faint)]'}`}>{i + 1}</span>
-                          <span className="flex-1 truncate font-semibold">{row.name}</span>
+                          <span className="min-w-0 flex-1 truncate font-semibold"><DriverName text={row.name} /></span>
                           {row.wins > 0 && <span className="tabular text-xs text-[var(--color-muted)]">{row.wins}W</span>}
                           <span className="tabular w-14 text-right text-lg font-bold"><CountUp value={row.points} /></span>
                         </li>
@@ -119,7 +119,7 @@ export default function Home() {
             return (
               <Link
                 key={e.id}
-                to="/schedule"
+                to={`/schedule/${e.id}`}
                 className={`group relative w-max min-w-[230px] shrink-0 snap-start rounded-2xl border p-5 transition-all hover:-translate-y-1 ${
                   isNext ? 'border-[var(--color-brand)] bg-[var(--color-cloud)] shadow-card' : 'border-[var(--color-line)] bg-[var(--color-paper)] hover:shadow-card'
                 } ${done ? 'opacity-60' : ''}`}
@@ -203,7 +203,7 @@ function LatestByClass({ eventId }: { eventId: string }) {
                       </div>
                     </div>
                     <span className="tabular w-12 text-right text-lg font-bold">
-                      <CountUp value={(r.points ?? 0) + (r.quali_points ?? 0)} />
+                      <CountUp value={(r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)} />
                     </span>
                   </li>
                 ))}

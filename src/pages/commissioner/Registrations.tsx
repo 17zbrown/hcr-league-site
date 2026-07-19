@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useCurrentSeason, useRegistrations } from '../../lib/queries'
@@ -11,9 +12,12 @@ export default function Registrations() {
   const { data: season } = useCurrentSeason()
   const { data: regs, isLoading } = useRegistrations(season?.id)
 
+  const [err, setErr] = useState<string | null>(null)
   const setStatus = async (id: string, status: string) => {
+    setErr(null)
     const { error } = await supabase.from('season_registrations').update({ status }).eq('id', id)
-    if (!error) qc.invalidateQueries({ queryKey: ['registrations'] })
+    if (error) setErr(error.message)
+    else qc.invalidateQueries({ queryKey: ['registrations'] })
   }
 
   if (isLoading) return <Skeleton className="h-96 w-full" />
@@ -25,6 +29,8 @@ export default function Registrations() {
         Everyone who has entered {season?.name ?? 'the season'}. Confirm entries and track who's
         been placed on the grid.
       </p>
+
+      {err && <p className="mb-4 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">{err}</p>}
 
       {(!regs || regs.length === 0) ? (
         <p className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 text-sm text-[var(--color-muted)]">
@@ -61,7 +67,15 @@ export default function Registrations() {
                   </td>
                   <td className="px-4 py-3 text-[var(--color-muted)]">{r.driver?.team_id ? 'Yes' : 'Free agent'}</td>
                   <td className="px-4 py-3">
-                    <select className="hcr-select !py-1.5 !text-xs" value={r.status} onChange={(e) => setStatus(r.id, e.target.value)}>
+                    <select
+                      className="hcr-select !py-1.5 !text-xs"
+                      value={r.status}
+                      onChange={(e) => {
+                        const next = e.target.value
+                        if (next === 'declined' && !confirm(`Decline ${r.driver?.name ?? r.display_name ?? 'this entry'}?`)) return
+                        setStatus(r.id, next)
+                      }}
+                    >
                       {STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </td>

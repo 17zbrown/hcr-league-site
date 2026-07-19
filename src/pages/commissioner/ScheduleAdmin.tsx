@@ -37,23 +37,28 @@ function EventRow({ event, onChange }: { event: RaceEvent; onChange: () => void 
   const [status, setStatus] = useState(event.status)
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
 
   const dirty = name !== (event.name ?? '') || date !== (event.date ?? '').slice(0, 10) || status !== event.status
 
   const save = async () => {
+    if (!date) { setErr('Pick a date before saving.'); return }
     setBusy(true)
-    await supabase
+    setErr(null)
+    const { error } = await supabase
       .from('events')
       .update({ name, date: `${date}T00:00:00Z`, status })
       .eq('id', event.id)
     setBusy(false)
+    if (error) { setErr(error.message); return }
     setSaved(true)
     setTimeout(() => setSaved(false), 1500)
     onChange()
   }
 
   return (
-    <div className="grid items-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-3 md:grid-cols-[46px_1.7fr_150px_130px_auto]">
+    <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-3">
+    <div className="grid items-center gap-2 md:grid-cols-[46px_1.7fr_150px_130px_auto]">
       <div className="tabular text-center font-display text-2xl font-extrabold text-[var(--color-faint)]">{event.round}</div>
       <input className="hcr-input !py-2" value={name} onChange={(e) => setName(e.target.value)} placeholder={event.track?.name} aria-label="Event name" />
       <input className="hcr-input !py-2 tabular" type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
@@ -61,6 +66,8 @@ function EventRow({ event, onChange }: { event: RaceEvent; onChange: () => void 
         {STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
       </select>
       <button onClick={save} disabled={!dirty || busy} className="hcr-btn hcr-btn-dark !py-2 !text-xs">{saved ? '✓' : 'Save'}</button>
+    </div>
+    {err && <p className="mt-2 text-xs text-[var(--color-red)]">{err}</p>}
     </div>
   )
 }

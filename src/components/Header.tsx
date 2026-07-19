@@ -44,7 +44,7 @@ export default function Header() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 border-b border-[var(--color-line)] bg-[var(--color-paper)]/85 backdrop-blur-md">
+      <header className="sticky top-0 z-50 border-b border-[var(--color-line)] bg-[var(--color-paper)]">
         <div className="container-hcr flex h-[72px] items-center justify-between gap-4">
           <Wordmark />
 

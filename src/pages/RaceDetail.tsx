@@ -278,7 +278,7 @@ export default function RaceDetail() {
                       <span className="font-display text-xl font-extrabold uppercase">{w.class_id}</span>
                     </div>
                     <div className="mt-2 font-semibold"><DriverName text={w.drivers_text} /></div>
-                    <div className="tabular mt-0.5 text-sm text-[var(--color-muted)]">#{w.number} · {w.best_lap ?? ''}</div>
+                    <div className="tabular mt-0.5 text-sm text-[var(--color-muted)]">#{w.number}{w.best_lap ? ` · ${w.best_lap}` : ''}</div>
                   </div>
                 )
               })}
@@ -290,7 +290,7 @@ export default function RaceDetail() {
               {done && winners.length > 0 && <div className="eyebrow">Previous editions</div>}
               {history.map((h) => (
                 <div key={h.round} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-4">
-                  <div className="tabular text-xs text-[var(--color-muted)]">Round {h.round} · {h.name}</div>
+                  <div className="tabular text-xs text-[var(--color-muted)]">Round {h.round}{h.name ? ` · ${h.name}` : ''}</div>
                   <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
                     {(h.rows ?? []).sort((a, b) => CLASS_ORDER.indexOf(a.class_id) - CLASS_ORDER.indexOf(b.class_id)).map((w) => (
                       <span key={w.id} className="text-sm">

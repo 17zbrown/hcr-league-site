@@ -16,14 +16,14 @@
   --color-ink: #0a0c11; /* primary text + dark surfaces */
   --color-ink-2: #2c3340; /* secondary text */
   --color-muted: #6b7280; /* muted text */
-  --color-faint: #767d89; /* darkened for legibility (was #9aa1ad, ~2.6:1 on white) */
+  --color-faint: #656b75; /* passes AA (~4.6:1) even on small caption text */
 
   /* Brand + vibrant accents */
   --color-brand: #f2e114; /* HCR yellow */
   --color-brand-deep: #97890a; /* yellow legible on white */
   --color-blue: #2f6bff;
   --color-green: #12b981;
-  --color-red: #ff3b47;
+  --color-red: #cf2130; /* darkened to pass AA as text on white */
 
   /* Type */
   --font-display: 'Archivo', system-ui, sans-serif;
@@ -171,6 +171,7 @@
     gap: 0.5rem;
     border-radius: 10px;
     padding: 0.6rem 1.1rem;
+    min-height: 2.75rem; /* 44px touch target */
     font-weight: 700;
     font-size: 0.85rem;
     letter-spacing: 0.02em;

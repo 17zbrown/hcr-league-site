@@ -112,7 +112,19 @@ export default function Account() {
           <div className="flex items-center justify-between">
             <h2 className="text-3xl">Enter {season?.name ?? 'the Season'}</h2>
             {!loading && reg && (
-              <span className="rounded-full bg-[var(--color-green)]/15 px-3 py-1 text-xs font-bold uppercase text-[var(--color-green)]">
+              <span
+                className="rounded-full px-3 py-1 text-xs font-bold uppercase"
+                style={{
+                  background:
+                    reg.status === 'declined' ? 'rgba(220,53,69,0.12)'
+                    : reg.status === 'pending' ? 'var(--color-mist)'
+                    : 'rgba(18,157,111,0.14)',
+                  color:
+                    reg.status === 'declined' ? '#c0392b'
+                    : reg.status === 'pending' ? 'var(--color-ink-2)'
+                    : '#0f8f66',
+                }}
+              >
                 {reg.status}
               </span>
             )}

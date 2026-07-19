@@ -67,10 +67,11 @@ export default function DriverProfile() {
             {driver.team?.number ?? driver.name.slice(0, 1)}
           </div>
           <div>
-            <h1 className="text-5xl md:text-6xl">
-              {driver.name} {driver.country && <span className="align-middle text-3xl">{driver.country}</span>}
-            </h1>
+            <h1 className="text-5xl md:text-6xl">{driver.name}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-3 text-[var(--color-muted)]">
+              {driver.country && (
+                <span className="text-xl leading-none" role="img" aria-label="Nationality">{driver.country}</span>
+              )}
               {driver.team && (
                 <TeamLink teamId={driver.team.id} className="font-semibold text-[var(--color-ink-2)]">
                   {driver.team.name}
@@ -182,7 +183,7 @@ export function ResultsTable({
                       {r.status ?? '—'}
                     </span>
                   </td>
-                  <td className="tabular px-4 py-3 text-right font-bold">{(r.points ?? 0) + (r.quali_points ?? 0)}</td>
+                  <td className="tabular px-4 py-3 text-right font-bold">{(r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)}</td>
                 </tr>
               )
             })}

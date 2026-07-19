@@ -60,6 +60,7 @@ function DriverRow({ driver, teams, computed, onChange }: { driver: Driver; team
   const [cat, setCat] = useState(driver.license_override ?? '')
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
 
   const dirty =
     name !== driver.name ||
@@ -70,7 +71,8 @@ function DriverRow({ driver, teams, computed, onChange }: { driver: Driver; team
 
   const save = async () => {
     setBusy(true)
-    await supabase
+    setErr(null)
+    const { error } = await supabase
       .from('drivers')
       .update({
         name,
@@ -81,18 +83,24 @@ function DriverRow({ driver, teams, computed, onChange }: { driver: Driver; team
       })
       .eq('id', driver.id)
     setBusy(false)
+    if (error) {
+      setErr(error.message)
+      return
+    }
     setSaved(true)
     setTimeout(() => setSaved(false), 1500)
     onChange()
   }
   const del = async () => {
     if (!confirm(`Delete driver "${driver.name}"?`)) return
-    await supabase.from('drivers').delete().eq('id', driver.id)
+    const { error } = await supabase.from('drivers').delete().eq('id', driver.id)
+    if (error) { setErr(error.message); return }
     onChange()
   }
 
   return (
-    <div className="grid items-center gap-2 rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-3 md:grid-cols-[1.4fr_60px_90px_1.4fr_150px_88px_auto_auto]">
+    <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-3">
+    <div className="grid items-center gap-2 md:grid-cols-[1.4fr_60px_90px_1.4fr_150px_88px_auto_auto]">
       <input className="hcr-input !py-2" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" />
       <input className="hcr-input !py-2 text-center" value={country} onChange={(e) => setCountry(e.target.value)} placeholder="🏳️" aria-label="Country" />
       <input className="hcr-input !py-2 tabular" value={irating} onChange={(e) => setIrating(e.target.value)} placeholder="iR" aria-label="iRating" />
@@ -109,6 +117,8 @@ function DriverRow({ driver, teams, computed, onChange }: { driver: Driver; team
       </div>
       <button onClick={save} disabled={!dirty || busy} className="hcr-btn hcr-btn-dark !py-2 !text-xs">{saved ? '✓' : 'Save'}</button>
       <button onClick={del} className="hcr-btn hcr-btn-ghost !py-2 !text-xs">Del</button>
+    </div>
+    {err && <p className="mt-2 text-xs text-[var(--color-red)]">{err}</p>}
     </div>
   )
 }

@@ -23,11 +23,11 @@ export default function ManagerPortal() {
     [drivers, profile?.managed_team_id],
   )
 
-  // Free-agent market: registered this season, not yet on a team.
+  // Free-agent market: approved this season, not yet on a team.
   const market = useMemo(
     () =>
       (registrations ?? []).filter(
-        (r: any) => r.driver && r.driver.team_id == null,
+        (r: any) => r.driver && r.driver.team_id == null && ['approved', 'rostered'].includes(r.status),
       ),
     [registrations],
   )
@@ -53,6 +53,7 @@ export default function ManagerPortal() {
   }
 
   const release = async (driverId: string) => {
+    if (!confirm('Release this driver from your team?')) return
     setBusyId(driverId)
     setError(null)
     const { error } = await supabase.rpc('release_driver', { p_driver_id: driverId })

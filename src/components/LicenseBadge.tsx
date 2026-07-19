@@ -6,8 +6,8 @@ export function LicenseBadge({ tier, size = 'sm', title }: { tier: License; size
   const pad = size === 'xs' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs'
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full font-mono font-bold uppercase tracking-wider ${pad}`}
-      style={{ background: `${color}1f`, color }}
+      className={`inline-flex items-center gap-1.5 rounded-full font-mono font-bold uppercase tracking-wider text-[var(--color-ink-2)] ${pad}`}
+      style={{ background: `${color}22` }}
       title={title}
     >
       <span className="h-2 w-2 rounded-full" style={{ background: color }} />

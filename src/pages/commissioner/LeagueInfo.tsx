@@ -13,6 +13,7 @@ export default function LeagueInfo() {
   })
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
 
   useEffect(() => {
     if (settings) {
@@ -32,8 +33,10 @@ export default function LeagueInfo() {
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true)
-    await supabase.from('league_settings').update(form).eq('id', settings!.id)
+    setErr(null)
+    const { error } = await supabase.from('league_settings').update(form).eq('id', settings!.id)
     setBusy(false)
+    if (error) { setErr(error.message); return }
     setSaved(true)
     setTimeout(() => setSaved(false), 1600)
     qc.invalidateQueries({ queryKey: ['league_settings'] })
@@ -58,6 +61,7 @@ export default function LeagueInfo() {
         {field('discord_url', 'Discord URL')}
         {field('broadcast_url', 'Broadcast URL')}
         {field('rulebook_url', 'Rulebook URL')}
+        {err && <p className="text-sm text-[var(--color-red)]">{err}</p>}
         <button type="submit" disabled={busy} className="hcr-btn hcr-btn-primary">
           {busy ? 'Saving…' : saved ? 'Saved ✓' : 'Save Changes'}
         </button>

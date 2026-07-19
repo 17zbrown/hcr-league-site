@@ -3,8 +3,8 @@ import type { ClassId, LeagueClass } from './types'
 /** Fallback class colors if the DB hasn't loaded yet. Mirrors classes.color. */
 export const CLASS_FALLBACK: Record<string, string> = {
   GTP: '#f2e114',
-  LMP2: '#4F8DF0',
-  GTD: '#4ADE80',
+  LMP2: '#2f6bff',
+  GTD: '#12b981',
 }
 
 export function classColor(classId: string, classes?: LeagueClass[]): string {

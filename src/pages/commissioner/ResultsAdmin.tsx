@@ -102,26 +102,25 @@ export default function ResultsAdmin() {
     const teamByNumber = new Map((teams ?? []).map((t) => [t.number, t.id]))
     const inserts = clean.map((r) => toResultInsert(r, eventId, teamByNumber))
 
-    const del = await supabase.from('results').delete().eq('event_id', eventId)
-    if (del.error) {
-      setError(del.error.message)
+    // Atomic replace: delete + insert + mark complete run in one transaction,
+    // so a failed insert can never leave the round with no results.
+    const { data: saved, error: rpcErr } = await supabase.rpc('replace_event_results', {
+      p_event_id: eventId,
+      p_rows: inserts,
+    })
+    if (rpcErr) {
+      setError(rpcErr.message)
       setBusy(false)
       return
     }
-    const ins = await supabase.from('results').insert(inserts)
-    if (ins.error) {
-      setError(ins.error.message)
-      setBusy(false)
-      return
-    }
-    await supabase.from('events').update({ status: 'complete' }).eq('id', eventId)
     qc.invalidateQueries({ queryKey: ['results'] })
     qc.invalidateQueries({ queryKey: ['events'] })
     qc.invalidateQueries({ queryKey: ['drivers'] })
     // Push any license/role changes to Discord (no-op if the integration is off).
     supabase.functions.invoke('discord-sync').catch(() => {})
-    setNote(`Saved ${inserts.length} results. Standings updated.`)
+    setNote(`Saved ${saved ?? inserts.length} results. Standings updated.`)
     setRows([])
+    if (fileRef.current) fileRef.current.value = '' // allow re-uploading the same file
     setBusy(false)
   }
 

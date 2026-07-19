@@ -157,7 +157,7 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
                           {r.status ?? '—'}
                         </span>
                       </td>
-                      <td className="tabular px-4 py-3 text-right font-bold">{(r.points ?? 0) + (r.quali_points ?? 0)}</td>
+                      <td className="tabular px-4 py-3 text-right font-bold">{(r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)}</td>
                     </tr>
                     )
                   })}

@@ -53,7 +53,7 @@ export default function HeroCarousel() {
                 <Link to="/schedule" className="rounded-xl bg-[var(--color-ink)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-1">Schedule</Link>
               </div>
             </div>
-            <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]/90 p-6 shadow-card backdrop-blur-sm">
+            <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 shadow-card">
               <div className="mb-4 flex items-center justify-between">
                 <span className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-blue)]">Green flag in</span>
                 <div className="flex gap-2">
@@ -78,7 +78,7 @@ export default function HeroCarousel() {
             <h1 className="text-5xl leading-[0.9] sm:text-6xl md:text-7xl">Drivers<br />on a roll</h1>
             <div className="mt-8 grid gap-3 sm:grid-cols-3">
               {leaders.map(({ cls, row }) => (
-                <div key={cls} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]/90 p-5 backdrop-blur-sm">
+                <div key={cls} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5 shadow-card">
                   <ClassChip classId={cls} />
                   <div className="mt-3 font-display text-2xl font-extrabold uppercase leading-tight">
                     <DriverName text={row!.name} />
@@ -113,9 +113,9 @@ export default function HeroCarousel() {
               <Link to="/results" className="mt-8 inline-block rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1 shadow-glow">Race Results</Link>
             </div>
             <div className="hidden md:block">
-              <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]/90 p-8 text-center shadow-card backdrop-blur-sm">
-                <div className="font-display text-[9rem] font-extrabold leading-none text-[var(--color-brand)]">1</div>
-                <div className="font-mono text-xs uppercase tracking-widest text-[var(--color-muted)]">Overall Victory</div>
+              <div className="rounded-2xl bg-[var(--color-ink)] p-8 text-center shadow-card">
+                <div className="font-display text-[7rem] font-extrabold leading-none text-[var(--color-brand)]">P1</div>
+                <div className="mt-2 font-mono text-xs uppercase tracking-widest text-white/60">Overall Victory</div>
               </div>
             </div>
           </div>
