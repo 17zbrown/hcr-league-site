@@ -7,9 +7,14 @@ interface AuthState {
   session: Session | null
   profile: Profile | null
   loading: boolean
+  /** 'member' | 'race_control' | 'admin' — drives which portal a user can reach. */
+  role: 'member' | 'race_control' | 'admin'
   isAdmin: boolean
+  /** Race control OR admin (admins can do everything race control can). */
+  isRaceControl: boolean
   isManager: boolean
   signIn: (email: string, password: string) => Promise<void>
+  signInWithDiscord: () => Promise<void>
   signUp: (email: string, password: string, displayName: string) => Promise<{ needsConfirm: boolean }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
@@ -59,6 +64,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error
   }
 
+  /** Discord OAuth — roles are read from your Discord server on sign-in. */
+  const signInWithDiscord = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'discord',
+      options: {
+        redirectTo: `${window.location.origin}/portal`,
+        scopes: 'identify guilds guilds.members.read',
+      },
+    })
+    if (error) throw error
+  }
+
   const signUp = async (email: string, password: string, displayName: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
@@ -79,13 +96,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (session?.user) setProfile(await fetchProfile(session.user.id))
   }
 
+  const role = (profile?.role ?? 'member') as 'member' | 'race_control' | 'admin'
+  const isAdmin = role === 'admin' || !!profile?.is_admin
+
   const value: AuthState = {
     session,
     profile,
     loading,
-    isAdmin: !!profile?.is_admin,
+    role,
+    isAdmin,
+    isRaceControl: isAdmin || role === 'race_control',
     isManager: !!profile?.is_team_manager,
     signIn,
+    signInWithDiscord,
     signUp,
     signOut,
     refreshProfile,

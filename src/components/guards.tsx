@@ -27,6 +27,16 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
+/** Race control OR admin. */
+export function RequireRaceControl({ children }: { children: ReactNode }) {
+  const { session, isRaceControl, loading } = useAuth()
+  const location = useLocation()
+  if (loading) return <Loading />
+  if (!session) return <Navigate to="/login" state={{ from: location.pathname }} replace />
+  if (!isRaceControl) return <Denied title="Race control only" />
+  return <>{children}</>
+}
+
 export function RequireManager({ children }: { children: ReactNode }) {
   const { session, isAdmin, isManager, loading } = useAuth()
   const location = useLocation()

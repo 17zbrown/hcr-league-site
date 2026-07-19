@@ -39,16 +39,29 @@ function MemberRow({ member, teams, onSaved }: { member: Profile; teams: any[]; 
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [role, setRole] = useState<string>((member as { role?: string }).role ?? 'member')
+
   useEffect(() => {
     setIsManager(member.is_team_manager)
     setTeamId(member.managed_team_id ?? '')
-  }, [member.is_team_manager, member.managed_team_id])
+    setRole((member as { role?: string }).role ?? 'member')
+  }, [member.is_team_manager, member.managed_team_id, member])
 
-  const dirty = isManager !== member.is_team_manager || (teamId || null) !== (member.managed_team_id ?? null)
+  const dirty =
+    isManager !== member.is_team_manager ||
+    (teamId || null) !== (member.managed_team_id ?? null) ||
+    role !== ((member as { role?: string }).role ?? 'member')
 
   const save = async () => {
     setBusy(true)
     setError(null)
+    // portal access role (member / race_control / admin)
+    const roleRes = await supabase.from('profiles').update({ role }).eq('id', member.id)
+    if (roleRes.error) {
+      setError(roleRes.error.message)
+      setBusy(false)
+      return
+    }
     const { error } = await supabase.rpc('set_member_role', {
       p_user_id: member.id,
       p_is_team_manager: isManager,
@@ -64,7 +77,7 @@ function MemberRow({ member, teams, onSaved }: { member: Profile; teams: any[]; 
   }
 
   return (
-    <div className="grid items-center gap-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 md:grid-cols-[1.4fr_auto_1.2fr_auto]">
+    <div className="grid items-center gap-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 md:grid-cols-[1.4fr_150px_auto_1.2fr_auto]">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span className="truncate font-semibold">{member.display_name ?? member.email}</span>
@@ -73,8 +86,14 @@ function MemberRow({ member, teams, onSaved }: { member: Profile; teams: any[]; 
         <div className="truncate text-xs text-[var(--color-muted)]">{member.email}</div>
       </div>
 
+      <select className="hcr-select !py-2" value={role} onChange={(e) => setRole(e.target.value)} aria-label="Portal access">
+        <option value="member">Member</option>
+        <option value="race_control">Race Control</option>
+        <option value="admin">Admin</option>
+      </select>
+
       <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={isManager} onChange={(e) => setIsManager(e.target.checked)} className="h-4 w-4 accent-[var(--color-blue)]" />
+        <input type="checkbox" checked={isManager} onChange={(e) => setIsManager(e.target.checked)} className="h-5 w-5 accent-[var(--color-blue)]" />
         Team Manager
       </label>
 

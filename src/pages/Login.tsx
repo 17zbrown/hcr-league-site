@@ -3,7 +3,7 @@ import { useLocation, useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 
 export default function Login() {
-  const { signIn, signUp } = useAuth()
+  const { signIn, signUp, signInWithDiscord } = useAuth()
   const nav = useNavigate()
   const location = useLocation() as { state?: { from?: string } }
   const from = location.state?.from ?? '/account'
@@ -97,6 +97,31 @@ export default function Login() {
             {busy ? 'Working…' : mode === 'in' ? 'Sign In' : 'Create Account'}
           </button>
         </form>
+
+        {/* Discord SSO — grants the right portal from your server roles */}
+        <div className="mt-6">
+          <div className="flex items-center gap-3 text-xs uppercase tracking-widest text-[var(--color-faint)]">
+            <span className="h-px flex-1 bg-[var(--color-line)]" />
+            or
+            <span className="h-px flex-1 bg-[var(--color-line)]" />
+          </div>
+          <button
+            type="button"
+            onClick={async () => {
+              setError(null)
+              try { await signInWithDiscord() } catch (e) { setError((e as Error).message) }
+            }}
+            className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#5865f2] py-3.5 font-display text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M19.3 5.4A17.6 17.6 0 0015 4l-.2.5c1.6.4 2.9 1 4.1 1.9A13.9 13.9 0 003 6.4 16 16 0 019.2 4.5L9 4a17.6 17.6 0 00-4.3 1.4C2 9.5 1.3 13.5 1.6 17.4a17.7 17.7 0 005.4 2.7l1.1-1.7c-.6-.2-1.2-.5-1.7-.9l.4-.3a12.6 12.6 0 0010.4 0l.4.3c-.5.4-1.1.7-1.7.9l1.1 1.7a17.7 17.7 0 005.4-2.7c.4-4.5-.6-8.5-2.9-12zM8.6 15c-1 0-1.9-1-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1S9.6 15 8.6 15zm6.8 0c-1 0-1.9-1-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1z" />
+            </svg>
+            Continue with Discord
+          </button>
+          <p className="mt-2 text-center text-xs text-[var(--color-faint)]">
+            Your server roles decide which portal you land in.
+          </p>
+        </div>
 
         <div className="mt-6 text-sm text-[var(--color-muted)]">
           {mode === 'in' ? (

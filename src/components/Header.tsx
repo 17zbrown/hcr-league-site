@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import logo from '../assets/hcr-logo.png'
 import { useAuth } from '../lib/auth'
 import { useLeagueSettings } from '../lib/queries'
+import NotificationBell from './NotificationBell'
 
 const NAV = [
   { to: '/', label: 'Home' },
@@ -31,7 +32,7 @@ function Wordmark() {
 export default function Header() {
   const [open, setOpen] = useState(false)
   const location = useLocation()
-  const { session, isAdmin, isManager } = useAuth()
+  const { session, isAdmin, isManager, isRaceControl } = useAuth()
   const { data: settings } = useLeagueSettings()
 
   useEffect(() => setOpen(false), [location.pathname])
@@ -49,9 +50,10 @@ export default function Header() {
           <Wordmark />
 
           <div className="flex items-center gap-2">
+            {session && <NotificationBell />}
             {session ? (
-              <Link to="/account" className="hidden rounded-lg bg-[var(--color-ink)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5 sm:block">
-                Account
+              <Link to="/portal" className="hidden rounded-lg bg-[var(--color-ink)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5 sm:block">
+                My Portal
               </Link>
             ) : (
               <Link to="/signup" className="hidden rounded-lg bg-[var(--color-brand)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-0.5 sm:block">
@@ -85,6 +87,7 @@ export default function Header() {
             session={!!session}
             isAdmin={isAdmin}
             isManager={isManager}
+            isRaceControl={isRaceControl}
             discord={settings?.discord_url ?? null}
           />
         )}
@@ -98,18 +101,22 @@ function FullMenu({
   session,
   isAdmin,
   isManager,
+  isRaceControl,
   discord,
 }: {
   onClose: () => void
   session: boolean
   isAdmin: boolean
   isManager: boolean
+  isRaceControl: boolean
   discord: string | null
 }) {
   const accountLinks = [
-    session ? { to: '/account', label: 'My Account' } : { to: '/login', label: 'Sign In' },
+    session ? { to: '/portal', label: 'My Portal' } : { to: '/login', label: 'Sign In' },
+    ...(session ? [{ to: '/portal', label: 'File a Protest' }] : []),
     { to: '/signup', label: session ? 'Enter the Season' : 'Create Account' },
-    ...(isAdmin ? [{ to: '/commissioner', label: 'Commissioner Portal' }] : []),
+    ...(isRaceControl ? [{ to: '/control', label: 'Race Control Portal' }] : []),
+    ...(isAdmin ? [{ to: '/admin', label: 'Admin Portal' }] : []),
     ...(isManager ? [{ to: '/manager', label: 'Team Manager Portal' }] : []),
   ]
 

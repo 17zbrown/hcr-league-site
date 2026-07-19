@@ -1,10 +1,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from './supabase'
 import type {
+  AppNotification,
   Champion,
   Driver,
   LeagueClass,
   LeagueSettings,
+  Protest,
+  ProtestAttachment,
+  ProtestMessage,
   RaceEvent,
   RaceResult,
   Season,
@@ -347,6 +351,86 @@ export function useChampions() {
       const { data, error } = await supabase.from('champions').select('*').order('sort')
       if (error) throw error
       return (data ?? []) as Champion[]
+    },
+  })
+}
+
+// ---------------- Protests & notifications ----------------
+
+/** Protests visible to the caller (RLS: own for members, all for race control). */
+export function useProtests(opts?: { mine?: boolean; userId?: string }) {
+  return useQuery({
+    queryKey: ['protests', opts?.mine ? `mine:${opts?.userId ?? ''}` : 'all'],
+    queryFn: async () => {
+      let q = supabase
+        .from('protests')
+        .select('*, event:events(id, round, name, track:tracks(name)), filer:profiles!protests_filed_by_fkey(id, display_name)')
+        .order('created_at', { ascending: false })
+      if (opts?.mine && opts.userId) q = q.eq('filed_by', opts.userId)
+      const { data, error } = await q
+      if (error) throw error
+      return (data ?? []) as unknown as Protest[]
+    },
+  })
+}
+
+export function useProtest(id?: string) {
+  return useQuery({
+    enabled: !!id,
+    queryKey: ['protest', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('protests')
+        .select('*, event:events(id, round, name, track:tracks(name)), filer:profiles!protests_filed_by_fkey(id, display_name)')
+        .eq('id', id!)
+        .maybeSingle()
+      if (error) throw error
+      return data as unknown as Protest | null
+    },
+  })
+}
+
+export function useProtestThread(protestId?: string) {
+  return useQuery({
+    enabled: !!protestId,
+    queryKey: ['protest-thread', protestId],
+    queryFn: async () => {
+      const [msgs, atts] = await Promise.all([
+        supabase.from('protest_messages').select('*').eq('protest_id', protestId!).order('created_at'),
+        supabase.from('protest_attachments').select('*').eq('protest_id', protestId!).order('created_at'),
+      ])
+      if (msgs.error) throw msgs.error
+      if (atts.error) throw atts.error
+
+      // Resolve author names via the safe public view (RLS hides other profiles).
+      const rows = (msgs.data ?? []) as unknown as ProtestMessage[]
+      const ids = Array.from(new Set(rows.map((m) => m.author_id)))
+      let authors: Record<string, { display_name: string | null; role: string }> = {}
+      if (ids.length) {
+        const { data: people } = await supabase.from('public_profiles').select('id, display_name, role').in('id', ids)
+        authors = Object.fromEntries((people ?? []).map((p) => [p.id, { display_name: p.display_name, role: p.role }]))
+      }
+      return {
+        messages: rows.map((m) => ({ ...m, author: (authors[m.author_id] ?? null) as ProtestMessage['author'] })),
+        attachments: (atts.data ?? []) as unknown as ProtestAttachment[],
+      }
+    },
+  })
+}
+
+export function useNotifications(userId?: string) {
+  return useQuery({
+    enabled: !!userId,
+    queryKey: ['notifications', userId],
+    refetchInterval: 60_000,
+    queryFn: async (): Promise<AppNotification[]> => {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(30)
+      if (error) throw error
+      return (data ?? []) as AppNotification[]
     },
   })
 }

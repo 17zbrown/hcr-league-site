@@ -150,14 +150,76 @@ export interface Champion {
   sort: number
 }
 
+export type UserRole = 'member' | 'race_control' | 'admin'
+
 export interface Profile {
   id: string
   email: string | null
   display_name: string | null
+  role: UserRole
+  discord_user_id: string | null
+  discord_username: string | null
+  avatar_url: string | null
   is_admin: boolean
   is_team_manager: boolean
   managed_team_id: string | null
   driver_id: string | null
+  created_at: string
+}
+
+export type ProtestStatus = 'open' | 'under_review' | 'resolved' | 'dismissed'
+
+export interface Protest {
+  id: string
+  season_id: string | null
+  event_id: string | null
+  filed_by: string
+  against_driver_id: string | null
+  against_text: string | null
+  incident_lap: string | null
+  category: string | null
+  summary: string
+  status: ProtestStatus
+  verdict: string | null
+  penalty: string | null
+  decided_by: string | null
+  decided_at: string | null
+  created_at: string
+  updated_at: string
+  // joined
+  event?: { id: string; round: number; name: string | null; track?: { name: string } | null } | null
+  filer?: { id: string; display_name: string | null } | null
+}
+
+export interface ProtestMessage {
+  id: string
+  protest_id: string
+  author_id: string
+  body: string
+  is_staff: boolean
+  created_at: string
+  author?: { display_name: string | null; role: UserRole } | null
+}
+
+export interface ProtestAttachment {
+  id: string
+  protest_id: string
+  message_id: string | null
+  kind: 'image' | 'link'
+  url: string
+  storage_path: string | null
+  title: string | null
+  created_at: string
+}
+
+export interface AppNotification {
+  id: string
+  user_id: string
+  kind: string
+  title: string
+  body: string | null
+  link: string | null
+  read_at: string | null
   created_at: string
 }
 
