@@ -77,17 +77,13 @@ export function AchievementGallery({ achievements }: { achievements: Achievement
               <div className="min-w-0">
                 <div
                   className={`font-body text-sm font-semibold ${
-                    a.earned ? 'text-[var(--color-ink)]' : 'text-[var(--color-faint)]'
+                    a.earned ? 'text-[var(--color-ink)]' : 'text-[var(--color-muted)]'
                   }`}
                 >
                   {a.name}
                   <span className="sr-only">{a.earned ? ' — unlocked' : ' — locked'}</span>
                 </div>
-                <p
-                  className={`mt-1 font-body text-xs leading-relaxed ${
-                    a.earned ? 'text-[var(--color-muted)]' : 'text-[var(--color-faint)]'
-                  }`}
-                >
+                <p className="mt-1 font-body text-xs leading-relaxed text-[var(--color-muted)]">
                   {a.blurb}
                 </p>
                 {a.earned && a.detail && (

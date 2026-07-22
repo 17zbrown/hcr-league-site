@@ -38,7 +38,7 @@ export default function CommissionerPortal() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`whitespace-nowrap rounded-lg px-4 py-2.5 text-left font-alt text-sm font-semibold transition-colors ${
+              className={`min-h-11 whitespace-nowrap rounded-lg px-4 py-2.5 text-left font-alt text-sm font-semibold transition-colors ${
                 t.id === tab
                   ? 'bg-[var(--color-deep)] text-white'
                   : 'text-[var(--color-ink-2)] hover:bg-[var(--color-mist)]'

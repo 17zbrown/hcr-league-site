@@ -6,7 +6,7 @@ export function LicenseBadge({ tier, size = 'sm', title }: { tier: License; size
   const pad = size === 'xs' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs'
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full font-mono font-bold uppercase tracking-wider text-[var(--color-ink-2)] ${pad}`}
+      className={`inline-flex items-center gap-1.5 rounded-full font-body font-semibold uppercase tracking-[0.14em] text-[var(--color-ink-2)] ${pad}`}
       style={{ background: `${color}22` }}
       title={title}
     >
@@ -22,7 +22,7 @@ export function LicenseProgress({ info }: { info: LicenseInfo }) {
   return (
     <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">License</span>
+        <span className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">License</span>
         <LicenseBadge tier={info.effective} />
       </div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--color-mist)]">
@@ -46,13 +46,14 @@ export function LicenseProgress({ info }: { info: LicenseInfo }) {
           return (
             <div
               key={t}
-              className="flex-1 rounded-md py-1 text-center font-mono text-[10px] font-bold uppercase tracking-wide"
+              className="flex flex-1 items-center justify-center gap-1 rounded-md py-1 text-center font-body text-[10px] font-semibold uppercase tracking-[0.14em]"
               style={{
-                background: active ? c : 'var(--color-mist)',
-                color: active ? '#fff' : 'var(--color-faint)',
+                background: active ? `${c}26` : 'var(--color-mist)',
+                color: active ? 'var(--color-ink)' : 'var(--color-muted)',
               }}
               title={`${t} — eligible for ${LICENSE_CLASSES[t]}`}
             >
+              {active && <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ background: c }} />}
               {t.slice(0, 3)}
             </div>
           )

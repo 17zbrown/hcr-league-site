@@ -120,9 +120,9 @@ export default function Account() {
                     : reg.status === 'pending' ? 'var(--color-mist)'
                     : 'rgba(18,157,111,0.14)',
                   color:
-                    reg.status === 'declined' ? '#c0392b'
+                    reg.status === 'declined' ? 'var(--color-red)'
                     : reg.status === 'pending' ? 'var(--color-ink-2)'
-                    : '#0f8f66',
+                    : 'var(--color-green)',
                 }}
               >
                 {reg.status}
@@ -180,8 +180,8 @@ export default function Account() {
               <textarea className="hcr-textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Team preference, availability…" />
             </label>
 
-            {error && <p className="rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">{error}</p>}
-            {msg && <p className="rounded-lg bg-[var(--color-green)]/10 px-4 py-3 text-sm text-[var(--color-green)]">{msg}</p>}
+            {error && <p role="alert" className="rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">{error}</p>}
+            {msg && <p role="status" className="rounded-lg bg-[var(--color-green)]/10 px-4 py-3 text-sm text-[var(--color-green)]">{msg}</p>}
 
             <button type="submit" disabled={busy} className="hcr-btn hcr-btn-primary w-full">
               {busy ? 'Submitting…' : reg ? 'Update Registration' : 'Enter the Season'}

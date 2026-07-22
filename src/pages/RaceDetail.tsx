@@ -90,11 +90,11 @@ export default function RaceDetail() {
 
   // Past editions at this venue (exclude the current event), grouped by round.
   const history = useMemo(() => {
-    const byEvent = new Map<string, { round: number; name: string | null; rows: typeof trackWinners }>()
+    const byEvent = new Map<string, { id: string; round: number; name: string | null; date: string | null; rows: typeof trackWinners }>()
     for (const w of trackWinners ?? []) {
       const ev = w.event
       if (!ev || ev.id === id) continue
-      if (!byEvent.has(ev.id)) byEvent.set(ev.id, { round: ev.round, name: ev.name, rows: [] })
+      if (!byEvent.has(ev.id)) byEvent.set(ev.id, { id: ev.id, round: ev.round, name: ev.name, date: ev.date ?? null, rows: [] })
       byEvent.get(ev.id)!.rows!.push(w)
     }
     return Array.from(byEvent.values()).sort((a, b) => b.round - a.round)
@@ -247,7 +247,7 @@ export default function RaceDetail() {
                 ) : fcError || !forecastHours.length ? (
                   <p className="text-sm text-[var(--color-muted)]">Forecast unavailable right now.</p>
                 ) : (
-                  <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+                  <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" tabIndex={0} role="region" aria-label="Race day forecast">
                     {forecastHours.map((h) => (
                       <div
                         key={h.hour}
@@ -324,12 +324,19 @@ export default function RaceDetail() {
             <div className={`${done && winners.length ? 'mt-6' : ''} space-y-3`}>
               {done && winners.length > 0 && <div className={MICRO}>Previous editions</div>}
               {history.map((h) => (
-                <div key={h.round} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-4">
-                  <div className={MICRO}>Round {h.round}{h.name ? ` · ${h.name}` : ''}</div>
+                <div key={h.id} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-4">
+                  <div className={MICRO}>
+                    Round {h.round}{h.name ? ` · ${h.name}` : ''}{h.date ? ` · ${fmtDateLong(h.date)}` : ''}
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
                     {(h.rows ?? []).sort((a, b) => CLASS_ORDER.indexOf(a.class_id) - CLASS_ORDER.indexOf(b.class_id)).map((w) => (
-                      <span key={w.id} className="text-sm">
-                        <span className="font-mono text-xs uppercase" style={{ color: classColor(w.class_id, classes) }}>{w.class_id}</span>{' '}
+                      <span key={w.id} className="inline-flex items-center gap-1.5 text-sm">
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ background: classColor(w.class_id, classes), boxShadow: 'inset 0 0 0 1px rgba(20,24,28,0.28)' }}
+                          aria-hidden
+                        />
+                        <span className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-ink-2)]">{w.class_id}</span>
                         <DriverName text={w.drivers_text} className="font-semibold" />
                       </span>
                     ))}
@@ -351,7 +358,7 @@ export default function RaceDetail() {
       {(event.notes || event.report) && (
         <Reveal>
           <section className="mt-12 rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-6 md:p-8">
-            <h2 className={`${MICRO} mb-3`}>{event.report ? 'Race Report' : 'Notes'}</h2>
+            <div className={`${MICRO} mb-3`}>{event.report ? 'Race Report' : 'Notes'}</div>
             <div className="font-body max-w-prose whitespace-pre-line leading-relaxed text-[var(--color-ink-2)]">{event.report ?? event.notes}</div>
           </section>
         </Reveal>

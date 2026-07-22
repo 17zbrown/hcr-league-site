@@ -60,6 +60,7 @@ export default function RaceControlPortal() {
           <button
             key={f.id}
             onClick={() => setFilter(f.id)}
+            aria-pressed={filter === f.id}
             className={`relative px-4 py-3 font-display text-lg transition-colors ${
               filter === f.id ? 'text-[var(--color-ink)]' : 'text-[var(--color-faint)] hover:text-[var(--color-ink)]'
             }`}

@@ -73,7 +73,7 @@ export default function ManagerPortal() {
           set your team.
         </p>
       )}
-      {error && <p className="mb-6 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">{error}</p>}
+      {error && <p role="alert" className="mb-6 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">{error}</p>}
 
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Roster */}
@@ -132,7 +132,7 @@ export default function ManagerPortal() {
                         <span className="rounded-full bg-[var(--color-mist)] px-2 py-0.5 font-body text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-ink-2)]">{r.fia_category}</span>
                       )}
                       {r.preferred_class && (
-                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-body text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ background: `${classColor(r.preferred_class)}22`, color: '#3a3f49' }}>
+                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-body text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ background: `${classColor(r.preferred_class)}22`, color: 'var(--color-ink-2)' }}>
                           <span className="h-1.5 w-1.5 rounded-full" style={{ background: classColor(r.preferred_class) }} />
                           {r.preferred_class}
                         </span>
@@ -141,7 +141,7 @@ export default function ManagerPortal() {
                   </div>
                   <button
                     onClick={() => sign(r.driver.id)}
-                    disabled={busyId === r.driver?.id || (!profile?.managed_team_id && !isAdmin)}
+                    disabled={busyId === r.driver?.id || !profile?.managed_team_id}
                     className="hcr-btn hcr-btn-primary !py-2 !text-xs"
                   >
                     {busyId === r.driver?.id ? '…' : 'Sign'}

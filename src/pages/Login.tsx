@@ -44,7 +44,7 @@ export default function Login() {
   return (
     <div className="container-hcr flex min-h-[70vh] items-center justify-center py-16">
       <div className="w-full max-w-md">
-        <div className="eyebrow mb-2">{mode === 'in' ? 'Member access' : 'Create account'}</div>
+        <div className="mb-2 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">{mode === 'in' ? 'Member access' : 'Create account'}</div>
         <h1 className="text-5xl">{mode === 'in' ? 'Sign in' : 'Join HCR'}</h1>
         <p className="mt-3 text-[var(--color-muted)]">
           {mode === 'in'
@@ -86,8 +86,8 @@ export default function Login() {
             />
           </Field>
 
-          {error && <p className="rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">{error}</p>}
-          {info && <p className="rounded-lg bg-[var(--color-green)]/10 px-4 py-3 text-sm text-[var(--color-green)]">{info}</p>}
+          {error && <p role="alert" className="rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">{error}</p>}
+          {info && <p role="status" className="rounded-lg bg-[var(--color-green)]/10 px-4 py-3 text-sm text-[var(--color-green)]">{info}</p>}
 
           <button
             type="submit"
@@ -111,7 +111,7 @@ export default function Login() {
               setError(null)
               try { await signInWithDiscord() } catch (e) { setError((e as Error).message) }
             }}
-            className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#5865f2] py-3.5 font-display text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5"
+            className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#5865f2] py-3.5 font-alt text-sm font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M19.3 5.4A17.6 17.6 0 0015 4l-.2.5c1.6.4 2.9 1 4.1 1.9A13.9 13.9 0 003 6.4 16 16 0 019.2 4.5L9 4a17.6 17.6 0 00-4.3 1.4C2 9.5 1.3 13.5 1.6 17.4a17.7 17.7 0 005.4 2.7l1.1-1.7c-.6-.2-1.2-.5-1.7-.9l.4-.3a12.6 12.6 0 0010.4 0l.4.3c-.5.4-1.1.7-1.7.9l1.1 1.7a17.7 17.7 0 005.4-2.7c.4-4.5-.6-8.5-2.9-12zM8.6 15c-1 0-1.9-1-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1S9.6 15 8.6 15zm6.8 0c-1 0-1.9-1-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1z" />
@@ -127,14 +127,14 @@ export default function Login() {
           {mode === 'in' ? (
             <>
               New here?{' '}
-              <button className="font-semibold text-[var(--color-blue)]" onClick={() => { setMode('up'); setError(null) }}>
+              <button className="-my-2 px-1 py-2.5 font-semibold text-[var(--color-blue)]" onClick={() => { setMode('up'); setError(null) }}>
                 Create an account
               </button>
             </>
           ) : (
             <>
               Already a member?{' '}
-              <button className="font-semibold text-[var(--color-blue)]" onClick={() => { setMode('in'); setError(null) }}>
+              <button className="-my-2 px-1 py-2.5 font-semibold text-[var(--color-blue)]" onClick={() => { setMode('in'); setError(null) }}>
                 Sign in
               </button>
             </>

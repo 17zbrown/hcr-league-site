@@ -55,7 +55,7 @@ export default function Ticker() {
           <span className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-white/45">
             {it.label}
           </span>
-          <span className="ml-3 font-display text-lg font-bold uppercase tracking-wide text-white">
+          <span className="ml-3 font-display text-lg text-white">
             {it.value}
           </span>
           <span className="ml-6 text-[var(--color-brand)]">◆</span>

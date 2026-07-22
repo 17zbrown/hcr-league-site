@@ -22,11 +22,11 @@
   --color-ink: #14181c;     /* primary text on light */
   --color-ink-2: #3c4650;   /* secondary text */
   --color-muted: #5c6873;   /* muted text (AA on light) */
-  --color-faint: #6d7883;   /* captions (AA on light) */
+  --color-faint: #5f6a74;   /* captions (AA on mist) */
 
   /* Accents — HCR yellow stays the brand accent; crimson is the hairline rule */
   --color-brand: #f2e114;
-  --color-brand-deep: #8a7d08; /* yellow legible as text on light */
+  --color-brand-deep: #756a07; /* yellow legible as text (5.5:1 on white) */
   --color-accent: #d93b45;     /* the reference's hot hairline */
   --color-blue: #2f6bff;
   --color-green: #12805c;
@@ -93,11 +93,11 @@
 @layer utilities {
   .eyebrow {
     font-family: var(--font-body);
-    font-size: 0.8rem;
+    font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--color-blue);
+    color: var(--color-muted);
   }
 
   .container-hcr {
@@ -181,6 +181,12 @@
     border-color: var(--color-blue);
     box-shadow: 0 0 0 3px rgba(47, 107, 255, 0.15);
   }
+  .hcr-input:focus-visible,
+  .hcr-select:focus-visible,
+  .hcr-textarea:focus-visible {
+    outline: 3px solid var(--color-blue);
+    outline-offset: 1px;
+  }
   .hcr-textarea {
     min-height: 6rem;
     resize: vertical;
@@ -224,5 +230,15 @@
   }
   .marquee-track {
     animation: none !important;
+  }
+}
+
+/* Print safety: scroll-reveal content must never print invisible. */
+@media print {
+  *,
+  *::before,
+  *::after {
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

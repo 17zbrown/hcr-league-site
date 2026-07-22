@@ -24,7 +24,7 @@ export default function SignUp() {
         />
         <div className="container-hcr relative py-16 md:py-24">
           <Reveal>
-            <div className="eyebrow mb-5">Season registration</div>
+            <div className="mb-5 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Season registration</div>
             <h1 className="max-w-3xl text-6xl md:text-8xl">Join the grid</h1>
             <p className="mt-7 max-w-lg text-lg text-[var(--color-muted)]">
               Create a member account, then enter the season from your account page. Every driver

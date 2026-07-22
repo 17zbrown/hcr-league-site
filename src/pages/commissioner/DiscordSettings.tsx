@@ -65,7 +65,7 @@ export default function DiscordSettings() {
 
   const field = (key: keyof Cfg, label: string, hint?: string) => (
     <label className="block">
-      <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">{label}</span>
+      <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">{label}</span>
       <input
         className="hcr-input tabular"
         value={form[key] as string}
@@ -90,7 +90,7 @@ export default function DiscordSettings() {
         <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <div className="font-display text-xl font-extrabold uppercase">Integration</div>
+              <div className="font-display text-2xl">Integration</div>
               <p className="text-sm text-[var(--color-muted)]">Nothing is sent or synced while this is off.</p>
             </div>
             <label className="flex items-center gap-2 text-sm font-semibold">
@@ -115,18 +115,18 @@ export default function DiscordSettings() {
         </div>
 
         <fieldset className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
-          <legend className="px-2 font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Server</legend>
+          <legend className="px-2 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Server</legend>
           <div className="mt-2">{field('guild_id', 'Server (guild) ID')}</div>
         </fieldset>
 
         <fieldset className="space-y-4 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
-          <legend className="px-2 font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Portal access</legend>
+          <legend className="px-2 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Portal access</legend>
           {field('role_site_admin', 'Admin role', 'Holders get the Admin portal.')}
           {field('role_site_race_control', 'Race Control role', 'Holders get the Race Control portal.')}
         </fieldset>
 
         <fieldset className="grid gap-4 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5 sm:grid-cols-2">
-          <legend className="px-2 font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">License roles (auto-assigned)</legend>
+          <legend className="px-2 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">License roles (auto-assigned)</legend>
           {field('role_bronze', 'Bronze')}
           {field('role_silver', 'Silver')}
           {field('role_gold', 'Gold')}
@@ -134,7 +134,7 @@ export default function DiscordSettings() {
         </fieldset>
 
         <fieldset className="grid gap-4 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5 sm:grid-cols-2">
-          <legend className="px-2 font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Channels</legend>
+          <legend className="px-2 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Channels</legend>
           {field('channel_results', 'Results')}
           {field('channel_standings', 'Standings')}
           {field('channel_license_ups', 'License promotions')}

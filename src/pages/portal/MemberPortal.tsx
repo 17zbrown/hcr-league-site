@@ -18,7 +18,13 @@ type Tab = 'overview' | 'file' | 'mine'
 export default function MemberPortal() {
   const { profile, session, isRaceControl, isAdmin, signOut } = useAuth()
   const [tab, setTab] = useState<Tab>('overview')
+  const [filedNote, setFiledNote] = useState(false)
   const { data: protests } = useProtests({ mine: true, userId: session?.user?.id })
+
+  const selectTab = (id: Tab) => {
+    if (id !== 'mine') setFiledNote(false)
+    setTab(id)
+  }
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'My profile' },
@@ -40,8 +46,9 @@ export default function MemberPortal() {
         {tabs.map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`relative px-5 py-3 font-display text-xl transition-colors ${
+            onClick={() => selectTab(t.id)}
+            aria-pressed={tab === t.id}
+            className={`relative px-5 py-3 font-alt text-sm font-bold uppercase tracking-wide transition-colors ${
               tab === t.id ? 'text-[var(--color-ink)]' : 'text-[var(--color-faint)] hover:text-[var(--color-ink)]'
             }`}
           >
@@ -52,8 +59,24 @@ export default function MemberPortal() {
       </div>
 
       {tab === 'overview' && <Overview onSignOut={signOut} />}
-      {tab === 'file' && <FileProtest onFiled={() => setTab('mine')} />}
-      {tab === 'mine' && <MyProtests />}
+      {tab === 'file' && <FileProtest onFiled={() => { setFiledNote(true); setTab('mine') }} />}
+      {tab === 'mine' && (
+        <>
+          {filedNote && (
+            <p role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--color-green)]/10 px-4 py-3 text-sm text-[var(--color-green)]">
+              Protest submitted — race control has been notified.
+              <button
+                onClick={() => setFiledNote(false)}
+                aria-label="Dismiss"
+                className="-my-2 inline-flex min-h-11 min-w-11 items-center justify-center font-semibold hover:text-[var(--color-ink)]"
+              >
+                ✕
+              </button>
+            </p>
+          )}
+          <MyProtests />
+        </>
+      )}
     </Section>
   )
 }
@@ -215,7 +238,7 @@ function FileProtest({ onFiled }: { onFiled: () => void }) {
         <EvidenceBox items={evidence} onChange={setEvidence} disabled={busy} />
       </div>
 
-      {err && <p className="rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">{err}</p>}
+      {err && <p role="alert" className="rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">{err}</p>}
 
       <button type="submit" disabled={busy} className="hcr-btn hcr-btn-primary">
         {busy ? 'Submitting…' : 'Submit protest'}

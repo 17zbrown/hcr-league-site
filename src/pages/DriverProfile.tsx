@@ -23,8 +23,8 @@ export default function DriverProfile() {
   const { id } = useParams()
   const { data: drivers, isLoading } = useDrivers()
   const { data: classes } = useClasses()
-  const { data: season } = useCurrentSeason()
-  const { data: results } = useSeasonResultsFull(season?.id)
+  const { data: season, isLoading: seasonLoading } = useCurrentSeason()
+  const { data: results, isLoading: resultsLoading } = useSeasonResultsFull(season?.id)
   const { data: licenseResults } = useLicenseResults()
 
   const driver = drivers?.find((d) => d.id === id)
@@ -62,6 +62,7 @@ export default function DriverProfile() {
   const cls = driver.team?.class_id
   const color = cls ? classColor(cls, classes) : 'var(--color-brand)'
   const raced = report.starts > 0
+  const resultsPending = seasonLoading || resultsLoading
 
   return (
     <div className="container-hcr py-10 md:py-14">
@@ -88,7 +89,7 @@ export default function DriverProfile() {
             <h1 className="text-5xl leading-[1.02] md:text-7xl">{driver.name}</h1>
             <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
               {driver.country && (
-                <span className="text-xl leading-none" role="img" aria-label="Nationality">{driver.country}</span>
+                <span className="text-xl leading-none">{driver.country}</span>
               )}
               {driver.team && (
                 <TeamLink teamId={driver.team.id} className="font-body font-semibold text-[var(--color-ink)] underline-offset-4 hover:underline">
@@ -110,7 +111,12 @@ export default function DriverProfile() {
         </div>
       </section>
 
-      {!raced ? (
+      {resultsPending ? (
+        <div className="mt-8 space-y-6">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-96 w-full" />
+        </div>
+      ) : !raced ? (
         <p className="mt-10 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-10 text-center text-[var(--color-muted)]">
           No scored results yet for {driver.name}. Their report builds automatically once they take a start.
         </p>
@@ -141,12 +147,12 @@ export default function DriverProfile() {
                   places made up on the road, and points banked.
                 </p>
                 <ol className="mt-5 flex flex-wrap gap-2.5">
-                  {report.form.map((f) => {
+                  {report.form.map((f, i) => {
                     const win = f.clsPos === 1
                     const pod = f.clsPos != null && f.clsPos <= 3
                     return (
                       <li
-                        key={f.round}
+                        key={`${f.round}-${i}`}
                         title={`${f.label} — ${f.dnf ? 'DNF' : f.clsPos != null ? `P${f.clsPos}` : '—'} · ${f.points} pts`}
                         className="group relative min-w-[92px] flex-1 rounded-2xl border p-4 transition-transform hover:-translate-y-0.5"
                         style={{
@@ -154,6 +160,7 @@ export default function DriverProfile() {
                           background: win ? `${color}1a` : 'var(--color-paper)',
                         }}
                       >
+                        <span className="sr-only">{f.label}</span>
                         <div className="font-body text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
                           R{f.round}
                         </div>
@@ -317,7 +324,7 @@ export function ResultsTable({
       <h2 className="mb-5 text-3xl">Round by round</h2>
       <div className="relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
         <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[var(--color-paper)] sm:hidden" aria-hidden />
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Round by round results">
           <table className="w-full min-w-[680px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-[var(--color-line)] bg-[var(--color-mist)] text-left font-body text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">

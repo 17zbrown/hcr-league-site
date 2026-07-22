@@ -107,9 +107,9 @@ function SideValue({ line, side }: { line: LedgerLine; side: 'a' | 'b' }) {
           <AnimatedStat value={v} decimals={line.decimals} prefix={prefix} />
         </span>
       )}
-      {/* winner mark: 2px brand underline; kept as a spacer on the loser so rows don't jitter */}
+      {/* winner mark: 2px gold underline; kept as a spacer on the loser so rows don't jitter */}
       <span
-        className={`mt-1.5 h-[2px] w-9 rounded-full ${win ? 'bg-[var(--color-brand)]' : 'bg-transparent'}`}
+        className={`mt-1.5 h-[2px] w-9 rounded-full ${win ? 'bg-[var(--color-brand-deep)]' : 'bg-transparent'}`}
         aria-hidden="true"
       />
       {win && <span className="sr-only">ahead</span>}
@@ -185,21 +185,32 @@ export default function Compare() {
 
   // Rounds where BOTH drivers hold a class finish — the season duel.
   const duel = useMemo(() => {
-    const posByRound = (rows: FullRow[]) => {
-      const m = new Map<number, number>()
+    // One row per round, keeping the better (lower) class finish when a round repeats.
+    const rowByRound = (rows: FullRow[]) => {
+      const m = new Map<number, FullRow>()
       for (const r of rows) {
         const rd = r.event?.round
-        if (rd == null || r.cls_pos == null || m.has(rd)) continue
-        m.set(rd, r.cls_pos)
+        if (rd == null || r.cls_pos == null) continue
+        const prev = m.get(rd)
+        if (prev == null || r.cls_pos < (prev.cls_pos ?? Infinity)) m.set(rd, r)
       }
       return m
     }
-    const ma = posByRound(rowsA)
-    const mb = posByRound(rowsB)
-    const tiles = [...ma.keys()]
-      .filter((rd) => mb.has(rd))
-      .sort((x, y) => x - y)
-      .map((rd) => ({ round: rd, a: ma.get(rd)!, b: mb.get(rd)! }))
+    const ma = rowByRound(rowsA)
+    const mb = rowByRound(rowsB)
+    const tiles: { round: number; a: number; b: number }[] = []
+    for (const rd of [...ma.keys()].filter((r) => mb.has(r)).sort((x, y) => x - y)) {
+      const ra = ma.get(rd)!
+      const rb = mb.get(rd)!
+      if (ra.class_id !== rb.class_id) {
+        // Different classes: class position isn't comparable, so score on overall
+        // position — and skip the round if either overall position is missing.
+        if (ra.pos == null || rb.pos == null) continue
+        tiles.push({ round: rd, a: ra.pos, b: rb.pos })
+      } else {
+        tiles.push({ round: rd, a: ra.cls_pos!, b: rb.cls_pos! })
+      }
+    }
     const aWins = tiles.filter((t) => t.a < t.b).length
     const bWins = tiles.filter((t) => t.b < t.a).length
     return { tiles, aWins, bWins }
@@ -341,7 +352,7 @@ export default function Compare() {
                   </div>
                 </div>
                 <p className="mt-3 font-body text-xs text-[var(--color-faint)]">
-                  The yellow underline marks whoever holds the edge on each line. Ties and missing data go unmarked.
+                  The gold underline marks whoever holds the edge on each line. Ties and missing data go unmarked.
                 </p>
               </section>
 
@@ -350,7 +361,8 @@ export default function Compare() {
                 <h2 className="text-3xl">The season duel</h2>
                 <p className="mt-2 max-w-prose font-body text-[var(--color-muted)]">
                   Every round both drivers took a class finish — {shortA} on the left of each score,{' '}
-                  {shortB} on the right.
+                  {shortB} on the right. Rounds where the two raced in different classes are scored on
+                  overall position.
                 </p>
 
                 {duel.tiles.length === 0 ? (
@@ -367,6 +379,9 @@ export default function Compare() {
                           title={`Round ${t.round} — ${driverA!.name} P${t.a}, ${driverB!.name} P${t.b}`}
                           className="min-w-[104px] flex-1 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 text-center sm:flex-none"
                         >
+                          <span className="sr-only">
+                            Round {t.round}: {driverA!.name} P{t.a}, {driverB!.name} P{t.b}
+                          </span>
                           <div className="font-body text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
                             R{t.round}
                           </div>

@@ -11,7 +11,7 @@ export default function NotFound() {
       </p>
       <Link
         to="/"
-        className="mt-8 rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1"
+        className="mt-8 rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1"
       >
         Back to the Paddock
       </Link>

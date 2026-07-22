@@ -209,7 +209,7 @@ export default function ResultsAdmin() {
                 {rows.map((row, i) => (
                   <tr key={i} className="border-b border-[var(--color-line)] last:border-0">
                     <td className="px-2 py-1">
-                      <button onClick={() => removeRow(i)} className="text-[var(--color-faint)] hover:text-[var(--color-red)]" aria-label="Remove row">✕</button>
+                      <button onClick={() => removeRow(i)} className="-m-2 inline-flex min-h-11 min-w-11 items-center justify-center text-[var(--color-faint)] hover:text-[var(--color-red)]" aria-label="Remove row">✕</button>
                     </td>
                     {GRID_FIELDS.map((f) => (
                       <td key={f} className="px-1 py-1">

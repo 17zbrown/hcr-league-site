@@ -33,21 +33,27 @@ export function crewNames(driversText?: string | null): string[] {
 
 /**
  * Does this result list the given driver? Exact match on any crew segment, with
- * a guarded fallback: if the driver's full normalized name appears as a whole-word
- * run inside a single segment (handles "J. Smith" vs "John Smith" only when the
- * segment fully contains every token of the driver name).
+ * a guarded fallback: exact token-set match against a single segment — the
+ * segment must carry exactly the same tokens as the driver name, just possibly
+ * reordered or re-punctuated. Abbreviated forms ("J. Smith" for "John Smith")
+ * and longer names ("Juan Pablo Garcia" for "Juan Garcia") are intentionally
+ * not matched.
  */
 export function resultListsDriver(driversText: string | null | undefined, driverName: string): boolean {
   const target = normalizeName(driverName)
   if (!target) return false
   const names = crewNames(driversText)
   if (names.includes(target)) return true
-  // token-subset fallback: every token of the driver name present in one segment
+  // exact-token-set fallback: segment tokens must equal the driver-name tokens
+  // exactly (abbreviated forms intentionally not matched)
   const targetTokens = target.split(' ').filter((t) => t.length > 1)
   if (targetTokens.length < 2) return false // too weak to match on a single token
   return names.some((seg) => {
-    const segTokens = new Set(seg.split(' '))
-    return targetTokens.every((t) => segTokens.has(t))
+    const segTokens = seg.split(' ').filter((t) => t.length > 1)
+    return (
+      segTokens.length === targetTokens.length &&
+      targetTokens.every((t) => segTokens.includes(t))
+    )
   })
 }
 

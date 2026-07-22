@@ -37,6 +37,7 @@ export default function Results() {
                 <button
                   key={e.id}
                   onClick={() => setEventId(e.id)}
+                  aria-pressed={isActive}
                   className={`rounded-xl border px-4 py-2.5 text-left transition-all ${
                     isActive
                       ? 'on-navy shadow-card border-transparent bg-[var(--color-deep)]'
@@ -107,10 +108,10 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
             </div>
             <div className="shadow-card relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
               <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[var(--color-paper)] sm:hidden" aria-hidden />
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={`${cls} classification`}>
               <table className="w-full min-w-[820px] border-collapse text-sm">
                 <thead>
-                  <tr className="border-b border-[var(--color-line)] bg-[var(--color-mist)] text-left font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
+                  <tr className="font-body border-b border-[var(--color-line)] bg-[var(--color-mist)] text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
                     <th className="px-4 py-3">Pos</th>
                     <th className="px-4 py-3">No.</th>
                     <th className="px-4 py-3">Driver</th>
@@ -141,7 +142,7 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
                             className="tabular inline-flex h-7 w-7 items-center justify-center rounded-md font-bold"
                             style={{ background: 'var(--color-mist)', color: 'var(--color-ink)' }}
                           >
-                            {r.cls_pos}
+                            {r.cls_pos ?? '—'}
                           </span>
                         )}
                       </td>

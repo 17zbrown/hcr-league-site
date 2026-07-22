@@ -115,7 +115,7 @@ export default function HeroCarousel() {
             </div>
             <div className="hidden md:block">
               <div className="rounded-2xl bg-[var(--color-deep-2)] p-8 text-center">
-                <div className="font-display text-[7rem] font-extrabold leading-none text-[var(--color-brand)]">P1</div>
+                <div className="font-display text-[7rem] leading-none text-[var(--color-brand)]">P1</div>
                 <div className="mt-2 font-mono text-xs uppercase tracking-widest text-white/60">Overall Victory</div>
               </div>
             </div>

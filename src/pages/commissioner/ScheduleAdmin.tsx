@@ -59,7 +59,7 @@ function EventRow({ event, onChange }: { event: RaceEvent; onChange: () => void 
   return (
     <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-3">
     <div className="grid items-center gap-2 md:grid-cols-[46px_1.7fr_150px_130px_auto]">
-      <div className="tabular text-center font-display text-2xl font-extrabold text-[var(--color-faint)]">{event.round}</div>
+      <div className="text-center font-display text-2xl text-[var(--color-faint)]">{event.round}</div>
       <input className="hcr-input !py-2" value={name} onChange={(e) => setName(e.target.value)} placeholder={event.track?.name} aria-label="Event name" />
       <input className="hcr-input !py-2 tabular" type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
       <select className="hcr-select !py-2" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">

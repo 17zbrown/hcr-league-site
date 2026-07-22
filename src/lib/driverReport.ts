@@ -99,7 +99,8 @@ export function buildDriverReport(rows: FullRow[], allRows: FullRow[] = []): Dri
       worstFinish = worstFinish == null ? cp : Math.max(worstFinish, cp)
     }
     if (r.quali_pos === 1) poles += 1
-    if (r.quali_pos != null) starts.push(r.quali_pos)
+    const startPos = r.grid ?? r.quali_pos
+    if (startPos != null) starts.push(startPos)
     if (r.inc != null) incidentsArr.push(r.inc)
 
     if (r.grid != null && r.pos != null) {
@@ -115,14 +116,13 @@ export function buildDriverReport(rows: FullRow[], allRows: FullRow[] = []): Dri
     }
   }
 
-  // consistency: tighter spread of finishes = higher score
+  // consistency: tighter spread of finishes = higher score; a single classified
+  // finish is no evidence of consistency, so it stays null (UI renders '—')
   let consistency: number | null = null
   if (finishes.length >= 2) {
     const m = avg(finishes)!
     const sd = Math.sqrt(avg(finishes.map((f) => (f - m) ** 2))!)
     consistency = Math.max(0, Math.min(100, Math.round(100 - sd * 14)))
-  } else if (finishes.length === 1) {
-    consistency = 100
   }
 
   const form: RoundForm[] = sorted.map((r) => ({

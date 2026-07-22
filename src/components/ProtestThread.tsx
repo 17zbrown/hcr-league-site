@@ -10,8 +10,8 @@ import type { ProtestAttachment, ProtestStatus } from '../lib/types'
 
 const STATUS_STYLE: Record<ProtestStatus, { label: string; bg: string; fg: string }> = {
   open: { label: 'Open', bg: 'var(--color-mist)', fg: 'var(--color-ink-2)' },
-  under_review: { label: 'Under review', bg: 'rgba(47,107,255,0.12)', fg: '#2f6bff' },
-  resolved: { label: 'Resolved', bg: 'rgba(18,157,111,0.14)', fg: '#0f8f66' },
+  under_review: { label: 'Under review', bg: 'rgba(47,107,255,0.12)', fg: '#1e56d6' },
+  resolved: { label: 'Resolved', bg: 'rgba(18,157,111,0.14)', fg: 'var(--color-green)' },
   dismissed: { label: 'Dismissed', bg: 'rgba(207,33,48,0.10)', fg: 'var(--color-red)' },
 }
 
@@ -19,7 +19,7 @@ export function StatusPill({ status }: { status: ProtestStatus }) {
   const s = STATUS_STYLE[status] ?? STATUS_STYLE.open
   return (
     <span
-      className="inline-flex shrink-0 items-center rounded-full px-3 py-1 font-mono text-[11px] font-bold uppercase tracking-wider"
+      className="inline-flex shrink-0 items-center rounded-full px-3 py-1 font-body text-[11px] font-semibold uppercase tracking-[0.14em]"
       style={{ background: s.bg, color: s.fg }}
     >
       {s.label}
@@ -166,7 +166,7 @@ export function ProtestThread({ protestId, canReply = true }: { protestId: strin
             />
           </label>
           <EvidenceBox items={evidence} onChange={setEvidence} disabled={busy} />
-          {err && <p className="text-sm text-[var(--color-red)]">{err}</p>}
+          {err && <p role="alert" className="text-sm text-[var(--color-red)]">{err}</p>}
           <button onClick={send} disabled={busy || !body.trim()} className="hcr-btn hcr-btn-primary">
             {busy ? 'Sending…' : 'Send reply'}
           </button>

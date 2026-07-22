@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useClasses, useCurrentSeason, useDrivers, useSeasonResultsFull, useTeams } from '../lib/queries'
 import { buildDriverReport, type FullRow } from '../lib/driverReport'
-import { resultListsDriver } from '../lib/attribution'
+import { normalizeName, resultListsDriver, splitCrew } from '../lib/attribution'
 import { classColor } from '../lib/format'
 import { Skeleton } from '../components/ui'
 import { AnimatedStat, MeterRow, StatBand } from '../components/editorial'
@@ -15,8 +15,8 @@ export default function TeamProfile() {
   const { data: teams, isLoading } = useTeams()
   const { data: drivers } = useDrivers()
   const { data: classes } = useClasses()
-  const { data: season } = useCurrentSeason()
-  const { data: results } = useSeasonResultsFull(season?.id)
+  const { data: season, isLoading: seasonLoading } = useCurrentSeason()
+  const { data: results, isLoading: resultsLoading } = useSeasonResultsFull(season?.id)
 
   const team = teams?.find((t) => t.id === id)
 
@@ -36,17 +36,21 @@ export default function TeamProfile() {
       new Set((results ?? []).filter((r) => r.team_id === id).map((r) => (r.drivers_text ?? '').trim()).filter(Boolean)),
     )
     for (const nm of racedNames) {
-      const match = (drivers ?? []).find((d) => resultListsDriver(nm, d.name))
-      if (match) {
-        if (!seen.has(match.id)) {
-          out.push({ key: match.id, driver: match, name: match.name })
-          seen.add(match.id)
-        }
-      } else {
-        const k = 'name:' + nm.toLowerCase()
-        if (!seen.has(k)) {
-          out.push({ key: k, name: nm })
-          seen.add(k)
+      // Endurance entries list a whole crew ("A. Smith / B. Jones") — split it and
+      // credit each individual, matched to their profile where one exists.
+      for (const segment of splitCrew(nm)) {
+        const match = (drivers ?? []).find((d) => resultListsDriver(segment, d.name))
+        if (match) {
+          if (!seen.has(match.id)) {
+            out.push({ key: match.id, driver: match, name: match.name })
+            seen.add(match.id)
+          }
+        } else {
+          const k = 'name:' + normalizeName(segment)
+          if (!seen.has(k)) {
+            out.push({ key: k, name: segment })
+            seen.add(k)
+          }
         }
       }
     }
@@ -76,6 +80,7 @@ export default function TeamProfile() {
 
   const color = classColor(team.class_id, classes)
   const raced = report.starts > 0
+  const resultsPending = seasonLoading || resultsLoading
 
   return (
     <div className="container-hcr py-10 md:py-14">
@@ -169,7 +174,12 @@ export default function TeamProfile() {
         )}
       </section>
 
-      {!raced ? (
+      {resultsPending ? (
+        <div className="mt-10 space-y-6">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-96 w-full" />
+        </div>
+      ) : !raced ? (
         <div className="mt-10 rounded-2xl bg-[var(--color-cloud)] p-10 text-center">
           <p className="font-display text-2xl">No scored results yet</p>
           <p className="mx-auto mt-2 max-w-md font-body text-sm text-[var(--color-muted)]">

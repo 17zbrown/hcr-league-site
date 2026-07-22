@@ -118,7 +118,7 @@ export function EvidenceBox({
         </button>
       </div>
 
-      {err && <p className="text-sm text-[var(--color-red)]">{err}</p>}
+      {err && <p role="alert" className="text-sm text-[var(--color-red)]">{err}</p>}
 
       {/* staged evidence */}
       {items.length > 0 && (
@@ -136,8 +136,8 @@ export function EvidenceBox({
               <button
                 type="button"
                 onClick={() => remove(i)}
-                aria-label="Remove evidence"
-                className="rounded-lg px-2 py-1 text-sm text-[var(--color-muted)] hover:text-[var(--color-red)]"
+                aria-label={`Remove ${it.title ?? 'evidence'}`}
+                className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg text-sm text-[var(--color-muted)] hover:text-[var(--color-red)]"
               >
                 ✕
               </button>

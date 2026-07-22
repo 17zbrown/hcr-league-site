@@ -63,23 +63,43 @@ export function computeAchievements(rows: FullRow[], allRows: FullRow[]): Achiev
   }
 
   // -- podium-run: 3+ consecutive rounds started, all P3 or better -----------
+  // One row per round (best = lowest cls_pos wins), ordered by round; the
+  // streak only extends when the round numbers are truly consecutive.
+  const byRound = new Map<number, FullRow>()
+  for (const r of sorted) {
+    const round = r.event?.round
+    if (round == null) continue
+    const cur = byRound.get(round)
+    if (cur == null || (r.cls_pos ?? Infinity) < (cur.cls_pos ?? Infinity)) byRound.set(round, r)
+  }
+  const roundRows = [...byRound.entries()].sort((a, b) => a[0] - b[0])
   let bestRun = 0
-  let bestRunEnd = -1
+  let bestRunStart: FullRow | undefined
+  let bestRunEnd: FullRow | undefined
   let run = 0
-  sorted.forEach((r, i) => {
+  let runStartRow: FullRow | undefined
+  let prevRound: number | null = null
+  for (const [round, r] of roundRows) {
     if (r.cls_pos != null && r.cls_pos <= 3) {
-      run += 1
+      if (run > 0 && prevRound != null && prevRound + 1 === round) {
+        run += 1
+      } else {
+        run = 1
+        runStartRow = r
+      }
       if (run > bestRun) {
         bestRun = run
-        bestRunEnd = i
+        bestRunStart = runStartRow
+        bestRunEnd = r
       }
     } else {
       run = 0
     }
-  })
+    prevRound = round
+  }
   const podiumRun = bestRun >= 3
-  const runStart = podiumRun ? sorted[bestRunEnd - bestRun + 1] : undefined
-  const runEnd = podiumRun ? sorted[bestRunEnd] : undefined
+  const runStart = podiumRun ? bestRunStart : undefined
+  const runEnd = podiumRun ? bestRunEnd : undefined
 
   // -- spotless: completed a race with zero incident points ------------------
   const spotless = sorted.find((r) => r.inc === 0 && !isDnf(r))
@@ -100,24 +120,27 @@ export function computeAchievements(rows: FullRow[], allRows: FullRow[]): Achiev
   const allEvents = new Set<string>()
   for (const r of allRows) if (r.event_id) allEvents.add(r.event_id)
   const myEvents = new Set<string>()
-  for (const r of sorted) if (r.event_id) myEvents.add(r.event_id)
+  for (const r of sorted) {
+    if (!r.event_id) continue
+    if ((r.status ?? '').toUpperCase() === 'DNS') continue // never started
+    myEvents.add(r.event_id)
+  }
   const everPresent = allEvents.size > 0 && [...allEvents].every((e) => myEvents.has(e))
 
   // -- centurion: 100+ laps -----------------------------------------------
   const totalLaps = sorted.reduce((a, r) => a + (r.laps ?? 0), 0)
 
-  // -- metronome: consistency >= 80 with >= 3 starts --------------------------
+  // -- metronome: consistency >= 80 with >= 3 classified finishes -------------
   // Spread logic mirrors the driver report: tighter finish spread = higher.
+  // A single classified finish is no evidence of consistency, so it stays null.
   const finishes = sorted.map((r) => r.cls_pos).filter((p): p is number => p != null)
   let consistency: number | null = null
   if (finishes.length >= 2) {
     const m = finishes.reduce((a, b) => a + b, 0) / finishes.length
     const sd = Math.sqrt(finishes.reduce((a, f) => a + (f - m) ** 2, 0) / finishes.length)
     consistency = Math.max(0, Math.min(100, Math.round(100 - sd * 14)))
-  } else if (finishes.length === 1) {
-    consistency = 100
   }
-  const metronome = sorted.length >= 3 && consistency != null && consistency >= 80
+  const metronome = finishes.length >= 3 && consistency != null && consistency >= 80
 
   // -- points-hoarder: 500+ season points -------------------------------------
   const points = sorted.reduce(

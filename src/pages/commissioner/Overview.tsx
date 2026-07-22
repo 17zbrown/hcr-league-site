@@ -30,7 +30,7 @@ export default function Overview() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {stats.map((s) => (
           <div key={s.label} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
-            <div className="font-display text-4xl font-extrabold">{s.value}</div>
+            <div className="font-display text-4xl">{s.value}</div>
             <div className="mt-1 font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">{s.label}</div>
           </div>
         ))}

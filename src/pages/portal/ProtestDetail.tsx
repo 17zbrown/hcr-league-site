@@ -162,7 +162,7 @@ function RulingPanel({
           <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Penalty</span>
           <input className="hcr-input" value={p} onChange={(e) => setP(e.target.value)} placeholder="e.g. 5s time penalty · No further action" />
         </label>
-        {err && <p className="text-sm text-[var(--color-red)]">{err}</p>}
+        {err && <p role="alert" className="text-sm text-[var(--color-red)]">{err}</p>}
         <button onClick={save} disabled={busy} className="hcr-btn hcr-btn-primary w-full">
           {busy ? 'Saving…' : saved ? 'Saved ✓' : 'Publish ruling'}
         </button>

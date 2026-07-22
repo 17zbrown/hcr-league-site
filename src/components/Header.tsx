@@ -52,7 +52,7 @@ export default function Header() {
           <div className="flex items-center gap-2">
             {session && <NotificationBell />}
             {session ? (
-              <Link to="/portal" className="hidden rounded-lg bg-[var(--color-ink)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-[var(--color-deep)] transition-transform hover:-translate-y-0.5 sm:block">
+              <Link to="/portal" className="hidden rounded-lg bg-[var(--color-deep)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5 sm:block">
                 My Portal
               </Link>
             ) : (
@@ -179,7 +179,7 @@ function FullMenu({
                 <Link
                   to={l.to}
                   onClick={onClose}
-                  className="block rounded-xl border border-white/12 px-5 py-4 font-display text-xl font-bold uppercase tracking-wide transition-colors hover:border-[var(--color-brand)] hover:text-[var(--color-brand)]"
+                  className="block rounded-xl border border-white/12 px-5 py-4 font-display text-xl transition-colors hover:border-[var(--color-brand)] hover:text-[var(--color-brand)]"
                 >
                   {l.label}
                 </Link>
@@ -191,7 +191,7 @@ function FullMenu({
                   href={discord}
                   target="_blank"
                   rel="noreferrer"
-                  className="block rounded-xl bg-white/5 px-5 py-4 font-display text-xl font-bold uppercase tracking-wide text-white/80 transition-colors hover:text-white"
+                  className="block rounded-xl bg-white/5 px-5 py-4 font-display text-xl text-white/80 transition-colors hover:text-white"
                 >
                   Join the Discord ↗
                 </a>
