@@ -161,7 +161,7 @@ export default function RaceDetail() {
                   <li key={s.id} className="flex items-center gap-4 border-b border-[var(--color-line)] px-5 py-4 last:border-0">
                     <span className="tabular font-display text-xl font-extrabold text-[var(--color-faint)]">{String(i + 1).padStart(2, '0')}</span>
                     <div className="flex-1">
-                      <div className="font-display text-lg font-extrabold uppercase">{s.type}</div>
+                      <div className="font-display text-lg">{s.type}</div>
                       <div className="tabular text-sm text-[var(--color-muted)]">{sessionTime(s.start)}</div>
                     </div>
                     {s.dur_min != null && <span className="tabular text-sm text-[var(--color-ink-2)]">{s.dur_min} min</span>}
@@ -275,7 +275,7 @@ export default function RaceDetail() {
                   <div key={w.id} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
                     <div className="flex items-center gap-2">
                       <span className="h-3 w-3 rounded-full" style={{ background: color }} />
-                      <span className="font-display text-xl font-extrabold uppercase">{w.class_id}</span>
+                      <span className="font-display text-xl">{w.class_id}</span>
                     </div>
                     <div className="mt-2 font-semibold"><DriverName text={w.drivers_text} /></div>
                     <div className="tabular mt-0.5 text-sm text-[var(--color-muted)]">#{w.number}{w.best_lap ? ` · ${w.best_lap}` : ''}</div>

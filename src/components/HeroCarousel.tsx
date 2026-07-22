@@ -81,7 +81,7 @@ export default function HeroCarousel() {
               {leaders.map(({ cls, row }) => (
                 <div key={cls} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5 shadow-card">
                   <ClassChip classId={cls} />
-                  <div className="mt-3 font-display text-2xl font-extrabold uppercase leading-tight">
+                  <div className="mt-3 font-display text-2xl leading-tight">
                     <DriverName text={row!.name} />
                   </div>
                   <div className="tabular mt-1 text-sm text-[var(--color-muted)]">

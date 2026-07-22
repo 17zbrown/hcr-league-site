@@ -162,7 +162,7 @@ function FullMenu({
                   className="group flex items-baseline gap-4 border-b border-white/10 py-4"
                 >
                   <span className="font-mono text-xs text-white/30">{String(i + 1).padStart(2, '0')}</span>
-                  <span className="font-display text-4xl font-extrabold uppercase leading-none transition-colors group-hover:text-[var(--color-brand)] md:text-5xl">
+                  <span className="font-display text-4xl leading-none transition-colors group-hover:text-[var(--color-brand)] md:text-5xl">
                     {item.label}
                   </span>
                 </NavLink>

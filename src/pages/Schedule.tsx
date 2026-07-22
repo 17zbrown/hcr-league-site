@@ -30,7 +30,7 @@ export default function Schedule() {
                   } ${done ? 'opacity-70' : ''}`}
                 >
                   <div className="flex flex-col items-center gap-1">
-                    <div className="font-display text-4xl font-extrabold text-[var(--color-faint)]">
+                    <div className="font-display text-5xl text-[var(--color-line-2)]">
                       {String(e.round).padStart(2, '0')}
                     </div>
                   </div>

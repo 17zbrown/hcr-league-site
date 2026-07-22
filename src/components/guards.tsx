@@ -49,7 +49,7 @@ export function RequireManager({ children }: { children: ReactNode }) {
 function Denied({ title }: { title: string }) {
   return (
     <div className="container-hcr flex min-h-[60vh] flex-col items-center justify-center text-center">
-      <div className="font-display text-6xl font-extrabold uppercase text-[var(--color-ink)]">Black flag</div>
+      <div className="font-display text-6xl text-[var(--color-ink)]">Black flag</div>
       <p className="mt-3 text-lg text-[var(--color-muted)]">
         {title}. Ask the commissioner for access if you think this is a mistake.
       </p>

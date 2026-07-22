@@ -87,7 +87,7 @@ export default function RaceControlPortal() {
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-display text-xl font-extrabold uppercase">{p.category ?? 'Protest'}</span>
+                    <span className="font-display text-xl">{p.category ?? 'Protest'}</span>
                     {p.against_text && <span className="text-sm text-[var(--color-muted)]">vs {p.against_text}</span>}
                   </div>
                   <div className="tabular mt-1 text-xs text-[var(--color-faint)]">

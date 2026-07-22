@@ -49,7 +49,7 @@ export default function Standings() {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`relative px-5 py-3 font-display text-2xl font-extrabold uppercase transition-colors ${
+              className={`relative px-5 py-3 font-display text-3xl transition-colors ${
                 active ? 'text-[var(--color-ink)]' : 'text-[var(--color-faint)] hover:text-[var(--color-ink)]'
               }`}
             >
@@ -153,7 +153,7 @@ function StandingsTable({
                 <td className="tabular px-5 py-3.5 text-center text-[var(--color-muted)]">{r.starts}</td>
                 <td className="tabular px-5 py-3.5 text-center">{r.wins || '—'}</td>
                 <td className="tabular px-5 py-3.5 text-center">{r.podiums || '—'}</td>
-                <td className="tabular px-5 py-3.5 text-right text-lg font-bold">
+                <td className="px-5 py-3.5 text-right font-display text-2xl leading-none">
                   <CountUp value={r.points} />
                 </td>
                 <td className="tabular hidden px-5 py-3.5 text-right text-[var(--color-faint)] sm:table-cell">

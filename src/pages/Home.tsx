@@ -13,6 +13,7 @@ import { computeStandings } from '../lib/standings'
 import { CLASS_ORDER, classColor, fmtDate } from '../lib/format'
 import type { ClassId } from '../lib/types'
 import { ClassChip, Section, Skeleton } from '../components/ui'
+import { StatBand } from '../components/editorial'
 import { CountUp, Reveal } from '../components/motion'
 import Ticker from '../components/Ticker'
 import HeroCarousel from '../components/HeroCarousel'
@@ -41,6 +42,17 @@ export default function Home() {
     [seasonResults, teams],
   )
 
+  // League pulse — real season totals from the imported results.
+  const { driversScored, totalStarts, totalLaps } = useMemo(() => {
+    const rows = seasonResults ?? []
+    const names = new Set(rows.map((r) => (r.drivers_text ?? '').trim().toLowerCase()).filter(Boolean))
+    return {
+      driversScored: names.size,
+      totalStarts: rows.length,
+      totalLaps: rows.reduce((s, r) => s + (r.laps ?? 0), 0),
+    }
+  }, [seasonResults])
+
   return (
     <>
       <HeroCarousel />
@@ -61,13 +73,27 @@ export default function Home() {
         </Section>
       )}
 
+      {/* ---------- LEAGUE PULSE ---------- */}
+      <Section eyebrow="The season so far" title="League pulse">
+        <StatBand
+          stats={[
+            { label: 'Rounds Complete', value: roundsDone },
+            { label: 'Rounds To Go', value: (events?.length ?? 0) - roundsDone },
+            { label: 'Drivers Scored', value: driversScored },
+            { label: 'Race Starts', value: totalStarts },
+            { label: 'Laps Recorded', value: totalLaps },
+            { label: 'Classes Racing', value: 3 },
+          ]}
+        />
+      </Section>
+
       {/* ---------- CHAMPIONSHIP SNAPSHOT ---------- */}
-      <div className="bg-[var(--color-mist)]">
+      <div className="bg-[var(--color-mist)]/60">
         <Section
           eyebrow="Championship · Top of the table"
           title="Standings"
           action={
-            <Link to="/standings" className="text-sm font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-blue)]">
+            <Link to="/standings" className="font-body text-sm font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-blue)]">
               All standings →
             </Link>
           }
@@ -78,19 +104,19 @@ export default function Home() {
               const color = classColor(cls, classes)
               return (
                 <Reveal key={cls} delay={ci * 0.08}>
-                  <div className="shadow-card overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
-                    <div className="flex items-center justify-between px-5 py-4" style={{ background: color }}>
-                      <span className="font-display text-2xl font-extrabold uppercase text-black">{cls}</span>
-                      <span className="font-mono text-xs font-semibold uppercase tracking-widest text-black/70">Drivers</span>
+                  <div className="on-navy overflow-hidden rounded-2xl bg-[var(--color-deep)] shadow-card">
+                    <div className="flex items-center justify-between border-b px-5 py-4" style={{ borderColor: `${color}55` }}>
+                      <span className="font-display text-3xl leading-none">{cls}</span>
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
                     </div>
                     <ol>
-                      {rows.length === 0 && <li className="px-5 py-7 text-sm text-[var(--color-muted)]">No results scored yet.</li>}
+                      {rows.length === 0 && <li className="px-5 py-7 font-body text-sm text-[var(--color-muted)]">No results scored yet.</li>}
                       {rows.map((row, i) => (
                         <li key={row.key} className="flex items-center gap-3 border-b border-[var(--color-line)] px-5 py-3.5 last:border-0">
-                          <span className={`tabular w-6 text-lg font-bold ${i === 0 ? 'text-[var(--color-ink)]' : 'text-[var(--color-faint)]'}`}>{i + 1}</span>
-                          <span className="min-w-0 flex-1 truncate font-semibold"><DriverName text={row.name} /></span>
+                          <span className={`font-display w-7 text-2xl leading-none ${i === 0 ? 'text-[var(--color-brand)]' : 'text-[var(--color-faint)]'}`}>{i + 1}</span>
+                          <span className="min-w-0 flex-1 truncate font-body font-semibold"><DriverName text={row.name} /></span>
                           {row.wins > 0 && <span className="tabular text-xs text-[var(--color-muted)]">{row.wins}W</span>}
-                          <span className="tabular w-14 text-right text-lg font-bold"><CountUp value={row.points} /></span>
+                          <span className="w-16 text-right font-display text-2xl leading-none"><CountUp value={row.points} /></span>
                         </li>
                       ))}
                     </ol>
@@ -129,7 +155,7 @@ export default function Home() {
                   {isNext && <span className="rounded-full bg-[var(--color-brand)] px-2 py-0.5 text-[10px] font-bold uppercase text-black">Next</span>}
                   {done && <span className="text-[10px] font-bold uppercase tracking-wide text-[var(--color-faint)]">Final</span>}
                 </div>
-                <div className="mt-3 whitespace-nowrap font-display text-2xl font-extrabold uppercase leading-tight">{e.track?.name ?? e.name}</div>
+                <div className="mt-3 whitespace-nowrap font-display text-2xl leading-tight">{e.track?.name ?? e.name}</div>
                 <div className="mt-1 text-sm text-[var(--color-muted)]">{e.track?.location}</div>
                 <div className="tabular mt-4 text-sm font-medium">{fmtDate(e.date)}</div>
               </Link>
@@ -182,7 +208,7 @@ function LatestByClass({ eventId }: { eventId: string }) {
           <Reveal key={cls} delay={ci * 0.08}>
             <div className="shadow-card overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
               <div className="flex items-center justify-between px-5 py-4" style={{ background: color }}>
-                <span className="font-display text-2xl font-extrabold uppercase text-black">{cls}</span>
+                <span className="font-display text-2xl text-black">{cls}</span>
                 <span className="font-mono text-xs font-semibold uppercase tracking-widest text-black/70">Result</span>
               </div>
               <ol>
@@ -232,7 +258,7 @@ function Champions() {
         {Object.entries(grouped).map(([label, champs], gi) => (
           <Reveal key={label} delay={gi * 0.06}>
             <div className="grid items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-6 md:grid-cols-[220px_1fr]">
-              <div className="font-display text-3xl font-extrabold uppercase">{label}</div>
+              <div className="font-display text-3xl">{label}</div>
               <div className="flex flex-wrap gap-6">
                 {champs.map((c) => (
                   <div key={c.id} className="flex items-center gap-3">

@@ -12,7 +12,7 @@ export default function Countdown({ target, dark = false }: { target: string; da
   const parts = countdownParts(target, now)
 
   if (!parts) {
-    return <div className="font-display text-2xl font-extrabold uppercase text-[var(--color-brand-deep)]">Lights out</div>
+    return <div className="font-display text-2xl text-[var(--color-brand-deep)]">Lights out</div>
   }
 
   const cells = [

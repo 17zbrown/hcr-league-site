@@ -43,7 +43,7 @@ export default function Teams() {
                           {t.number}
                         </div>
                         <div className="min-w-0">
-                          <div className="truncate font-display text-2xl font-extrabold uppercase leading-tight">{t.name}</div>
+                          <div className="truncate font-display text-2xl leading-tight">{t.name}</div>
                           <div className="truncate text-sm text-[var(--color-muted)]">{t.car}</div>
                         </div>
                       </Link>

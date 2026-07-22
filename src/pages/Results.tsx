@@ -39,7 +39,7 @@ export default function Results() {
                 }`}
               >
                 <div className="tabular text-xs font-semibold text-[var(--color-muted)]">ROUND {e.round}</div>
-                <div className="font-display text-xl font-extrabold uppercase">{e.track?.name}</div>
+                <div className="font-display text-xl">{e.track?.name}</div>
               </button>
             ))}
           </div>

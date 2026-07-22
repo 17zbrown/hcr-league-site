@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 export default function NotFound() {
   return (
     <div className="container-hcr flex min-h-[60vh] flex-col items-center justify-center text-center">
-      <div className="font-display text-8xl font-extrabold uppercase text-[var(--color-ink)]">
+      <div className="font-display text-8xl text-[var(--color-ink)]">
         D<span className="text-[var(--color-brand-deep)]">N</span>F
       </div>
       <p className="mt-4 text-xl text-[var(--color-muted)]">

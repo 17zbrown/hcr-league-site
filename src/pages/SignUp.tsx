@@ -61,7 +61,7 @@ export default function SignUp() {
               <Reveal key={l.cat} delay={i * 0.08}>
                 <div className="h-full rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
                   <div className="tabular text-sm text-[var(--color-faint)]">0{i + 1}</div>
-                  <div className="mt-2 font-display text-3xl font-extrabold uppercase">{l.cat}</div>
+                  <div className="mt-2 font-display text-3xl">{l.cat}</div>
                   <div className="mt-1 font-mono text-xs uppercase tracking-wider text-[var(--color-blue)]">{l.classes}</div>
                   <p className="mt-3 text-sm text-[var(--color-muted)]">{l.desc}</p>
                 </div>

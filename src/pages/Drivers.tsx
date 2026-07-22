@@ -37,7 +37,7 @@ export default function Drivers() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate font-display text-2xl font-extrabold uppercase leading-none">{d.name}</span>
+                    <span className="truncate font-display text-2xl leading-none">{d.name}</span>
                     {d.country && <span className="text-lg leading-none">{d.country}</span>}
                   </div>
                   <div className="mt-1.5 flex items-center gap-2 truncate text-sm text-[var(--color-muted)]">

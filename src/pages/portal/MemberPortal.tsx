@@ -41,7 +41,7 @@ export default function MemberPortal() {
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`relative px-5 py-3 font-display text-xl font-extrabold uppercase transition-colors ${
+            className={`relative px-5 py-3 font-display text-xl transition-colors ${
               tab === t.id ? 'text-[var(--color-ink)]' : 'text-[var(--color-faint)] hover:text-[var(--color-ink)]'
             }`}
           >
@@ -77,7 +77,7 @@ function Overview({ onSignOut }: { onSignOut: () => void }) {
   return (
     <div className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
       <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
-        <div className="font-display text-3xl font-extrabold uppercase">{profile?.display_name ?? 'Member'}</div>
+        <div className="font-display text-3xl">{profile?.display_name ?? 'Member'}</div>
         <div className="mt-1 text-sm text-[var(--color-muted)]">{profile?.email}</div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="rounded-full bg-[var(--color-mist)] px-3 py-1 font-mono text-[11px] font-bold uppercase tracking-wider text-[var(--color-ink-2)]">
@@ -248,7 +248,7 @@ function MyProtests() {
           >
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-display text-xl font-extrabold uppercase">{p.category ?? 'Protest'}</span>
+                <span className="font-display text-xl">{p.category ?? 'Protest'}</span>
                 {p.against_text && <span className="text-sm text-[var(--color-muted)]">vs {p.against_text}</span>}
               </div>
               <div className="tabular mt-1 text-xs text-[var(--color-faint)]">

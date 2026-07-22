@@ -43,8 +43,12 @@ export function Section({
       {(eyebrow || title || action) && (
         <div className="mb-9 flex flex-wrap items-end justify-between gap-4">
           <div>
-            {eyebrow && <div className="eyebrow mb-2">{eyebrow}</div>}
-            {title && <TitleTag className="text-4xl md:text-5xl">{title}</TitleTag>}
+            {eyebrow && (
+              <div className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
+                {eyebrow}
+              </div>
+            )}
+            {title && <TitleTag className="mt-2 text-5xl md:text-6xl">{title}</TitleTag>}
           </div>
           {action}
         </div>

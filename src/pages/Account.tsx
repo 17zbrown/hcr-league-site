@@ -84,7 +84,7 @@ export default function Account() {
         {/* left: identity + portals */}
         <div className="space-y-4">
           <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
-            <div className="font-display text-3xl font-extrabold uppercase">{profile?.display_name ?? 'Member'}</div>
+            <div className="font-display text-3xl">{profile?.display_name ?? 'Member'}</div>
             <div className="mt-1 text-sm text-[var(--color-muted)]">{profile?.email}</div>
             <div className="mt-4 flex flex-wrap gap-2">
               {isAdmin && <span className="rounded-full bg-[var(--color-brand)] px-3 py-1 text-xs font-bold uppercase text-black">Commissioner</span>}

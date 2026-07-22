@@ -115,13 +115,13 @@ export default function TeamProfile() {
                     to={`/drivers/${m.driver.id}`}
                     className="flex items-center gap-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 transition-all hover:-translate-y-1 hover:shadow-card"
                   >
-                    <span className="font-display text-xl font-extrabold uppercase">{m.driver.name}</span>
+                    <span className="font-display text-xl">{m.driver.name}</span>
                     {m.driver.country && <span>{m.driver.country}</span>}
                     <span className="ml-auto text-[var(--color-faint)]" aria-hidden>→</span>
                   </Link>
                 ) : (
                   <div className="flex items-center gap-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4">
-                    <span className="font-display text-xl font-extrabold uppercase">{m.name}</span>
+                    <span className="font-display text-xl">{m.name}</span>
                   </div>
                 )}
               </Reveal>
