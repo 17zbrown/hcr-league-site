@@ -119,7 +119,7 @@ export default function RaceDetail() {
         <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-3">
           <span className="tabular font-mono text-sm text-[var(--color-muted)]">ROUND {event.round}</span>
-          {done && <span className="rounded-full bg-[var(--color-ink)] px-2.5 py-0.5 text-[11px] font-bold uppercase text-white">Final</span>}
+          {done && <span className="rounded-full bg-[var(--color-deep)] px-2.5 py-0.5 text-[11px] font-bold uppercase text-white">Final</span>}
           {event.status === 'next' && <span className="rounded-full bg-[var(--color-brand)] px-2.5 py-0.5 text-[11px] font-bold uppercase text-black">Next Round</span>}
           <div className="ml-auto flex gap-1.5">
             {CLASS_ORDER.map((c) => <ClassChip key={c} classId={c} />)}

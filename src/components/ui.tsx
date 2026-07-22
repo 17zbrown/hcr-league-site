@@ -10,7 +10,7 @@ export function ClassChip({ classId, size = 'sm' }: { classId: string; size?: 's
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full font-mono font-medium uppercase tracking-wider ${pad}`}
-      style={{ background: `${color}1f`, color: '#3a3f49' }}
+      style={{ background: `${color}1f`, color }}
     >
       <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
       {classId}

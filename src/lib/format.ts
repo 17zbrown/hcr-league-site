@@ -14,10 +14,11 @@ export function classColor(classId: string, classes?: LeagueClass[]): string {
 
 /** Legible-on-white variants of the class colors — for thin strokes / text
  * where the bright chip colors (esp. GTP yellow) wash out. */
+/** On the dark ground the full-strength class colors read best. */
 export const CLASS_LINE: Record<string, string> = {
-  GTP: '#97890a', // brand-deep
-  LMP2: '#2f6bff',
-  GTD: '#12b981',
+  GTP: '#f2e114',
+  LMP2: '#5b8def',
+  GTD: '#3fc98a',
 }
 
 export function classLineColor(classId: string): string {

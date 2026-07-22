@@ -6,7 +6,7 @@ export default function Footer() {
   const { data: settings } = useLeagueSettings()
 
   return (
-    <footer className="mt-24 bg-[var(--color-ink)] text-[var(--color-paper)]">
+    <footer className="mt-24 bg-[var(--color-deep)] text-[var(--color-paper)]">
       <div className="container-hcr grid gap-10 py-16 md:grid-cols-[1.6fr_1fr_1fr]">
         <div>
           <img src={logo} alt="HCR League" className="h-11 w-auto" />

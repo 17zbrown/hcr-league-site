@@ -19,7 +19,7 @@ const NAV = [
 function Wordmark() {
   return (
     <Link to="/" className="flex items-center gap-2.5" aria-label="HCR League home">
-      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-ink)]">
+      <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-mist)]">
         <img src={logo} alt="" className="h-6 w-6 object-contain" />
       </span>
       <span className="font-display text-xl font-extrabold uppercase tracking-tight">
@@ -52,7 +52,7 @@ export default function Header() {
           <div className="flex items-center gap-2">
             {session && <NotificationBell />}
             {session ? (
-              <Link to="/portal" className="hidden rounded-lg bg-[var(--color-ink)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5 sm:block">
+              <Link to="/portal" className="hidden rounded-lg bg-[var(--color-ink)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-[var(--color-deep)] transition-transform hover:-translate-y-0.5 sm:block">
                 My Portal
               </Link>
             ) : (
@@ -122,7 +122,7 @@ function FullMenu({
 
   return (
     <motion.div
-      className="fixed inset-0 z-[60] bg-[var(--color-ink)] text-white"
+      className="fixed inset-0 z-[60] bg-[var(--color-deep)] text-white"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

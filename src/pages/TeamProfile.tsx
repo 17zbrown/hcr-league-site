@@ -83,7 +83,7 @@ export default function TeamProfile() {
       <div className="flex flex-wrap items-end justify-between gap-6 border-b border-[var(--color-line)] pb-8">
         <div className="flex items-center gap-5">
           <div
-            className="tabular flex h-20 w-24 shrink-0 items-center justify-center rounded-2xl bg-[var(--color-ink)] font-display text-4xl font-extrabold text-white"
+            className="tabular flex h-20 w-24 shrink-0 items-center justify-center rounded-2xl bg-[var(--color-mist)] font-display text-4xl font-extrabold text-[var(--color-ink)]"
             style={{ borderBottom: `5px solid ${color}` }}
           >
             {team.number}

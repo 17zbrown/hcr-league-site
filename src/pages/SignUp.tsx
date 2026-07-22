@@ -44,7 +44,7 @@ export default function SignUp() {
                   href={settings.discord_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded-xl bg-[var(--color-ink)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-1"
+                  className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]"
                 >
                   Join the Discord
                 </a>

@@ -49,7 +49,7 @@ export default function Ticker() {
   if (!items.length) return null
 
   return (
-    <Marquee className="border-y border-white/10 bg-[var(--color-ink)]">
+    <Marquee className="border-y border-white/10 bg-[var(--color-deep)]">
       {items.map((it, i) => (
         <span key={i} className="flex items-center whitespace-nowrap py-3.5 pl-6 pr-1">
           <span className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-white/45">

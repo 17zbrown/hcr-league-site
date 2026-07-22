@@ -1,29 +1,31 @@
 @import 'tailwindcss';
 
 /* ------------------------------------------------------------------ *
- * HCR League — design tokens (bright / modern / vibrant)
- * White grounds, near-black ink, one bold accent (HCR yellow) plus
- * vibrant racing blue + green. Class colors come from the DB.
+ * HCR League — design tokens (cinematic / dark / broadcast)
+ * Near-black cinematic grounds, cool white type, ONE hot accent
+ * (HCR yellow). On a dark ground the yellow finally reads at full
+ * strength instead of washing out. Class colors come from the DB.
  * ------------------------------------------------------------------ */
 @theme {
-  /* Grounds & neutrals */
-  --color-paper: #ffffff;
-  --color-cloud: #fafbfc;
-  --color-mist: #f3f5f9;
-  --color-line: #e6e9ef;
-  --color-line-2: #d6dae2;
+  /* Grounds & neutrals — darkest to lightest surface */
+  --color-deep: #07090c;   /* deepest surface: footer, menu, chips */
+  --color-paper: #101419;  /* default panel / card ground */
+  --color-cloud: #161b21;  /* raised panel */
+  --color-mist: #1c222a;   /* subtle fill / table header */
+  --color-line: #262d36;
+  --color-line-2: #333b46;
 
-  --color-ink: #0a0c11; /* primary text + dark surfaces */
-  --color-ink-2: #2c3340; /* secondary text */
-  --color-muted: #6b7280; /* muted text */
-  --color-faint: #656b75; /* passes AA (~4.6:1) even on small caption text */
+  --color-ink: #e9eef4;    /* primary text (cool white) */
+  --color-ink-2: #c2cad4;  /* secondary text */
+  --color-muted: #97a1ad;  /* muted text — AA on dark grounds */
+  --color-faint: #7c8794;  /* captions — still AA on our grounds */
 
-  /* Brand + vibrant accents */
-  --color-brand: #f2e114; /* HCR yellow */
-  --color-brand-deep: #97890a; /* yellow legible on white */
-  --color-blue: #2f6bff;
-  --color-green: #12b981;
-  --color-red: #cf2130; /* darkened to pass AA as text on white */
+  /* Brand + accents */
+  --color-brand: #f2e114; /* HCR yellow — the single hot accent */
+  --color-brand-deep: #cbbb10; /* yellow when it must sit on a light chip */
+  --color-blue: #5b8def;
+  --color-green: #3fc98a;
+  --color-red: #ef4b57;
 
   /* Type */
   --font-display: 'Archivo', system-ui, sans-serif;
@@ -42,7 +44,7 @@
 
   body {
     margin: 0;
-    background: var(--color-paper);
+    background: var(--color-deep);
     color: var(--color-ink);
     font-family: var(--font-body);
     font-size: 16px;
@@ -102,7 +104,7 @@
 
   /* Soft elevation used sparingly on feature cards */
   .shadow-card {
-    box-shadow: 0 24px 60px -34px rgba(10, 12, 17, 0.35);
+    box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.03);
   }
   .shadow-glow {
     box-shadow: 0 14px 38px -14px rgba(242, 225, 20, 0.75);
@@ -113,8 +115,8 @@
      Neutral lines + the single yellow accent, per the design rules. */
   .hero-grid {
     background-image:
-      linear-gradient(to right, rgba(10, 12, 17, 0.055) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(10, 12, 17, 0.055) 1px, transparent 1px);
+      linear-gradient(to right, rgba(233, 238, 244, 0.055) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(233, 238, 244, 0.055) 1px, transparent 1px);
     background-size: 46px 46px;
     -webkit-mask-image: radial-gradient(118% 96% at 86% -6%, #000 26%, transparent 72%);
     mask-image: radial-gradient(118% 96% at 86% -6%, #000 26%, transparent 72%);
@@ -182,7 +184,8 @@
   .hcr-btn:disabled { opacity: 0.55; cursor: default; }
   .hcr-btn-primary { background: var(--color-brand); color: #000; }
   .hcr-btn-primary:hover:not(:disabled) { transform: translateY(-1px); }
-  .hcr-btn-dark { background: var(--color-ink); color: #fff; }
+  /* On a dark ground the high-contrast solid inverts: light chip, dark label. */
+  .hcr-btn-dark { background: var(--color-ink); color: var(--color-deep); }
   .hcr-btn-dark:hover:not(:disabled) { transform: translateY(-1px); }
   .hcr-btn-ghost { background: transparent; border: 1px solid var(--color-line-2); color: var(--color-ink); }
   .hcr-btn-ghost:hover:not(:disabled) { border-color: var(--color-ink); }

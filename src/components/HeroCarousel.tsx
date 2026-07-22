@@ -7,6 +7,7 @@ import { CLASS_ORDER, classColor, fmtDateLong } from '../lib/format'
 import Countdown from './Countdown'
 import { ClassChip } from './ui'
 import HeroVideo from './HeroVideo'
+import SmokeCanvas from './SmokeCanvas'
 import { DriverName } from './links'
 
 interface Slide {
@@ -50,7 +51,7 @@ export default function HeroCarousel() {
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link to="/signup" className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1">Enter the Season</Link>
-                <Link to="/schedule" className="rounded-xl bg-[var(--color-ink)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-1">Schedule</Link>
+                <Link to="/schedule" className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Schedule</Link>
               </div>
             </div>
             <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 shadow-card">
@@ -89,7 +90,7 @@ export default function HeroCarousel() {
                 </div>
               ))}
             </div>
-            <Link to="/standings" className="mt-7 inline-block rounded-xl bg-[var(--color-ink)] px-6 py-3 font-display text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-1">Full Standings</Link>
+            <Link to="/standings" className="mt-7 inline-block rounded-xl border border-[var(--color-line-2)] px-6 py-3 font-display text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Full Standings</Link>
           </div>
         ),
       })
@@ -113,7 +114,7 @@ export default function HeroCarousel() {
               <Link to="/results" className="mt-8 inline-block rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1 shadow-glow">Race Results</Link>
             </div>
             <div className="hidden md:block">
-              <div className="rounded-2xl bg-[var(--color-ink)] p-8 text-center shadow-card">
+              <div className="rounded-2xl bg-[var(--color-deep)] p-8 text-center shadow-card">
                 <div className="font-display text-[7rem] font-extrabold leading-none text-[var(--color-brand)]">P1</div>
                 <div className="mt-2 font-mono text-xs uppercase tracking-widest text-white/60">Overall Victory</div>
               </div>
@@ -132,7 +133,8 @@ export default function HeroCarousel() {
             Race like{' '}
             <span className="relative inline-block">
               <span className="relative z-10">it's real.</span>
-              <span className="absolute inset-x-0 bottom-1.5 z-0 h-4 bg-[var(--color-brand)] md:h-5" />
+              {/* the reference's signature: a single hairline accent, not a fill */}
+              <span className="absolute inset-x-0 -bottom-1 z-0 h-[3px] bg-[var(--color-brand)]" />
             </span>
           </h1>
           <p className="mt-6 max-w-md text-lg text-[var(--color-muted)]">
@@ -141,7 +143,7 @@ export default function HeroCarousel() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link to="/signup" className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1">Enter the Season</Link>
-            <Link to="/standings" className="rounded-xl bg-[var(--color-ink)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-1">Championship</Link>
+            <Link to="/standings" className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Championship</Link>
           </div>
         </div>
       ),
@@ -172,7 +174,7 @@ export default function HeroCarousel() {
       aria-roledescription="carousel"
     >
       {/* Background race footage (falls back to the static hero if no clips) */}
-      <div className={`pointer-events-none absolute inset-0 overflow-hidden ${videoActive ? 'bg-[var(--color-ink)]' : ''}`}>
+      <div className={`pointer-events-none absolute inset-0 overflow-hidden ${videoActive ? 'bg-[var(--color-deep)]' : ''}`}>
         <HeroVideo onActive={setVideoActive} />
       </div>
 
@@ -183,20 +185,29 @@ export default function HeroCarousel() {
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              'linear-gradient(100deg, rgba(255,255,255,0.94) 0%, rgba(255,255,255,0.80) 38%, rgba(255,255,255,0.36) 72%, rgba(255,255,255,0.12) 100%)',
+              'linear-gradient(100deg, rgba(7,9,12,0.94) 0%, rgba(7,9,12,0.86) 38%, rgba(7,9,12,0.48) 72%, rgba(7,9,12,0.18) 100%)',
           }}
         />
       )}
 
+      {/* Telemetry grid, then tire smoke launching out of the box. */}
+      {!videoActive && <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden="true" />}
+      {!videoActive && <SmokeCanvas className="pointer-events-none absolute inset-0 h-full w-full" />}
+
+      {/* Warm light spill from the box + cinematic vignette so type always wins */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'radial-gradient(58% 55% at 86% -8%, rgba(242,225,20,0.16), transparent 62%), radial-gradient(48% 50% at 4% 6%, rgba(47,107,255,0.08), transparent 60%)',
+            'radial-gradient(42% 60% at 6% 88%, rgba(242,225,20,0.16), transparent 64%),' +
+            'radial-gradient(60% 55% at 88% -6%, rgba(91,141,239,0.10), transparent 62%),' +
+            'linear-gradient(90deg, rgba(7,9,12,0.62) 0%, rgba(7,9,12,0.34) 46%, rgba(7,9,12,0.08) 78%, rgba(7,9,12,0.30) 100%)',
         }}
       />
-      {/* Gradient gridline backdrop (telemetry grid) — hidden when video plays */}
-      {!videoActive && <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden="true" />}
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-24"
+        style={{ background: 'linear-gradient(to top, var(--color-deep), transparent)' }}
+      />
 
       <div className="container-hcr relative py-14 md:py-20">
         <div className="relative min-h-[600px] sm:min-h-[540px] md:min-h-[460px]">
