@@ -50,8 +50,8 @@ export default function HeroCarousel() {
                 {next.track?.location ? ` · ${next.track.location}` : ''} · {fmtDateLong(next.date)}
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Link to="/signup" className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1">Enter the Season</Link>
-                <Link to="/schedule" className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Schedule</Link>
+                <Link to="/signup" className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1">Enter the Season</Link>
+                <Link to="/schedule" className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Schedule</Link>
               </div>
             </div>
             <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 shadow-card">
@@ -90,7 +90,7 @@ export default function HeroCarousel() {
                 </div>
               ))}
             </div>
-            <Link to="/standings" className="mt-7 inline-block rounded-xl border border-[var(--color-line-2)] px-6 py-3 font-display text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Full Standings</Link>
+            <Link to="/standings" className="mt-7 inline-block rounded-xl border border-[var(--color-line-2)] px-6 py-3 font-alt text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Full Standings</Link>
           </div>
         ),
       })
@@ -111,10 +111,10 @@ export default function HeroCarousel() {
                 <ClassChip classId={winner.class_id} size="md" />
                 <span className="tabular text-[var(--color-muted)]">#{winner.number} · {winner.laps} laps · {winner.best_lap}</span>
               </div>
-              <Link to="/results" className="mt-8 inline-block rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1 shadow-glow">Race Results</Link>
+              <Link to="/results" className="mt-8 inline-block rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1 shadow-glow">Race Results</Link>
             </div>
             <div className="hidden md:block">
-              <div className="rounded-2xl bg-[var(--color-deep)] p-8 text-center shadow-card">
+              <div className="rounded-2xl bg-[var(--color-deep-2)] p-8 text-center">
                 <div className="font-display text-[7rem] font-extrabold leading-none text-[var(--color-brand)]">P1</div>
                 <div className="mt-2 font-mono text-xs uppercase tracking-widest text-white/60">Overall Victory</div>
               </div>
@@ -142,8 +142,8 @@ export default function HeroCarousel() {
             fight for three titles — broadcast timing, real race control, no arcade shortcuts.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link to="/signup" className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1">Enter the Season</Link>
-            <Link to="/standings" className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Championship</Link>
+            <Link to="/signup" className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1">Enter the Season</Link>
+            <Link to="/standings" className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Championship</Link>
           </div>
         </div>
       ),
@@ -168,7 +168,7 @@ export default function HeroCarousel() {
 
   return (
     <section
-      className="relative overflow-hidden border-b border-[var(--color-line)]"
+      className="on-navy relative overflow-hidden bg-[var(--color-deep)]"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       aria-roledescription="carousel"
@@ -185,7 +185,7 @@ export default function HeroCarousel() {
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              'linear-gradient(100deg, rgba(7,9,12,0.94) 0%, rgba(7,9,12,0.86) 38%, rgba(7,9,12,0.48) 72%, rgba(7,9,12,0.18) 100%)',
+              'linear-gradient(100deg, rgba(22,48,61,0.94) 0%, rgba(22,48,61,0.86) 38%, rgba(22,48,61,0.48) 72%, rgba(22,48,61,0.18) 100%)',
           }}
         />
       )}
@@ -201,12 +201,12 @@ export default function HeroCarousel() {
           background:
             'radial-gradient(42% 60% at 6% 88%, rgba(242,225,20,0.16), transparent 64%),' +
             'radial-gradient(60% 55% at 88% -6%, rgba(91,141,239,0.10), transparent 62%),' +
-            'linear-gradient(90deg, rgba(7,9,12,0.62) 0%, rgba(7,9,12,0.34) 46%, rgba(7,9,12,0.08) 78%, rgba(7,9,12,0.30) 100%)',
+            'linear-gradient(90deg, rgba(22,48,61,0.55) 0%, rgba(22,48,61,0.28) 46%, rgba(22,48,61,0.05) 78%, rgba(22,48,61,0.28) 100%)',
         }}
       />
       <div
         className="pointer-events-none absolute inset-x-0 bottom-0 h-24"
-        style={{ background: 'linear-gradient(to top, var(--color-deep), transparent)' }}
+        style={{ background: 'linear-gradient(to top, #16303d, transparent)' }}
       />
 
       <div className="container-hcr relative py-14 md:py-20">

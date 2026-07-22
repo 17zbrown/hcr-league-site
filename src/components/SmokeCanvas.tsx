@@ -27,10 +27,12 @@ export default function SmokeCanvas({ className = '' }: { className?: string }) 
     sprite.width = sprite.height = SPRITE
     const sctx = sprite.getContext('2d')!
     const g = sctx.createRadialGradient(SPRITE / 2, SPRITE / 2, 0, SPRITE / 2, SPRITE / 2, SPRITE / 2)
-    g.addColorStop(0, 'rgba(255,255,255,0.60)')
-    g.addColorStop(0.3, 'rgba(226,232,240,0.30)')
-    g.addColorStop(0.65, 'rgba(150,164,180,0.11)')
-    g.addColorStop(1, 'rgba(150,164,180,0)')
+    // Very low-contrast stops: smoke should read as haze catching light, never
+    // as a defined blob. Density comes from overlapping many puffs, not opacity.
+    g.addColorStop(0, 'rgba(233,240,246,0.20)')
+    g.addColorStop(0.35, 'rgba(214,226,236,0.10)')
+    g.addColorStop(0.7, 'rgba(176,196,212,0.035)')
+    g.addColorStop(1, 'rgba(176,196,212,0)')
     sctx.fillStyle = g
     sctx.fillRect(0, 0, SPRITE, SPRITE)
 
@@ -71,7 +73,7 @@ export default function SmokeCanvas({ className = '' }: { className?: string }) 
           vy: Math.sin(ang) * speed * 0.65,
           life: 0,
           max: burst ? 2.6 + Math.random() * 2.4 : 4.5 + Math.random() * 4,
-          size: burst ? 46 + Math.random() * 90 : 70 + Math.random() * 130,
+          size: burst ? 130 + Math.random() * 170 : 190 + Math.random() * 240,
           grow: burst ? 46 + Math.random() * 46 : 24 + Math.random() * 30,
           rot: Math.random() * Math.PI * 2,
           vr: (Math.random() - 0.5) * 0.45,
@@ -97,7 +99,7 @@ export default function SmokeCanvas({ className = '' }: { className?: string }) 
 
         const size = p.size + p.grow * p.life * 8
         // fade in fast, out slow
-        const alpha = (k < 0.12 ? k / 0.12 : 1 - (k - 0.12) / 0.88) * 0.85
+        const alpha = (k < 0.12 ? k / 0.12 : 1 - (k - 0.12) / 0.88) * 0.5
         if (alpha <= 0) continue
 
         ctx.save()

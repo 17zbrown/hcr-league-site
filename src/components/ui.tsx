@@ -10,9 +10,13 @@ export function ClassChip({ classId, size = 'sm' }: { classId: string; size?: 's
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full font-mono font-medium uppercase tracking-wider ${pad}`}
-      style={{ background: `${color}1f`, color }}
+      style={{ background: `${color}26`, color: 'var(--color-ink-2)' }}
     >
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+      {/* inset ring keeps pale hues (GTP yellow) visible on light grounds */}
+      <span
+        className="h-2 w-2 rounded-full"
+        style={{ background: color, boxShadow: 'inset 0 0 0 1px rgba(20,24,28,0.28)' }}
+      />
       {classId}
     </span>
   )

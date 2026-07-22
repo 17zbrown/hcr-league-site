@@ -22,7 +22,7 @@ function Wordmark() {
       <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--color-mist)]">
         <img src={logo} alt="" className="h-6 w-6 object-contain" />
       </span>
-      <span className="font-display text-xl font-extrabold uppercase tracking-tight">
+      <span className="font-alt text-xl font-extrabold uppercase tracking-tight">
         HCR<span className="text-[var(--color-brand-deep)]">/</span>League
       </span>
     </Link>
@@ -122,14 +122,14 @@ function FullMenu({
 
   return (
     <motion.div
-      className="fixed inset-0 z-[60] bg-[var(--color-deep)] text-white"
+      className="on-navy fixed inset-0 z-[60] bg-[var(--color-deep)] text-white"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
     >
       <div className="container-hcr flex h-[72px] items-center justify-between">
-        <span className="font-display text-xl font-extrabold uppercase tracking-tight">
+        <span className="font-alt text-xl font-extrabold uppercase tracking-tight">
           HCR<span className="text-[var(--color-brand)]">/</span>League
         </span>
         <button

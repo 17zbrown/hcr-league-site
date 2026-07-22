@@ -1,34 +1,40 @@
 @import 'tailwindcss';
 
 /* ------------------------------------------------------------------ *
- * HCR League — design tokens (cinematic / dark / broadcast)
- * Near-black cinematic grounds, cool white type, ONE hot accent
- * (HCR yellow). On a dark ground the yellow finally reads at full
- * strength instead of washing out. Class colors come from the DB.
+ * HCR League — design tokens (editorial / motorsport)
+ * Warm off-white reading grounds with deep teal-navy feature panels,
+ * an elegant display serif against small letterspaced sans labels, and
+ * HCR yellow as the single accent. Class colors come from the DB.
  * ------------------------------------------------------------------ */
 @theme {
-  /* Grounds & neutrals — darkest to lightest surface */
-  --color-deep: #07090c;   /* deepest surface: footer, menu, chips */
-  --color-paper: #101419;  /* default panel / card ground */
-  --color-cloud: #161b21;  /* raised panel */
-  --color-mist: #1c222a;   /* subtle fill / table header */
-  --color-line: #262d36;
-  --color-line-2: #333b46;
+  /* Grounds — warm off-white page, white cards, deep teal-navy feature panels */
+  --color-ground: #f4f2ee;  /* page ground (warm, not clinical white) */
+  --color-paper: #ffffff;   /* cards / reading surfaces */
+  --color-cloud: #faf9f7;   /* subtle raised */
+  --color-mist: #eeece7;    /* fills, table headers */
+  --color-line: #e2ded7;
+  --color-line-2: #cec9c0;
 
-  --color-ink: #e9eef4;    /* primary text (cool white) */
-  --color-ink-2: #c2cad4;  /* secondary text */
-  --color-muted: #97a1ad;  /* muted text — AA on dark grounds */
-  --color-faint: #7c8794;  /* captions — still AA on our grounds */
+  /* The signature surface: deep teal-navy panels */
+  --color-deep: #16303d;
+  --color-deep-2: #1e3e4e;  /* raised on navy */
 
-  /* Brand + accents */
-  --color-brand: #f2e114; /* HCR yellow — the single hot accent */
-  --color-brand-deep: #cbbb10; /* yellow when it must sit on a light chip */
-  --color-blue: #5b8def;
-  --color-green: #3fc98a;
-  --color-red: #ef4b57;
+  --color-ink: #14181c;     /* primary text on light */
+  --color-ink-2: #3c4650;   /* secondary text */
+  --color-muted: #5c6873;   /* muted text (AA on light) */
+  --color-faint: #6d7883;   /* captions (AA on light) */
 
-  /* Type */
-  --font-display: 'Archivo', system-ui, sans-serif;
+  /* Accents — HCR yellow stays the brand accent; crimson is the hairline rule */
+  --color-brand: #f2e114;
+  --color-brand-deep: #8a7d08; /* yellow legible as text on light */
+  --color-accent: #d93b45;     /* the reference's hot hairline */
+  --color-blue: #2f6bff;
+  --color-green: #12805c;
+  --color-red: #c62430;
+
+  /* Type — elegant display serif + clean sans + mono for timing data */
+  --font-display: 'Instrument Serif', 'Iowan Old Style', Georgia, serif;
+  --font-alt: 'Archivo', system-ui, sans-serif;
   --font-body: 'Hanken Grotesk', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
 
@@ -44,7 +50,7 @@
 
   body {
     margin: 0;
-    background: var(--color-deep);
+    background: var(--color-ground);
     color: var(--color-ink);
     font-family: var(--font-body);
     font-size: 16px;
@@ -55,10 +61,9 @@
 
   h1, h2, h3, h4 {
     font-family: var(--font-display);
-    font-weight: 800;
-    line-height: 0.95;
-    letter-spacing: -0.02em;
-    text-transform: uppercase;
+    font-weight: 400;      /* the display serif carries weight optically */
+    line-height: 1.02;
+    letter-spacing: -0.015em;
     margin: 0;
   }
 
@@ -104,7 +109,7 @@
 
   /* Soft elevation used sparingly on feature cards */
   .shadow-card {
-    box-shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.03);
+    box-shadow: 0 22px 50px -30px rgba(20, 24, 28, 0.28);
   }
   .shadow-glow {
     box-shadow: 0 14px 38px -14px rgba(242, 225, 20, 0.75);
@@ -115,11 +120,26 @@
      Neutral lines + the single yellow accent, per the design rules. */
   .hero-grid {
     background-image:
-      linear-gradient(to right, rgba(233, 238, 244, 0.055) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(233, 238, 244, 0.055) 1px, transparent 1px);
+      linear-gradient(to right, rgba(247, 245, 241, 0.07) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(247, 245, 241, 0.07) 1px, transparent 1px);
     background-size: 46px 46px;
     -webkit-mask-image: radial-gradient(118% 96% at 86% -6%, #000 26%, transparent 72%);
     mask-image: radial-gradient(118% 96% at 86% -6%, #000 26%, transparent 72%);
+  }
+
+  /* Any subtree on a navy panel re-points the neutral tokens, so existing
+     components (cards, tables, chips) invert without bespoke classes. */
+  .on-navy {
+    --color-paper: #1e3e4e;
+    --color-cloud: #24485b;
+    --color-mist: #2a5266;
+    --color-line: #2d5567;
+    --color-line-2: #3f6a7e;
+    --color-ink: #f7f5f1;
+    --color-ink-2: #dcd8d1;
+    --color-muted: #a9b4bd;
+    --color-faint: #93a0aa;
+    color: var(--color-ink);
   }
 
   /* Kinetic marquee */
@@ -167,6 +187,8 @@
   }
 
   .hcr-btn {
+    /* Chrome stays sans — only headings and stat numerals take the serif. */
+    font-family: var(--font-alt);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -185,7 +207,7 @@
   .hcr-btn-primary { background: var(--color-brand); color: #000; }
   .hcr-btn-primary:hover:not(:disabled) { transform: translateY(-1px); }
   /* On a dark ground the high-contrast solid inverts: light chip, dark label. */
-  .hcr-btn-dark { background: var(--color-ink); color: var(--color-deep); }
+  .hcr-btn-dark { background: var(--color-deep); color: #fff; }
   .hcr-btn-dark:hover:not(:disabled) { transform: translateY(-1px); }
   .hcr-btn-ghost { background: transparent; border: 1px solid var(--color-line-2); color: var(--color-ink); }
   .hcr-btn-ghost:hover:not(:disabled) { border-color: var(--color-ink); }
