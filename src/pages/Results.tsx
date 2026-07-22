@@ -7,6 +7,9 @@ import { resultListsDriver } from '../lib/attribution'
 import { Section, Skeleton } from '../components/ui'
 import { DriverName } from '../components/links'
 
+/** The editorial micro-label: tiny, letterspaced, muted. */
+const MICRO = 'font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]'
+
 export default function Results() {
   const { data: season } = useCurrentSeason()
   const { data: events } = useEvents(season?.id)
@@ -28,20 +31,27 @@ export default function Results() {
       ) : (
         <>
           <div className="mb-8 flex flex-wrap gap-2">
-            {completed.map((e) => (
-              <button
-                key={e.id}
-                onClick={() => setEventId(e.id)}
-                className={`rounded-xl border px-4 py-2.5 text-left transition-all ${
-                  e.id === eventId
-                    ? 'border-[var(--color-brand)] bg-[var(--color-cloud)] shadow-card'
-                    : 'border-[var(--color-line)] bg-[var(--color-paper)] hover:border-[var(--color-line-2)]'
-                }`}
-              >
-                <div className="tabular text-xs font-semibold text-[var(--color-muted)]">ROUND {e.round}</div>
-                <div className="font-display text-xl">{e.track?.name}</div>
-              </button>
-            ))}
+            {completed.map((e) => {
+              const isActive = e.id === eventId
+              return (
+                <button
+                  key={e.id}
+                  onClick={() => setEventId(e.id)}
+                  className={`rounded-xl border px-4 py-2.5 text-left transition-all ${
+                    isActive
+                      ? 'on-navy shadow-card border-transparent bg-[var(--color-deep)]'
+                      : 'border-[var(--color-line)] bg-[var(--color-paper)] hover:border-[var(--color-line-2)]'
+                  }`}
+                >
+                  <div className={MICRO}>Round {e.round}</div>
+                  <div className="font-display text-xl">
+                    <span className={isActive ? 'border-b-2 border-[var(--color-brand)] pb-px' : ''}>
+                      {e.track?.name}
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
           </div>
 
           {active && (
@@ -85,10 +95,15 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
         }
         return (
           <div key={cls}>
-            <div className="mb-3 flex items-center gap-2.5">
-              <span className="h-4 w-4 rounded-sm" style={{ background: color }} />
-              <h3 className="text-2xl uppercase">{cls}</h3>
-              <span className="tabular text-sm text-[var(--color-muted)]">{rows.length} cars</span>
+            <div className="mb-3 flex items-baseline gap-3">
+              <span
+                className="h-2.5 w-2.5 shrink-0 self-center rounded-full"
+                style={{ background: color, boxShadow: 'inset 0 0 0 1px rgba(20,24,28,0.28)' }}
+                aria-hidden
+              />
+              <h3 className="text-2xl leading-none">{cls}</h3>
+              <span className={MICRO}>{rows.length} {rows.length === 1 ? 'car' : 'cars'}</span>
+              <span className="h-px flex-1 self-center bg-[var(--color-line)]" aria-hidden />
             </div>
             <div className="shadow-card relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
               <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[var(--color-paper)] sm:hidden" aria-hidden />
@@ -111,15 +126,24 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
                   {rows.map((r) => {
                     const isMe = !!meName && resultListsDriver(r.drivers_text, meName)
                     const delta = r.grid != null && r.pos != null ? r.grid - r.pos : null
+                    const podium = r.cls_pos != null && r.cls_pos <= 3
                     return (
-                    <tr key={r.id} className={`border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-mist)] ${isMe ? 'bg-[var(--color-brand)]/[0.09]' : ''}`}>
+                    <tr
+                      key={r.id}
+                      className={`border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-mist)] ${isMe ? 'bg-[var(--color-brand)]/[0.09]' : ''}`}
+                      style={!isMe && r.cls_pos === 1 ? { background: `${color}14` } : undefined}
+                    >
                       <td className="px-4 py-3">
-                        <span
-                          className="tabular inline-flex h-7 w-7 items-center justify-center rounded-md font-bold"
-                          style={{ background: r.cls_pos === 1 ? color : 'var(--color-mist)', color: r.cls_pos === 1 ? '#000' : 'var(--color-ink)' }}
-                        >
-                          {r.cls_pos}
-                        </span>
+                        {podium ? (
+                          <span className="font-display text-2xl leading-none">P{r.cls_pos}</span>
+                        ) : (
+                          <span
+                            className="tabular inline-flex h-7 w-7 items-center justify-center rounded-md font-bold"
+                            style={{ background: 'var(--color-mist)', color: 'var(--color-ink)' }}
+                          >
+                            {r.cls_pos}
+                          </span>
+                        )}
                       </td>
                       <td className="tabular px-4 py-3 text-[var(--color-muted)]">#{r.number}</td>
                       <td className="px-4 py-3 font-semibold">
@@ -171,8 +195,8 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
 
       {report && (
         <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-6 md:p-8">
-          <h3 className="eyebrow mb-3">Race Report</h3>
-          <div className="max-w-3xl whitespace-pre-line leading-relaxed text-[var(--color-ink-2)]">{report}</div>
+          <div className={`${MICRO} mb-3`}>Race Report</div>
+          <div className="font-body max-w-prose whitespace-pre-line leading-relaxed text-[var(--color-ink-2)]">{report}</div>
         </div>
       )}
     </div>

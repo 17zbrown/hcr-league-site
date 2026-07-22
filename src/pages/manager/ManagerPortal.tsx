@@ -129,10 +129,10 @@ export default function ManagerPortal() {
                     <div className="truncate font-semibold">{r.driver?.name ?? r.display_name}</div>
                     <div className="mt-0.5 flex flex-wrap gap-1.5 text-xs">
                       {r.fia_category && (
-                        <span className="rounded-full bg-[var(--color-mist)] px-2 py-0.5 font-mono uppercase text-[var(--color-ink-2)]">{r.fia_category}</span>
+                        <span className="rounded-full bg-[var(--color-mist)] px-2 py-0.5 font-body text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-ink-2)]">{r.fia_category}</span>
                       )}
                       {r.preferred_class && (
-                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-mono uppercase" style={{ background: `${classColor(r.preferred_class)}22`, color: '#3a3f49' }}>
+                        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-body text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ background: `${classColor(r.preferred_class)}22`, color: '#3a3f49' }}>
                           <span className="h-1.5 w-1.5 rounded-full" style={{ background: classColor(r.preferred_class) }} />
                           {r.preferred_class}
                         </span>

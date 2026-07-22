@@ -43,7 +43,7 @@ export default function ProtestDetail() {
 
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--color-line)] pb-6">
         <div className="min-w-0">
-          <div className="font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
+          <div className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
             {protest.event ? `Round ${protest.event.round} · ${protest.event.name ?? protest.event.track?.name}` : 'Protest'}
           </div>
           <h1 className="mt-2 text-4xl md:text-5xl">{protest.category ?? 'Protest'}</h1>
@@ -61,7 +61,7 @@ export default function ProtestDetail() {
         <div>
           {/* opening statement */}
           <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
-            <h2 className="font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">The incident</h2>
+            <h2 className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">The incident</h2>
             <p className="mt-2 whitespace-pre-line leading-relaxed text-[var(--color-ink-2)]">{protest.summary}</p>
             {opening.length > 0 && (
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -93,10 +93,10 @@ export default function ProtestDetail() {
           {/* verdict, once issued */}
           {protest.verdict && (
             <div className="mt-6 rounded-2xl border-2 border-[var(--color-brand)] bg-[var(--color-cloud)] p-5">
-              <h2 className="font-mono text-xs uppercase tracking-wider text-[var(--color-ink-2)]">Race control ruling</h2>
+              <h2 className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-ink-2)]">Race control ruling</h2>
               <p className="mt-2 whitespace-pre-line leading-relaxed text-[var(--color-ink)]">{protest.verdict}</p>
               {protest.penalty && (
-                <p className="mt-3 font-display text-xl font-extrabold uppercase">Penalty: {protest.penalty}</p>
+                <p className="mt-3 font-alt text-sm font-bold uppercase tracking-wide">Penalty: {protest.penalty}</p>
               )}
             </div>
           )}
@@ -146,20 +146,20 @@ function RulingPanel({
 
   return (
     <aside className="h-fit rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5 lg:sticky lg:top-24">
-      <h2 className="font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Issue a ruling</h2>
+      <h2 className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Issue a ruling</h2>
       <div className="mt-4 space-y-4">
         <label className="block">
-          <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Status</span>
+          <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Status</span>
           <select className="hcr-select" value={s} onChange={(e) => setS(e.target.value as ProtestStatus)}>
             {STATUSES.map((x) => <option key={x} value={x}>{x.replace('_', ' ')}</option>)}
           </select>
         </label>
         <label className="block">
-          <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Ruling</span>
+          <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Ruling</span>
           <textarea className="hcr-textarea" value={v} onChange={(e) => setV(e.target.value)} placeholder="Explain the decision — this is shown to the filer." />
         </label>
         <label className="block">
-          <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Penalty</span>
+          <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Penalty</span>
           <input className="hcr-input" value={p} onChange={(e) => setP(e.target.value)} placeholder="e.g. 5s time penalty · No further action" />
         </label>
         {err && <p className="text-sm text-[var(--color-red)]">{err}</p>}

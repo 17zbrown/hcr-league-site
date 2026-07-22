@@ -12,9 +12,13 @@ import {
 } from '../lib/queries'
 import { CLASS_ORDER, classColor, fmtDateLong, wmo } from '../lib/format'
 import { ClassChip, Skeleton } from '../components/ui'
+import { FeaturePanel, StatBand, type Stat } from '../components/editorial'
 import { DriverName } from '../components/links'
 import Countdown from '../components/Countdown'
 import { Reveal } from '../components/motion'
+
+/** The editorial micro-label: tiny, letterspaced, muted. */
+const MICRO = 'font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]'
 
 function sessionTime(iso: string) {
   return new Date(iso).toLocaleString([], {
@@ -108,61 +112,85 @@ export default function RaceDetail() {
     )
   }
 
+  // Track facts for the stat band — only real numbers, nulls hidden.
+  const trackFacts: Stat[] = []
+  if (event.duration_min != null) trackFacts.push({ label: 'Duration (min)', value: event.duration_min })
+  if (track?.length_km != null) {
+    trackFacts.push({
+      label: 'Length (km)',
+      value: track.length_km,
+      decimals: 2,
+      hint: `${(track.length_km * 0.621371).toFixed(2)} mi`,
+    })
+  }
+  if (track?.corners != null) trackFacts.push({ label: 'Corners', value: track.corners })
+  if (track?.config) trackFacts.push({ label: 'Layout', value: null, text: track.config })
+
   return (
     <div className="container-hcr py-12 md:py-16">
       <Link to="/schedule" className="mb-6 inline-block text-sm font-semibold text-[var(--color-muted)] hover:text-[var(--color-ink)]">
         ← Schedule
       </Link>
 
-      {/* Header */}
-      <div className="border-b border-[var(--color-line)] pb-8">
-        <div className="min-w-0 flex-1">
+      {/* Header — navy feature panel */}
+      <FeaturePanel className="p-6 md:p-10">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="tabular font-mono text-sm text-[var(--color-muted)]">ROUND {event.round}</span>
-          {done && <span className="rounded-full bg-[var(--color-deep)] px-2.5 py-0.5 text-[11px] font-bold uppercase text-white">Final</span>}
-          {event.status === 'next' && <span className="rounded-full bg-[var(--color-brand)] px-2.5 py-0.5 text-[11px] font-bold uppercase text-black">Next Round</span>}
+          <span className={MICRO}>Round {event.round}</span>
+          {done && (
+            <span className="rounded-full border border-[var(--color-line-2)] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[var(--color-ink)]">
+              Final
+            </span>
+          )}
+          {event.status === 'next' && (
+            <span className="rounded-full bg-[var(--color-brand)] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-black">
+              Next Round
+            </span>
+          )}
           <div className="ml-auto flex gap-1.5">
             {CLASS_ORDER.map((c) => <ClassChip key={c} classId={c} />)}
           </div>
         </div>
-        <h1 className="mt-3 text-5xl md:text-6xl">{event.name ?? track?.name}</h1>
-        <div className="mt-2 text-lg text-[var(--color-muted)]">
+        <h1 className="mt-4 text-5xl md:text-6xl">{event.name ?? track?.name}</h1>
+        <div className="mt-3 text-lg text-[var(--color-ink-2)]">
           {track?.name}{track?.location ? ` · ${track.location}` : ''} · {fmtDateLong(event.date)}
         </div>
 
-        {/* Track facts */}
-        <div className="mt-5 flex flex-wrap gap-x-8 gap-y-2 font-mono text-sm text-[var(--color-ink-2)]">
-          {event.duration_min && <span><span className="text-[var(--color-muted)]">Duration</span> {event.duration_min} min</span>}
-          {track?.length_km && <span><span className="text-[var(--color-muted)]">Length</span> {track.length_km} km · {(track.length_km * 0.621371).toFixed(2)} mi</span>}
-          {track?.corners && <span><span className="text-[var(--color-muted)]">Corners</span> {track.corners}</span>}
-          {track?.config && <span><span className="text-[var(--color-muted)]">Layout</span> {track.config}</span>}
-        </div>
-
-        <div className="mt-6 flex flex-wrap items-center gap-4">
-          {upcoming && <Countdown target={event.date} />}
+        <div className="mt-7 flex flex-wrap items-center gap-4">
+          {upcoming && <Countdown target={event.date} dark />}
           {event.broadcast_url && (
-            <a href={event.broadcast_url} target="_blank" rel="noreferrer" className="hcr-btn hcr-btn-dark">Watch Broadcast ↗</a>
+            <a href={event.broadcast_url} target="_blank" rel="noreferrer" className="hcr-btn hcr-btn-ghost">Watch Broadcast ↗</a>
           )}
           {done && <Link to="/results" className="hcr-btn hcr-btn-primary">Full Results</Link>}
         </div>
+      </FeaturePanel>
+
+      {/* Track facts */}
+      {trackFacts.length > 0 && (
+        <div className="mt-6">
+          <StatBand stats={trackFacts} columns={4} />
         </div>
-      </div>
+      )}
 
       <div className="mt-10 grid gap-8 lg:grid-cols-2">
         {/* Sessions */}
         <Reveal>
           <section>
-            <h2 className="mb-4 text-2xl">Session Schedule</h2>
+            <div className="mb-4 flex items-center gap-3">
+              <h2 className="text-2xl leading-none">Session Schedule</h2>
+              <span className="h-px flex-1 bg-[var(--color-line)]" aria-hidden />
+            </div>
             {!sessions?.length ? (
-              <p className="text-[var(--color-muted)]">Session times to be announced.</p>
+              <p className="rounded-2xl bg-[var(--color-cloud)] p-6 text-[var(--color-muted)]">
+                Session times land here once the stewards post the running order.
+              </p>
             ) : (
               <ol className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
                 {sessions.map((s, i) => (
                   <li key={s.id} className="flex items-center gap-4 border-b border-[var(--color-line)] px-5 py-4 last:border-0">
-                    <span className="tabular font-display text-xl font-extrabold text-[var(--color-faint)]">{String(i + 1).padStart(2, '0')}</span>
+                    <span className="font-display text-2xl text-[var(--color-faint)]">{String(i + 1).padStart(2, '0')}</span>
                     <div className="flex-1">
-                      <div className="font-display text-lg">{s.type}</div>
-                      <div className="tabular text-sm text-[var(--color-muted)]">{sessionTime(s.start)}</div>
+                      <div className={MICRO}>{s.type}</div>
+                      <div className="mt-0.5 font-display text-xl">{sessionTime(s.start)}</div>
                     </div>
                     {s.dur_min != null && <span className="tabular text-sm text-[var(--color-ink-2)]">{s.dur_min} min</span>}
                   </li>
@@ -176,11 +204,14 @@ export default function RaceDetail() {
         {/* Weather */}
         <Reveal delay={0.08}>
           <section>
-            <h2 className="mb-4 text-2xl">Weather</h2>
+            <div className="mb-4 flex items-center gap-3">
+              <h2 className="text-2xl leading-none">Weather</h2>
+              <span className="h-px flex-1 bg-[var(--color-line)]" aria-hidden />
+            </div>
 
             {/* Live real-world conditions */}
             <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
-              <div className="eyebrow mb-3">Now at {track?.location ?? track?.name}</div>
+              <div className={`${MICRO} mb-3`}>Now at {track?.location ?? track?.name}</div>
               {track?.lat == null ? (
                 <p className="text-sm text-[var(--color-muted)]">No coordinates for this track.</p>
               ) : liveLoading ? (
@@ -191,7 +222,7 @@ export default function RaceDetail() {
                 <div className="flex items-center gap-5">
                   <div className="text-5xl">{wmo(live.current.weather_code).icon}</div>
                   <div>
-                    <div className="tabular font-display text-4xl font-extrabold">{Math.round(live.current.temperature_2m)}°F</div>
+                    <div className="font-display text-4xl leading-none">{Math.round(live.current.temperature_2m)}°F</div>
                     <div className="text-sm text-[var(--color-muted)]">{wmo(live.current.weather_code).label}</div>
                   </div>
                   <div className="tabular ml-auto space-y-1 text-right text-sm text-[var(--color-ink-2)]">
@@ -206,7 +237,7 @@ export default function RaceDetail() {
             {/* Real-world race-day forecast, centered on the in-sim start hour */}
             {track?.lat != null && (
               <div className="mt-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
-                <div className="eyebrow mb-3">
+                <div className={`${MICRO} mb-3`}>
                   {pastRace ? 'Conditions on race day' : 'Race-day forecast'} · sim start {hourLabel(centerHour)}
                 </div>
                 {tooFar ? (
@@ -224,9 +255,9 @@ export default function RaceDetail() {
                           h.isCenter ? 'border-[var(--color-brand)] bg-[var(--color-cloud)]' : 'border-[var(--color-line)]'
                         }`}
                       >
-                        <div className="font-mono text-[11px] text-[var(--color-muted)]">{hourLabel(h.hour)}</div>
+                        <div className="font-body text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">{hourLabel(h.hour)}</div>
                         <div className="my-0.5 text-2xl">{h.code != null ? wmo(h.code).icon : '—'}</div>
-                        <div className="tabular font-display text-lg font-extrabold leading-none">
+                        <div className="font-display text-lg leading-none">
                           {h.temp != null ? `${Math.round(h.temp)}°` : '—'}
                         </div>
                         <div className="tabular mt-1 text-[10px] text-[var(--color-blue)]">
@@ -244,11 +275,11 @@ export default function RaceDetail() {
             {/* In-sim race-day forecast */}
             {!!simWeather?.length && (
               <div className="mt-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-5">
-                <div className="eyebrow mb-3">Sim race-day forecast</div>
+                <div className={`${MICRO} mb-3`}>Sim race-day forecast</div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {simWeather.map((w) => (
                     <div key={w.id} className="tabular">
-                      {w.air_f != null && <div className="font-display text-2xl font-extrabold">{Math.round(w.air_f)}°F</div>}
+                      {w.air_f != null && <div className="font-display text-2xl">{Math.round(w.air_f)}°F</div>}
                       <div className="text-xs text-[var(--color-muted)]">
                         {w.sky ?? '—'}{w.precip != null ? ` · ${w.precip}% rain` : ''}
                         {w.wind_mph != null ? ` · ${w.wind_mph} mph` : ''}
@@ -265,7 +296,10 @@ export default function RaceDetail() {
       {/* Winners / history */}
       <Reveal>
         <section className="mt-12">
-          <h2 className="mb-4 text-2xl">{done ? 'Race Winners' : 'Winners at this Venue'}</h2>
+          <div className="mb-4 flex items-center gap-3">
+            <h2 className="text-2xl leading-none">{done ? 'Race Winners' : 'Winners at this Venue'}</h2>
+            <span className="h-px flex-1 bg-[var(--color-line)]" aria-hidden />
+          </div>
 
           {done && winners.length > 0 && (
             <div className="grid gap-3 sm:grid-cols-3">
@@ -274,8 +308,9 @@ export default function RaceDetail() {
                 return (
                   <div key={w.id} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
                     <div className="flex items-center gap-2">
-                      <span className="h-3 w-3 rounded-full" style={{ background: color }} />
+                      <span className="h-3 w-3 rounded-full" style={{ background: color, boxShadow: 'inset 0 0 0 1px rgba(20,24,28,0.28)' }} />
                       <span className="font-display text-xl">{w.class_id}</span>
+                      <span className="ml-auto font-display text-2xl leading-none text-[var(--color-faint)]">P1</span>
                     </div>
                     <div className="mt-2 font-semibold"><DriverName text={w.drivers_text} /></div>
                     <div className="tabular mt-0.5 text-sm text-[var(--color-muted)]">#{w.number}{w.best_lap ? ` · ${w.best_lap}` : ''}</div>
@@ -287,10 +322,10 @@ export default function RaceDetail() {
 
           {history.length > 0 ? (
             <div className={`${done && winners.length ? 'mt-6' : ''} space-y-3`}>
-              {done && winners.length > 0 && <div className="eyebrow">Previous editions</div>}
+              {done && winners.length > 0 && <div className={MICRO}>Previous editions</div>}
               {history.map((h) => (
                 <div key={h.round} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-4">
-                  <div className="tabular text-xs text-[var(--color-muted)]">Round {h.round}{h.name ? ` · ${h.name}` : ''}</div>
+                  <div className={MICRO}>Round {h.round}{h.name ? ` · ${h.name}` : ''}</div>
                   <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1">
                     {(h.rows ?? []).sort((a, b) => CLASS_ORDER.indexOf(a.class_id) - CLASS_ORDER.indexOf(b.class_id)).map((w) => (
                       <span key={w.id} className="text-sm">
@@ -303,7 +338,11 @@ export default function RaceDetail() {
               ))}
             </div>
           ) : (
-            !done && <p className="text-[var(--color-muted)]">First running at this venue — no previous winners yet.</p>
+            !done && (
+              <p className="rounded-2xl bg-[var(--color-cloud)] p-6 text-[var(--color-muted)]">
+                First running at this venue — the history books open here.
+              </p>
+            )
           )}
         </section>
       </Reveal>
@@ -312,8 +351,8 @@ export default function RaceDetail() {
       {(event.notes || event.report) && (
         <Reveal>
           <section className="mt-12 rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-6 md:p-8">
-            <h2 className="eyebrow mb-3">{event.report ? 'Race Report' : 'Notes'}</h2>
-            <div className="max-w-3xl whitespace-pre-line leading-relaxed text-[var(--color-ink-2)]">{event.report ?? event.notes}</div>
+            <h2 className={`${MICRO} mb-3`}>{event.report ? 'Race Report' : 'Notes'}</h2>
+            <div className="font-body max-w-prose whitespace-pre-line leading-relaxed text-[var(--color-ink-2)]">{event.report ?? event.notes}</div>
           </section>
         </Reveal>
       )}

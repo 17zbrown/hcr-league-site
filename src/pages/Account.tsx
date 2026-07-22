@@ -87,9 +87,9 @@ export default function Account() {
             <div className="font-display text-3xl">{profile?.display_name ?? 'Member'}</div>
             <div className="mt-1 text-sm text-[var(--color-muted)]">{profile?.email}</div>
             <div className="mt-4 flex flex-wrap gap-2">
-              {isAdmin && <span className="rounded-full bg-[var(--color-brand)] px-3 py-1 text-xs font-bold uppercase text-black">Commissioner</span>}
-              {isManager && <span className="rounded-full bg-[var(--color-blue)] px-3 py-1 text-xs font-bold uppercase text-white">Team Manager</span>}
-              {!isAdmin && !isManager && <span className="rounded-full bg-[var(--color-mist)] px-3 py-1 text-xs font-bold uppercase text-[var(--color-ink-2)]">Member</span>}
+              {isAdmin && <span className="rounded-full bg-[var(--color-brand)] px-3 py-1 font-alt text-xs font-bold uppercase tracking-wide text-black">Commissioner</span>}
+              {isManager && <span className="rounded-full bg-[var(--color-blue)] px-3 py-1 font-alt text-xs font-bold uppercase tracking-wide text-white">Team Manager</span>}
+              {!isAdmin && !isManager && <span className="rounded-full bg-[var(--color-mist)] px-3 py-1 font-alt text-xs font-bold uppercase tracking-wide text-[var(--color-ink-2)]">Member</span>}
             </div>
           </div>
 
@@ -113,7 +113,7 @@ export default function Account() {
             <h2 className="text-3xl">Enter {season?.name ?? 'the Season'}</h2>
             {!loading && reg && (
               <span
-                className="rounded-full px-3 py-1 text-xs font-bold uppercase"
+                className="rounded-full px-3 py-1 font-alt text-xs font-bold uppercase tracking-wide"
                 style={{
                   background:
                     reg.status === 'declined' ? 'rgba(220,53,69,0.12)'
@@ -137,12 +137,12 @@ export default function Account() {
 
           <form onSubmit={enter} className="mt-6 space-y-4">
             <label className="block">
-              <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Driver name</span>
+              <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Driver name</span>
               <input className="hcr-input" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
             </label>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
-                <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
+                <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
                   iRacing full name <span className="text-[var(--color-red)]">*</span>
                 </span>
                 <input
@@ -155,7 +155,7 @@ export default function Account() {
                 />
               </label>
               <label className="block">
-                <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
+                <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
                   iRacing customer ID# <span className="text-[var(--color-red)]">*</span>
                 </span>
                 <input
@@ -170,13 +170,13 @@ export default function Account() {
               </label>
             </div>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Preferred class</span>
+              <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Preferred class</span>
               <select className="hcr-select" value={preferredClass} onChange={(e) => setPreferredClass(e.target.value)}>
                 {CLASSES.map((c) => <option key={c}>{c}</option>)}
               </select>
             </label>
             <label className="block">
-              <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Notes (optional)</span>
+              <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Notes (optional)</span>
               <textarea className="hcr-textarea" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Team preference, availability…" />
             </label>
 

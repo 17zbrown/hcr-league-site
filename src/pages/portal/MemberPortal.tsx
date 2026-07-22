@@ -80,7 +80,7 @@ function Overview({ onSignOut }: { onSignOut: () => void }) {
         <div className="font-display text-3xl">{profile?.display_name ?? 'Member'}</div>
         <div className="mt-1 text-sm text-[var(--color-muted)]">{profile?.email}</div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-[var(--color-mist)] px-3 py-1 font-mono text-[11px] font-bold uppercase tracking-wider text-[var(--color-ink-2)]">
+          <span className="rounded-full bg-[var(--color-mist)] px-3 py-1 font-alt text-[11px] font-bold uppercase tracking-wide text-[var(--color-ink-2)]">
             {role === 'race_control' ? 'Race Control' : role === 'admin' ? 'Admin' : 'Member'}
           </span>
           {license && <LicenseBadge tier={license.effective} />}
@@ -97,7 +97,7 @@ function Overview({ onSignOut }: { onSignOut: () => void }) {
       </div>
 
       <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
-        <h3 className="font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Account</h3>
+        <h3 className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Account</h3>
         <div className="mt-4 space-y-2">
           <Link to="/account" className="hcr-btn hcr-btn-ghost w-full">Season entry &amp; iRacing details</Link>
           <button onClick={onSignOut} className="hcr-btn hcr-btn-ghost w-full">Sign out</button>
@@ -172,7 +172,7 @@ function FileProtest({ onFiled }: { onFiled: () => void }) {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Race</span>
+          <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Race</span>
           <select className="hcr-select" value={eventId} onChange={(e) => setEventId(e.target.value)}>
             <option value="">— Select a round —</option>
             {(events ?? []).map((ev) => (
@@ -181,18 +181,18 @@ function FileProtest({ onFiled }: { onFiled: () => void }) {
           </select>
         </label>
         <label className="block">
-          <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Driver involved</span>
+          <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Driver involved</span>
           <select className="hcr-select" value={againstId} onChange={(e) => setAgainstId(e.target.value)}>
             <option value="">— Select a driver —</option>
             {(drivers ?? []).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
         </label>
         <label className="block">
-          <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Lap / time</span>
+          <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Lap / time</span>
           <input className="hcr-input" value={lap} onChange={(e) => setLap(e.target.value)} placeholder="e.g. Lap 14, T1" />
         </label>
         <label className="block">
-          <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Category</span>
+          <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Category</span>
           <select className="hcr-select" value={category} onChange={(e) => setCategory(e.target.value)}>
             {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
           </select>
@@ -200,7 +200,7 @@ function FileProtest({ onFiled }: { onFiled: () => void }) {
       </div>
 
       <label className="block">
-        <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">What happened</span>
+        <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">What happened</span>
         <textarea
           className="hcr-textarea"
           value={summary}
@@ -211,7 +211,7 @@ function FileProtest({ onFiled }: { onFiled: () => void }) {
       </label>
 
       <div>
-        <span className="mb-2 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Evidence</span>
+        <span className="mb-2 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Evidence</span>
         <EvidenceBox items={evidence} onChange={setEvidence} disabled={busy} />
       </div>
 
@@ -251,7 +251,7 @@ function MyProtests() {
                 <span className="font-display text-xl">{p.category ?? 'Protest'}</span>
                 {p.against_text && <span className="text-sm text-[var(--color-muted)]">vs {p.against_text}</span>}
               </div>
-              <div className="tabular mt-1 text-xs text-[var(--color-faint)]">
+              <div className="mt-1.5 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
                 {p.event ? `Round ${p.event.round} · ${p.event.name ?? p.event.track?.name} · ` : ''}
                 Filed {fmtDateLong(p.created_at)}
               </div>

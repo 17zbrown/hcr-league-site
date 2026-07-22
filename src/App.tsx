@@ -15,6 +15,7 @@ const Results = lazy(() => import('./pages/Results'))
 const Drivers = lazy(() => import('./pages/Drivers'))
 const DriverProfile = lazy(() => import('./pages/DriverProfile'))
 const Teams = lazy(() => import('./pages/Teams'))
+const Compare = lazy(() => import('./pages/Compare'))
 const TeamProfile = lazy(() => import('./pages/TeamProfile'))
 const Reports = lazy(() => import('./pages/Reports'))
 const SignUp = lazy(() => import('./pages/SignUp'))
@@ -58,6 +59,7 @@ export default function App() {
             <Route path="/results" element={<Results />} />
             <Route path="/drivers" element={<Drivers />} />
             <Route path="/drivers/:id" element={<DriverProfile />} />
+            <Route path="/compare" element={<Compare />} />
             <Route path="/teams" element={<Teams />} />
             <Route path="/teams/:id" element={<TeamProfile />} />
             <Route path="/reports" element={<Reports />} />

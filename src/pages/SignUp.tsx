@@ -35,7 +35,7 @@ export default function SignUp() {
             <div className="mt-9 flex flex-wrap gap-3">
               <Link
                 to={session ? '/account' : '/login'}
-                className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1"
+                className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-sm font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1"
               >
                 {session ? 'Enter the Season' : 'Create Account & Enter'}
               </Link>
@@ -44,7 +44,7 @@ export default function SignUp() {
                   href={settings.discord_url}
                   target="_blank"
                   rel="noreferrer"
-                  className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-display text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]"
+                  className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-alt text-sm font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]"
                 >
                   Join the Discord
                 </a>
@@ -56,14 +56,14 @@ export default function SignUp() {
 
       <div className="bg-[var(--color-mist)]">
         <Section eyebrow="Eligibility" title="The license ladder">
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-px overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-line)] sm:grid-cols-2 md:grid-cols-4">
             {LADDER.map((l, i) => (
-              <Reveal key={l.cat} delay={i * 0.08}>
-                <div className="h-full rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
+              <Reveal key={l.cat} delay={i * 0.08} y={0} className="h-full bg-[var(--color-paper)]">
+                <div className="flex h-full flex-col p-6">
                   <div className="tabular text-sm text-[var(--color-faint)]">0{i + 1}</div>
                   <div className="mt-2 font-display text-3xl">{l.cat}</div>
-                  <div className="mt-1 font-mono text-xs uppercase tracking-wider text-[var(--color-blue)]">{l.classes}</div>
-                  <p className="mt-3 text-sm text-[var(--color-muted)]">{l.desc}</p>
+                  <div className="mt-1 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-blue)]">{l.classes}</div>
+                  <p className="mt-4 border-t border-[var(--color-line)] pt-3 text-sm text-[var(--color-muted)]">{l.desc}</p>
                 </div>
               </Reveal>
             ))}

@@ -4,6 +4,7 @@ import { useAuth } from '../../lib/auth'
 import { useProtests } from '../../lib/queries'
 import { fmtDateLong } from '../../lib/format'
 import { Section, Skeleton } from '../../components/ui'
+import { StatBand } from '../../components/editorial'
 import { StatusPill } from '../../components/ProtestThread'
 import type { ProtestStatus } from '../../lib/types'
 
@@ -42,18 +43,16 @@ export default function RaceControlPortal() {
       </div>
 
       {/* queue summary — real counts, not decoration */}
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {([
-          ['Open', counts.open],
-          ['Under review', counts.under_review],
-          ['Resolved', counts.resolved],
-          ['Dismissed', counts.dismissed],
-        ] as const).map(([label, n]) => (
-          <div key={label} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4">
-            <div className="tabular font-display text-3xl font-extrabold">{n}</div>
-            <div className="mt-1 font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">{label}</div>
-          </div>
-        ))}
+      <div className="mb-8">
+        <StatBand
+          columns={4}
+          stats={[
+            { label: 'Open', value: counts.open },
+            { label: 'Under review', value: counts.under_review },
+            { label: 'Resolved', value: counts.resolved },
+            { label: 'Dismissed', value: counts.dismissed },
+          ]}
+        />
       </div>
 
       <div className="mb-6 flex flex-wrap gap-1 border-b border-[var(--color-line)]">
@@ -61,7 +60,7 @@ export default function RaceControlPortal() {
           <button
             key={f.id}
             onClick={() => setFilter(f.id)}
-            className={`relative px-4 py-3 font-mono text-xs font-bold uppercase tracking-wider transition-colors ${
+            className={`relative px-4 py-3 font-display text-lg transition-colors ${
               filter === f.id ? 'text-[var(--color-ink)]' : 'text-[var(--color-faint)] hover:text-[var(--color-ink)]'
             }`}
           >
@@ -90,7 +89,7 @@ export default function RaceControlPortal() {
                     <span className="font-display text-xl">{p.category ?? 'Protest'}</span>
                     {p.against_text && <span className="text-sm text-[var(--color-muted)]">vs {p.against_text}</span>}
                   </div>
-                  <div className="tabular mt-1 text-xs text-[var(--color-faint)]">
+                  <div className="mt-1.5 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
                     {p.event ? `Round ${p.event.round} · ${p.event.name ?? p.event.track?.name} · ` : ''}
                     {p.filer?.display_name ? `${p.filer.display_name} · ` : ''}
                     {fmtDateLong(p.created_at)}

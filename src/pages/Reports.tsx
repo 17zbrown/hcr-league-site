@@ -30,20 +30,20 @@ export default function Reports() {
         <div className="space-y-6">
           {reports.map((e, i) => (
             <Reveal key={e.id} delay={Math.min(i * 0.05, 0.3)}>
-              <article className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 md:p-8">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
-                  <span className="tabular font-semibold text-[var(--color-blue)]">Round {e.round}</span>
+              <article className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 md:p-10">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
+                  <span className="text-[var(--color-brand-deep)]">Round {e.round}</span>
                   <span aria-hidden>·</span>
                   <span>{e.track?.name}</span>
                   <span aria-hidden>·</span>
-                  <span className="tabular">{fmtDateLong(e.date)}</span>
+                  <span>{fmtDateLong(e.date)}</span>
                 </div>
-                <h2 className="mt-2 text-3xl md:text-4xl">
+                <h2 className="mt-3 text-4xl md:text-5xl">
                   <Link to={`/schedule/${e.id}`} className="transition-colors hover:text-[var(--color-blue)]">
                     {e.name ?? e.track?.name}
                   </Link>
                 </h2>
-                <div className="mt-4 max-w-3xl whitespace-pre-line leading-relaxed text-[var(--color-ink-2)]">
+                <div className="font-body mt-5 max-w-prose whitespace-pre-line leading-relaxed text-[var(--color-ink-2)] first-letter:float-left first-letter:mr-3 first-letter:font-display first-letter:text-6xl first-letter:leading-[0.8] first-letter:text-[var(--color-ink)]">
                   {e.report}
                 </div>
                 <div className="mt-5 flex flex-wrap gap-4 text-sm font-semibold">

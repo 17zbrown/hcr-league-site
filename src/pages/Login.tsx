@@ -92,7 +92,7 @@ export default function Login() {
           <button
             type="submit"
             disabled={busy}
-            className="w-full rounded-xl bg-[var(--color-brand)] py-3.5 font-display text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-0.5 disabled:opacity-60"
+            className="w-full rounded-xl bg-[var(--color-brand)] py-3.5 font-alt text-sm font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-0.5 disabled:opacity-60"
           >
             {busy ? 'Working…' : mode === 'in' ? 'Sign In' : 'Create Account'}
           </button>
@@ -152,7 +152,7 @@ export default function Login() {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">{label}</span>
+      <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">{label}</span>
       {children}
     </label>
   )

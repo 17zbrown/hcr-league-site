@@ -8,10 +8,12 @@ import {
   useSeasonResultsFull,
 } from '../lib/queries'
 import { buildDriverReport, type FullRow } from '../lib/driverReport'
+import { computeAchievements } from '../lib/achievements'
 import { buildPaceIndex, computeLicense, resultsForDriver } from '../lib/license'
 import { classColor } from '../lib/format'
 import { Skeleton } from '../components/ui'
 import { AnimatedStat, MeterRow, StatBand } from '../components/editorial'
+import { AchievementGallery } from '../components/AchievementGallery'
 import { LicenseBadge, LicenseProgress } from '../components/LicenseBadge'
 import { TeamLink } from '../components/links'
 import { Reveal } from '../components/motion'
@@ -35,6 +37,11 @@ export default function DriverProfile() {
   }, [driver, results])
 
   const report = useMemo(() => buildDriverReport(rows, (results ?? []) as FullRow[]), [rows, results])
+
+  const achievements = useMemo(
+    () => computeAchievements(rows, (results ?? []) as FullRow[]),
+    [rows, results],
+  )
 
   const license = useMemo(() => {
     if (!driver) return null
@@ -211,6 +218,14 @@ export default function DriverProfile() {
                 </div>
               </section>
 
+              {/* Trophy cabinet */}
+              <section>
+                <h2 className="text-3xl">Trophy cabinet</h2>
+                <div className="mt-5">
+                  <AchievementGallery achievements={achievements} />
+                </div>
+              </section>
+
               {/* Results table */}
               <ResultsTable rows={rows} classes={classes} emptyLabel={`No scored results yet for ${driver.name}.`} />
             </div>
@@ -260,6 +275,13 @@ export default function DriverProfile() {
                   )}
                 </ul>
               </div>
+
+              <Link
+                to={'/compare?a=' + driver.id}
+                className="inline-block font-body text-sm font-semibold text-[var(--color-blue)] underline-offset-4 hover:underline"
+              >
+                Compare with another driver →
+              </Link>
             </aside>
           </div>
         </>
