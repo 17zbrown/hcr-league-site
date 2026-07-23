@@ -222,16 +222,24 @@ export default function SmokeCanvas({ className = '' }: { className?: string }) 
     resize()
 
     if (reduced) {
-      // settled haze band along the ground — no motion at all
-      for (let i = 0; i < 70; i++) {
-        spawnWisp()
-        const p = parts[parts.length - 1]
-        p.life = p.max * 0.45
-        p.x += p.vx * 2.5
-        p.y += p.vy * 2.5
+      // settled haze band along the ground — no motion at all, but repaint on
+      // resize/rotate so the static bitmap isn't stretched to a new aspect.
+      const paintSettled = () => {
+        resize()
+        parts = []
+        for (let i = 0; i < 70; i++) {
+          spawnWisp()
+          const p = parts[parts.length - 1]
+          p.life = p.max * 0.45
+          p.x += p.vx * 2.5
+          p.y += p.vy * 2.5
+        }
+        draw(0, 99)
       }
-      draw(0, 99)
-      return () => void 0
+      paintSettled()
+      const onReducedResize = () => paintSettled()
+      window.addEventListener('resize', onReducedResize)
+      return () => window.removeEventListener('resize', onReducedResize)
     }
 
     // lay fresh skid marks where the launch begins

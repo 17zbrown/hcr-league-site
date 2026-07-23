@@ -6,7 +6,7 @@ import { computeStandings } from '../lib/standings'
 import { CLASS_ORDER, classColor, fmtDateLong } from '../lib/format'
 import Countdown from './Countdown'
 import { ClassChip } from './ui'
-import HeroVideo from './HeroVideo'
+import HeroYouTube from './HeroYouTube'
 import SmokeCanvas from './SmokeCanvas'
 import { DriverName } from './links'
 
@@ -171,12 +171,28 @@ export default function HeroCarousel() {
       className="on-navy relative overflow-hidden bg-[var(--color-deep)]"
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={() => setPaused(false)}
       aria-roledescription="carousel"
+      aria-label="Featured league highlights"
     >
-      {/* Background race footage (falls back to the static hero if no clips) */}
-      <div className={`pointer-events-none absolute inset-0 overflow-hidden ${videoActive ? 'bg-[var(--color-deep)]' : ''}`}>
-        <HeroVideo onActive={setVideoActive} />
+      {/* Official iRacing trailer (falls back to the tire-smoke hero if the
+          embed can't autoplay / load). */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden bg-[var(--color-deep)]">
+        <HeroYouTube onActive={setVideoActive} />
       </div>
+
+      {/* Opaque curtain over the player until it is genuinely PLAYING, so a
+          blocked-autoplay / loading / error frame never shows. The video is left
+          fully visible to the browser (opacity-gating the iframe itself makes
+          YouTube treat it as hidden and refuse to autoplay), so playback still
+          starts underneath the curtain, which then fades away. */}
+      <div
+        className={`pointer-events-none absolute inset-0 bg-[var(--color-deep)] transition-opacity duration-700 ${
+          videoActive ? 'opacity-0' : 'opacity-100'
+        }`}
+        aria-hidden="true"
+      />
 
       {/* Legibility scrim — only when a clip is playing. Strong on the left
           (text) fading right (cars stay visible). */}
@@ -208,6 +224,18 @@ export default function HeroCarousel() {
         style={{ background: 'linear-gradient(to top, #16303d, transparent)' }}
       />
 
+      {/* Credit the rights-holder while their trailer is on screen. */}
+      {videoActive && (
+        <a
+          href="https://www.youtube.com/@iRacingOfficial"
+          target="_blank"
+          rel="noreferrer"
+          className="absolute bottom-2 right-3 z-10 font-mono text-[10px] uppercase tracking-[0.14em] text-white/60 transition-colors hover:text-white/90"
+        >
+          Trailer · iRacing
+        </a>
+      )}
+
       <div className="container-hcr relative py-14 md:py-20">
         <div className="relative min-h-[600px] sm:min-h-[540px] md:min-h-[460px]">
           {slides.map((s, i) => {
@@ -216,6 +244,11 @@ export default function HeroCarousel() {
               <div
                 key={s.key}
                 aria-hidden={!on}
+                // inert (absent from this React version's types) removes the
+                // off-slide's links from tab order AND the a11y tree;
+                // pointer-events/opacity alone leave them focusable.
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                {...(!on && ({ inert: '' } as any))}
                 className="absolute inset-0 flex items-center transition-all duration-700 ease-out"
                 style={{
                   opacity: on ? 1 : 0,
@@ -245,6 +278,7 @@ export default function HeroCarousel() {
                 key={s.key}
                 onClick={() => setIdx(i)}
                 aria-label={`Go to slide ${i + 1}`}
+                aria-current={i === active ? 'true' : undefined}
                 className="h-2.5 rounded-full transition-all duration-300"
                 style={{ width: i === active ? 34 : 10, background: i === active ? 'var(--color-ink)' : 'var(--color-line-2)' }}
               />
