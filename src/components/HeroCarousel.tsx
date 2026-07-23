@@ -194,13 +194,12 @@ export default function HeroCarousel() {
       {!videoActive && <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden="true" />}
       {!videoActive && <SmokeCanvas className="pointer-events-none absolute inset-0 h-full w-full" />}
 
-      {/* Warm light spill from the box + cinematic vignette so type always wins */}
+      {/* Neutral legibility scrim only — no colored glow (a warm radial in the
+          corner reads as a rising sun, not exhaust). The smoke carries the mood. */}
       <div
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'radial-gradient(42% 60% at 6% 88%, rgba(242,225,20,0.16), transparent 64%),' +
-            'radial-gradient(60% 55% at 88% -6%, rgba(91,141,239,0.10), transparent 62%),' +
             'linear-gradient(90deg, rgba(22,48,61,0.55) 0%, rgba(22,48,61,0.28) 46%, rgba(22,48,61,0.05) 78%, rgba(22,48,61,0.28) 100%)',
         }}
       />
