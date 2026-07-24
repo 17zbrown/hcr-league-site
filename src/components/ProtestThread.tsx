@@ -27,25 +27,49 @@ export function StatusPill({ status }: { status: ProtestStatus }) {
   )
 }
 
+/**
+ * Only ever hand http(s) URLs to href/src. Attachment URLs are member-supplied
+ * free text, so a `javascript:` (or `data:`) value would execute on click —
+ * stored XSS. Anything that isn't plain http(s) is refused outright.
+ */
+function safeUrl(raw?: string | null): string | null {
+  if (!raw) return null
+  try {
+    const u = new URL(raw.trim(), window.location.origin)
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null
+  } catch {
+    return null
+  }
+}
+
 function Evidence({ items }: { items: ProtestAttachment[] }) {
   if (!items.length) return null
   return (
     <div className="mt-3 grid gap-3 sm:grid-cols-2">
       {items.map((a) => {
+        const href = safeUrl(a.url)
+        if (!href) {
+          return (
+            <div key={a.id} className="rounded-xl border border-dashed border-[var(--color-line-2)] p-4 text-sm text-[var(--color-muted)]">
+              Attachment hidden — unsupported link.
+            </div>
+          )
+        }
         if (a.kind === 'image') {
           return (
-            <a key={a.id} href={a.url} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-[var(--color-line)]">
-              <img src={a.url} alt={a.title ?? 'Evidence screenshot'} className="h-auto w-full object-cover" />
+            <a key={a.id} href={href} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl border border-[var(--color-line)]">
+              <img src={href} alt={a.title ?? 'Evidence screenshot'} className="h-auto w-full object-cover" />
             </a>
           )
         }
-        const info = parseClipUrl(a.url)
+        const info = parseClipUrl(href)
+        const embed = safeUrl(info.embedUrl)
         return (
           <div key={a.id} className="overflow-hidden rounded-xl border border-[var(--color-line)]">
-            {info.embedUrl ? (
+            {embed ? (
               <div className="aspect-video w-full bg-black">
                 <iframe
-                  src={info.embedUrl}
+                  src={embed}
                   title={info.label}
                   allowFullScreen
                   className="h-full w-full"
@@ -53,8 +77,8 @@ function Evidence({ items }: { items: ProtestAttachment[] }) {
                 />
               </div>
             ) : (
-              <a href={a.url} target="_blank" rel="noreferrer" className="block p-4 text-sm font-semibold text-[var(--color-blue)] underline">
-                {a.title ?? a.url}
+              <a href={href} target="_blank" rel="noreferrer" className="block p-4 text-sm font-semibold text-[var(--color-blue)] underline">
+                {a.title ?? href}
               </a>
             )}
           </div>

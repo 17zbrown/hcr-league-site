@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useReducedMotion } from 'framer-motion'
 import { useClasses, useCurrentSeason, useEvents, useSeasonResults, useTeams } from '../lib/queries'
 import { computeStandings } from '../lib/standings'
-import { CLASS_ORDER, classColor, fmtDateLong } from '../lib/format'
+import { CLASS_ORDER, classColor, eventEnded, fmtDateLong } from '../lib/format'
 import Countdown from './Countdown'
 import { ClassChip } from './ui'
 import HeroYouTube from './HeroYouTube'
@@ -32,7 +32,7 @@ export default function HeroCarousel() {
     const complete = sorted.filter((e) => e.status === 'complete')
     const next =
       sorted.find((e) => e.status === 'next') ??
-      sorted.find((e) => new Date(e.date).getTime() > Date.now())
+      sorted.find((e) => !eventEnded(e.date))
     const last = complete[complete.length - 1]
     const standings = computeStandings(results ?? [], teams ?? [])
     const leaders = CLASS_ORDER.map((c) => ({ cls: c, row: standings.drivers[c]?.[0] })).filter((x) => x.row)

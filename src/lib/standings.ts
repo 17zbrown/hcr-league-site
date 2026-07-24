@@ -1,5 +1,16 @@
 import type { ClassId, RaceResult, StandingRow, Team } from './types'
 import { CLASS_ORDER } from './format'
+import { crewNames } from './attribution'
+
+/**
+ * Stable identity for a crew, independent of how race control typed it.
+ * "A. Smith / B. Jones" and "B. Jones, A. Smith" are the same entry — keying on
+ * the raw text split one team's championship into two half-scoring rows.
+ */
+function crewKey(driversText?: string | null, fallback = ''): string {
+  const names = crewNames(driversText)
+  return names.length ? names.sort().join('|') : fallback.toLowerCase()
+}
 
 interface Accum {
   key: string
@@ -24,15 +35,6 @@ function finalize(map: Map<string, Accum>): StandingRow[] {
 /** Row points: race + quali + steward adjustment. The single scoring formula. */
 export const rowPoints = (r: RaceResult) =>
   (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)
-
-/**
- * Rows that score the MAIN championship. Fill-in / guest entries (drivers whose
- * class isn't on that round's grid, racing anyway) are excluded everywhere the
- * title is at stake — they score the separate Fill-In Cup instead.
- */
-export function championshipRows<T extends RaceResult>(rows: T[]): T[] {
-  return rows.filter((r) => !r.fill_in)
-}
 
 /** Rows that score the Fill-In Cup. */
 export function fillInRows<T extends RaceResult>(rows: T[]): T[] {
@@ -64,7 +66,7 @@ export function computeStandings(
 
     // Driver standings — keyed by driver name text (crew).
     const dName = (r.drivers_text || '').trim() || `#${r.number}`
-    const dKey = dName.toLowerCase()
+    const dKey = crewKey(r.drivers_text, dName)
     const d =
       driverMap[cls].get(dKey) ??
       { key: dKey, name: dName, number: r.number, classId: cls, points: 0, starts: 0, wins: 0, podiums: 0, poles: 0, bestFinish: null }
@@ -96,11 +98,6 @@ export function computeStandings(
     drivers: { GTP: finalize(driverMap.GTP), LMP2: finalize(driverMap.LMP2), GTD: finalize(driverMap.GTD) },
     teams: { GTP: finalize(teamMap.GTP), LMP2: finalize(teamMap.LMP2), GTD: finalize(teamMap.GTD) },
   }
-}
-
-/** Fetch results across many events is done in the page; this helper just needs rows. */
-export function emptyStandings() {
-  return { GTP: [], LMP2: [], GTD: [] } as Record<ClassId, StandingRow[]>
 }
 
 export type FullResult = RaceResult & {
@@ -176,7 +173,7 @@ export function computeProgression(
       name = (r.team_id ? teamById.get(r.team_id)?.name : undefined) ?? `#${r.number}`
     } else {
       name = (r.drivers_text || '').trim() || `#${r.number}`
-      key = name.toLowerCase()
+      key = crewKey(r.drivers_text, name)
     }
     const s = seriesMap.get(key) ?? { name, perRound: new Array(rounds.length).fill(0) }
     s.perRound[roundIndex.get(r.event!.round)!] += pts
@@ -211,7 +208,7 @@ export function computeFillInStandings(results: RaceResult[]): StandingRow[] {
     if (!CLASS_ORDER.includes(cls)) continue
     const clsPos = r.cls_pos ?? null
     const dName = (r.drivers_text || '').trim() || `#${r.number}`
-    const key = `${dName.toLowerCase()}|${cls}`
+    const key = `${crewKey(r.drivers_text, dName)}::${cls}`
     const a =
       map.get(key) ??
       { key, name: dName, number: r.number, classId: cls, points: 0, starts: 0, wins: 0, podiums: 0, poles: 0, bestFinish: null }

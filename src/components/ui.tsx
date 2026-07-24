@@ -62,16 +62,31 @@ export function Skeleton({ className = '' }: { className?: string }) {
   return <div className={`animate-pulse rounded-lg bg-[var(--color-mist)] ${className}`} />
 }
 
-export function PositionBadge({ pos, color, lead = false }: { pos: number | null; color?: string; lead?: boolean }) {
+/**
+ * A failed fetch is not an empty season. Without this, a dropped connection
+ * rendered "No results scored yet" — telling members the league has no data
+ * when really the request just failed.
+ */
+export function LoadError({
+  what = 'this data',
+  onRetry,
+}: {
+  what?: string
+  onRetry?: () => void
+}) {
   return (
-    <span
-      className="tabular inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold"
-      style={{
-        background: lead && color ? color : 'var(--color-mist)',
-        color: lead && color ? '#000' : 'var(--color-ink)',
-      }}
-    >
-      {pos ?? '—'}
-    </span>
+    <div className="rounded-2xl border border-dashed border-[var(--color-line-2)] bg-[var(--color-paper)] p-8 text-center">
+      <p className="font-display text-2xl">Couldn't load {what}.</p>
+      <p className="mx-auto mt-2 max-w-sm font-body text-sm text-[var(--color-muted)]">
+        The connection dropped or the server didn't answer. Your data is fine — this is just
+        this page failing to fetch it.
+      </p>
+      {onRetry && (
+        <button onClick={onRetry} className="hcr-btn hcr-btn-dark mt-5">
+          Try again
+        </button>
+      )}
+    </div>
   )
 }
+

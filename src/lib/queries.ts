@@ -296,23 +296,6 @@ export function useDrivers() {
   })
 }
 
-/** Free-agent drivers: not on a team. Used by the team-manager market. */
-export function useFreeAgents() {
-  return useQuery({
-    queryKey: ['free-agents'],
-    queryFn: async (): Promise<Driver[]> => {
-      const { data, error } = await supabase
-        .from('drivers')
-        .select('*')
-        .is('team_id', null)
-        .order('name')
-      if (error) throw error
-      return (data ?? []) as Driver[]
-    },
-  })
-}
-
-/** All member profiles (admin only via RLS). */
 export function useMembers() {
   return useQuery({
     queryKey: ['members'],

@@ -290,12 +290,29 @@ export default function SmokeCanvas({ className = '' }: { className?: string }) 
     start()
 
     const onResize = () => resize()
-    const onVis = () => (document.hidden ? stop() : start())
+    // Scrolled past the hero, this kept burning a full 60fps of canvas work for
+    // pixels nobody can see. Pause when it leaves the viewport, resume when it
+    // comes back (and still honour tab visibility).
+    let onScreen = true
+    const sync = () => (document.hidden || !onScreen ? stop() : start())
+    const onVis = () => sync()
+    let io: IntersectionObserver | undefined
+    if (typeof IntersectionObserver !== 'undefined') {
+      io = new IntersectionObserver(
+        ([entry]) => {
+          onScreen = entry.isIntersecting
+          sync()
+        },
+        { rootMargin: '120px' },
+      )
+      io.observe(canvas)
+    }
     window.addEventListener('resize', onResize)
     document.addEventListener('visibilitychange', onVis)
 
     return () => {
       stop()
+      io?.disconnect()
       window.removeEventListener('resize', onResize)
       document.removeEventListener('visibilitychange', onVis)
     }

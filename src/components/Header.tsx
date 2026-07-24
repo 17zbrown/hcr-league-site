@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 import logo from '../assets/hcr-logo.png'
 import { useAuth } from '../lib/auth'
 import { useLeagueSettings } from '../lib/queries'
@@ -79,19 +79,21 @@ export default function Header() {
         </div>
       </header>
 
-      <AnimatePresence>
-        {open && (
-          <FullMenu
-            key="menu"
-            onClose={() => setOpen(false)}
-            session={!!session}
-            isAdmin={isAdmin}
-            isManager={isManager}
-            isRaceControl={isRaceControl}
-            discord={settings?.discord_url ?? null}
-          />
-        )}
-      </AnimatePresence>
+      {/* Rendered plainly rather than through AnimatePresence: the exit
+          animation finished but the node was left mounted at opacity 0, so a
+          dismissed menu stayed as an invisible full-screen overlay (still
+          pointer-events:auto and aria-modal) swallowing clicks on the page
+          behind it. Unmounting immediately is worth losing the fade-out. */}
+      {open && (
+        <FullMenu
+          onClose={() => setOpen(false)}
+          session={!!session}
+          isAdmin={isAdmin}
+          isManager={isManager}
+          isRaceControl={isRaceControl}
+          discord={settings?.discord_url ?? null}
+        />
+      )}
     </>
   )
 }
@@ -120,13 +122,62 @@ function FullMenu({
     ...(isManager ? [{ to: '/manager', label: 'Team Manager Portal' }] : []),
   ]
 
+  const reduceMotion = useReducedMotion() ?? false
+  const panelRef = useRef<HTMLDivElement | null>(null)
+
+  // Keep the latest onClose in a ref: Header passes a fresh arrow every render,
+  // so depending on it directly re-ran this effect constantly — tearing the key
+  // listener down and fighting Header's own scroll lock.
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+
+  // A full-screen overlay has to behave like a dialog: Escape closes it, and
+  // focus moves in and is trapped. (Header owns the body scroll lock.)
+  useEffect(() => {
+    const prevFocus = document.activeElement as HTMLElement | null
+    panelRef.current?.querySelector<HTMLElement>('button, a[href]')?.focus()
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        closeRef.current()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const nodes = panelRef.current?.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )
+      if (!nodes?.length) return
+      const first = nodes[0]
+      const last = nodes[nodes.length - 1]
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      prevFocus?.focus?.()
+    }
+    // attach once for the life of the overlay
+  }, [])
+
   return (
     <motion.div
-      className="on-navy fixed inset-0 z-[60] bg-[var(--color-deep)] text-white"
+      ref={panelRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Site menu"
+      // overflow-y-auto: the panel was a fixed, unscrollable viewport, so on
+      // phones the Account links sat below the fold with no way to reach them.
+      className="on-navy fixed inset-0 z-[60] overflow-y-auto overscroll-contain bg-[var(--color-deep)] text-white"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.25 }}
+      transition={{ duration: reduceMotion ? 0 : 0.25 }}
     >
       <div className="container-hcr flex h-[72px] items-center justify-between">
         <span className="font-alt text-xl font-extrabold uppercase tracking-tight">
@@ -147,21 +198,21 @@ function FullMenu({
 
       <div className="container-hcr grid gap-12 py-10 md:grid-cols-[1.4fr_1fr] md:py-16">
         <nav aria-label="All pages">
-          <div className="mb-5 font-mono text-xs uppercase tracking-[0.2em] text-white/40">Explore</div>
+          <div className="mb-5 font-mono text-xs uppercase tracking-[0.2em] text-white/65">Explore</div>
           <ul>
             {NAV.map((item, i) => (
               <motion.li
                 key={item.to}
-                initial={{ opacity: 0, y: 16 }}
+                initial={reduceMotion ? false : { opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.05 + i * 0.04, duration: 0.4, ease: [0.2, 0.7, 0.2, 1] }}
+                transition={reduceMotion ? { duration: 0 } : { delay: 0.05 + i * 0.04, duration: 0.4, ease: [0.2, 0.7, 0.2, 1] }}
               >
                 <NavLink
                   to={item.to}
                   onClick={onClose}
                   className="group flex items-baseline gap-4 border-b border-white/10 py-4"
                 >
-                  <span className="font-mono text-xs text-white/30">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="font-mono text-xs text-white/65">{String(i + 1).padStart(2, '0')}</span>
                   <span className="font-display text-4xl leading-none transition-colors group-hover:text-[var(--color-brand)] md:text-5xl">
                     {item.label}
                   </span>
@@ -172,7 +223,7 @@ function FullMenu({
         </nav>
 
         <div>
-          <div className="mb-5 font-mono text-xs uppercase tracking-[0.2em] text-white/40">Account</div>
+          <div className="mb-5 font-mono text-xs uppercase tracking-[0.2em] text-white/65">Account</div>
           <ul className="space-y-2">
             {accountLinks.map((l) => (
               <li key={l.to + l.label}>

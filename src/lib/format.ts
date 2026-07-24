@@ -33,14 +33,44 @@ const MON = [
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
 ]
 
+/**
+ * Event dates are stored as calendar days pinned to UTC midnight
+ * (`2026-08-01T00:00:00Z`). Reading those with local getters shows the previous
+ * day for everyone west of UTC — i.e. every US viewer. So parse the calendar
+ * part and rebuild it in local time: the day you typed is the day that renders.
+ * Timestamps that carry a real time-of-day (protest `created_at`) still format
+ * correctly, since we only take the date portion for date-only display.
+ */
+export function calendarDate(iso: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  if (!m) return new Date(iso)
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+}
+
+/** `YYYY-MM-DD` for the stored calendar day (no timezone shift). */
+export function dateKey(iso: string): string {
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(iso)
+  return m ? m[1] : new Date(iso).toISOString().slice(0, 10)
+}
+
 export function fmtDate(iso: string): string {
-  const d = new Date(iso)
+  const d = calendarDate(iso)
   return `${DAY[d.getDay()]} ${MON[d.getMonth()]} ${d.getDate()}`
 }
 
 export function fmtDateLong(iso: string): string {
-  const d = new Date(iso)
+  const d = calendarDate(iso)
   return `${MON[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
+}
+
+/**
+ * When a race-day event is "past". A round stays current all day locally
+ * rather than flipping at UTC midnight (8pm ET the evening before).
+ */
+export function eventEnded(iso: string, now: number = Date.now()): boolean {
+  const d = calendarDate(iso)
+  d.setHours(23, 59, 59, 999)
+  return d.getTime() < now
 }
 
 export function fmtTime(iso: string): string {
@@ -48,9 +78,15 @@ export function fmtTime(iso: string): string {
   return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
 }
 
-/** Break an ISO target into a countdown, or null once elapsed. */
+/**
+ * Break an ISO target into a countdown, or null once elapsed. Date-only /
+ * UTC-midnight event dates count down to the START of that local day, not to
+ * UTC midnight (which lands the evening before for US viewers).
+ */
 export function countdownParts(targetIso: string, now: number) {
-  const diff = new Date(targetIso).getTime() - now
+  const isCalendarDay = /^\d{4}-\d{2}-\d{2}(T00:00:00(\.000)?Z?)?$/.test(targetIso)
+  const target = isCalendarDay ? calendarDate(targetIso).getTime() : new Date(targetIso).getTime()
+  const diff = target - now
   if (diff <= 0) return null
   const s = Math.floor(diff / 1000)
   return {

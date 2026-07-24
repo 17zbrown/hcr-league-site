@@ -85,6 +85,9 @@ export default function HeroYouTube({
 
     const wrap = wrapRef.current
     let cancelled = false
+    // Don't fetch YouTube's API + player during the landing page's critical
+    // path — the smoke hero is already showing. Wait for an idle moment.
+    let startTimer: ReturnType<typeof setTimeout> | undefined
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let player: any = null
     let ro: ResizeObserver | undefined
@@ -122,7 +125,9 @@ export default function HeroYouTube({
       iframe.setAttribute('tabindex', '-1')
     }
 
-    loadYouTubeApi()
+    const begin = () => {
+      if (cancelled) return
+      loadYouTubeApi()
       .then(() => {
         if (cancelled) return
         const w = window as unknown as { YT: any } // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -187,9 +192,17 @@ export default function HeroYouTube({
         window.addEventListener('resize', cover)
       })
       .catch(() => onActive(false))
+    }
+
+    // requestIdleCallback where supported, else a short timeout — either way the
+    // landing page paints (and the smoke hero runs) before YouTube loads.
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback
+    if (ric) ric(begin, { timeout: 2500 })
+    else startTimer = setTimeout(begin, 1200)
 
     return () => {
       cancelled = true
+      if (startTimer) clearTimeout(startTimer)
       clearInterval(poll)
       ro?.disconnect()
       window.removeEventListener('resize', cover)

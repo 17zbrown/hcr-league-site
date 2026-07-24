@@ -10,7 +10,8 @@ import {
   useTeams,
 } from '../lib/queries'
 import { computeStandings } from '../lib/standings'
-import { CLASS_ORDER, classColor, fmtDate } from '../lib/format'
+import { CLASS_ORDER, classColor, eventEnded, fmtDate } from '../lib/format'
+import { crewNames } from '../lib/attribution'
 import type { ClassId } from '../lib/types'
 import { ClassChip, Section, Skeleton } from '../components/ui'
 import { StatBand } from '../components/editorial'
@@ -32,7 +33,7 @@ export default function Home() {
     const complete = sorted.filter((e) => e.status === 'complete')
     const next =
       sorted.find((e) => e.status === 'next') ??
-      sorted.find((e) => new Date(e.date).getTime() > Date.now()) ??
+      sorted.find((e) => !eventEnded(e.date)) ??
       sorted.find((e) => e.status !== 'complete')
     return { nextEvent: next, lastEvent: complete[complete.length - 1], roundsDone: complete.length }
   }, [events])
@@ -43,13 +44,16 @@ export default function Home() {
   )
 
   // League pulse — real season totals from the imported results.
-  const { driversScored, totalStarts, totalLaps } = useMemo(() => {
+  const { driversScored, totalStarts, totalLaps, cleanRaces } = useMemo(() => {
     const rows = seasonResults ?? []
-    const names = new Set(rows.map((r) => (r.drivers_text ?? '').trim().toLowerCase()).filter(Boolean))
+    const names = new Set(rows.flatMap((r) => crewNames(r.drivers_text)))
+    const scored = rows.filter((r) => r.inc != null)
     return {
       driversScored: names.size,
       totalStarts: rows.length,
       totalLaps: rows.reduce((s, r) => s + (r.laps ?? 0), 0),
+      // share of entries that finished a race without a single incident point
+      cleanRaces: scored.length ? Math.round((scored.filter((r) => (r.inc ?? 0) === 0).length / scored.length) * 100) : null,
     }
   }, [seasonResults])
 
@@ -82,7 +86,7 @@ export default function Home() {
             { label: 'Drivers Scored', value: driversScored },
             { label: 'Race Starts', value: totalStarts },
             { label: 'Laps Recorded', value: totalLaps },
-            { label: 'Classes Racing', value: 3 },
+            ...(cleanRaces != null ? [{ label: 'Incident-Free Runs', value: cleanRaces, suffix: '%' }] : []),
           ]}
         />
       </Section>

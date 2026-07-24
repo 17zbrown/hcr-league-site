@@ -56,7 +56,9 @@ const SYNONYMS: Record<Field, string[]> = {
   number: ['no', 'number', 'carnumber', 'carno', 'num', 'carnum'],
   drivers_text: ['driver', 'drivers', 'name', 'entry', 'competitor', 'teamdriver', 'crew'],
   car: ['car', 'vehicle', 'model', 'carmodel', 'make', 'chassis'],
-  grid: ['grid', 'start', 'startpos', 'startingposition', 'st', 'qualpos'],
+  // NB: 'qualpos' belongs to quali_pos only — listing it here too made grid win
+  // the match (object key order), so a lone "Qual Pos" column imported as grid.
+  grid: ['grid', 'start', 'startpos', 'startingposition', 'st'],
   laps: ['laps', 'lap', 'completed', 'lapscompleted', 'lapscomp'],
   total_time: ['time', 'totaltime', 'racetime', 'total', 'elapsed'],
   gap: ['gap', 'behind', 'delta'],
@@ -179,7 +181,16 @@ export async function pdfToText(file: File): Promise<string> {
     const ys = Array.from(byLine.keys()).sort((a, b) => b - a)
     for (const y of ys) {
       const parts = byLine.get(y)!.sort((a, b) => a.x - b.x)
-      out.push(parts.map((p) => p.s).join('  ').replace(/\s+/g, ' ').trim())
+      // Collapse whitespace WITHIN each cell, then join with the double-space
+      // delimiter parseText splits on. Collapsing after the join erased the
+      // very delimiters we just inserted, so PDF rows never split into columns.
+      out.push(
+        parts
+          .map((p) => p.s.replace(/\s+/g, ' ').trim())
+          .filter(Boolean)
+          .join('  ')
+          .trim(),
+      )
     }
   }
   return out.filter(Boolean).join('\n')

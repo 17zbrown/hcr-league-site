@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import Header from './components/Header'
 import Footer from './components/Footer'
+import ErrorBoundary from './components/ErrorBoundary'
 import Home from './pages/Home'
 import { RequireAdmin, RequireAuth, RequireManager, RequireRaceControl } from './components/guards'
 
@@ -51,6 +52,7 @@ export default function App() {
       <ScrollToTop />
       <Header />
       <main className="flex-1">
+        <ErrorBoundary>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             <Route path="/" element={<Home />} />
@@ -84,6 +86,7 @@ export default function App() {
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
+        </ErrorBoundary>
       </main>
       <Footer />
     </div>

@@ -5,7 +5,7 @@ import { computeFillInStandings, fillInRows } from '../lib/standings'
 import { classColor } from '../lib/format'
 import { useAuth } from '../lib/auth'
 import { resultListsDriver } from '../lib/attribution'
-import { Section, Skeleton } from '../components/ui'
+import { LoadError, Section, Skeleton } from '../components/ui'
 import { CountUp } from '../components/motion'
 import { DriverName } from '../components/links'
 
@@ -16,7 +16,7 @@ import { DriverName } from '../components/links'
  */
 export default function FillInStandings() {
   const { data: season } = useCurrentSeason()
-  const { data: results, isLoading } = useSeasonResults(season?.id)
+  const { data: results, isLoading, isError, refetch } = useSeasonResults(season?.id)
   const { data: classes } = useClasses()
   const { profile } = useAuth()
   const meName = profile?.display_name ?? null
@@ -53,7 +53,9 @@ export default function FillInStandings() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <LoadError what="the Fill-In Cup" onRetry={() => refetch()} />
+      ) : isLoading ? (
         <Skeleton className="h-72 w-full" />
       ) : rows.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-[var(--color-line-2)] bg-[var(--color-paper)] p-10 text-center">

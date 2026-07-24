@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useClasses, useCurrentSeason, useSeasonResults, useSeasonResultsFull, useTeams } from '../lib/queries'
+import { useClasses, useCurrentSeason, useSeasonResultsFull, useTeams } from '../lib/queries'
 import { computeProgression, computeStandings } from '../lib/standings'
 import { CLASS_ORDER, classColor, classLineColor } from '../lib/format'
 import { useAuth } from '../lib/auth'
 import { resultListsDriver } from '../lib/attribution'
 import type { ClassId, LeagueClass, StandingRow } from '../lib/types'
-import { Section, Skeleton } from '../components/ui'
+import { LoadError, Section, Skeleton } from '../components/ui'
 import { CountUp } from '../components/motion'
 import { DriverName, TeamLink } from '../components/links'
 import { ProgressionChart } from '../components/ProgressionChart'
@@ -15,8 +15,10 @@ type Tab = ClassId | 'TEAMS'
 
 export default function Standings() {
   const { data: season } = useCurrentSeason()
-  const { data: results, isLoading } = useSeasonResults(season?.id)
-  const { data: fullResults } = useSeasonResultsFull(season?.id)
+  // One fetch: the "full" variant is a superset of the plain rows, so deriving
+  // standings from it avoids downloading the whole season twice.
+  const { data: fullResults, isLoading, isError, refetch } = useSeasonResultsFull(season?.id)
+  const results = fullResults
   const { data: teams } = useTeams()
   const { data: classes } = useClasses()
   const [tab, setTab] = useState<Tab>('GTP')
@@ -67,7 +69,9 @@ export default function Standings() {
         </Link>
       </div>
 
-      {isLoading ? (
+      {isError ? (
+        <LoadError what="the standings" onRetry={() => refetch()} />
+      ) : isLoading ? (
         <Skeleton className="h-96 w-full" />
       ) : (
         <div className="space-y-8">

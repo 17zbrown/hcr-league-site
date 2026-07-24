@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom'
 export default function NotFound() {
   return (
     <div className="container-hcr flex min-h-[60vh] flex-col items-center justify-center text-center">
-      <div className="font-display text-8xl text-[var(--color-ink)]">
+      <h1 className="font-display text-8xl text-[var(--color-ink)]">
         D<span className="text-[var(--color-brand-deep)]">N</span>F
-      </div>
+      </h1>
       <p className="mt-4 text-xl text-[var(--color-muted)]">
         This page didn't make the finish. Let's get you back on track.
       </p>

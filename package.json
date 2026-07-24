@@ -11,8 +11,6 @@
     "og": "node scripts/gen-og.mjs"
   },
   "dependencies": {
-    "@react-three/drei": "^9.114.0",
-    "@react-three/fiber": "^8.17.10",
     "@supabase/supabase-js": "^2.58.0",
     "@tanstack/react-query": "^5.62.0",
     "framer-motion": "^11.15.0",
@@ -20,8 +18,7 @@
     "pdfjs-dist": "^4.7.76",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0",
-    "three": "^0.169.0"
+    "react-router-dom": "^6.28.0"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",

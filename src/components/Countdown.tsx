@@ -23,7 +23,7 @@ export default function Countdown({ target, dark = false }: { target: string; da
   ]
 
   const cellBg = dark ? 'bg-white/10' : 'bg-[var(--color-mist)]'
-  const labelColor = dark ? 'text-white/50' : 'text-[var(--color-muted)]'
+  const labelColor = dark ? 'text-white/70' : 'text-[var(--color-muted)]'
 
   return (
     <div className="flex gap-2 sm:gap-2.5" role="timer" aria-label="Time until next race">

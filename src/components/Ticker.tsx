@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useCurrentSeason, useEvents, useSeasonResults, useTeams } from '../lib/queries'
 import { computeStandings } from '../lib/standings'
-import { CLASS_ORDER, fmtDate } from '../lib/format'
+import { CLASS_ORDER, eventEnded, fmtDate } from '../lib/format'
 import { Marquee } from './motion'
 
 interface Item {
@@ -22,7 +22,7 @@ export default function Ticker() {
     const complete = sorted.filter((e) => e.status === 'complete')
     const next =
       sorted.find((e) => e.status === 'next') ??
-      sorted.find((e) => new Date(e.date).getTime() > Date.now())
+      sorted.find((e) => !eventEnded(e.date))
     const last = complete[complete.length - 1]
 
     if (season) out.push({ label: 'Season', value: season.name })
@@ -52,7 +52,7 @@ export default function Ticker() {
     <Marquee className="on-navy border-y border-white/10 bg-[var(--color-deep)]">
       {items.map((it, i) => (
         <span key={i} className="flex items-center whitespace-nowrap py-3.5 pl-6 pr-1">
-          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-white/45">
+          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.14em] text-white/70">
             {it.label}
           </span>
           <span className="ml-3 font-display text-lg text-white">

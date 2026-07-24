@@ -10,7 +10,7 @@ import {
   useTrackWinners,
   useWeather,
 } from '../lib/queries'
-import { CLASS_ORDER, classColor, fmtDateLong, wmo } from '../lib/format'
+import { CLASS_ORDER, classColor, dateKey, fmtDateLong, wmo } from '../lib/format'
 import { ClassChip, Skeleton } from '../components/ui'
 import { FeaturePanel, StatBand, type Stat } from '../components/editorial'
 import { DriverName } from '../components/links'
@@ -46,8 +46,9 @@ export default function RaceDetail() {
   const upcoming = !!event && !done
 
   // Race-day forecast window, centered on the in-sim start hour.
-  const raceDate = event ? new Date(event.date) : null
-  const dateStr = raceDate ? raceDate.toLocaleDateString('en-CA') : undefined
+  // Use the stored calendar day directly — converting through a local Date
+  // shifted the forecast a day early for every viewer west of UTC.
+  const dateStr = event ? dateKey(event.date) : undefined
   const daysUntil = dateStr
     ? Math.round((new Date(`${dateStr}T00:00:00`).getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000)
     : 0
