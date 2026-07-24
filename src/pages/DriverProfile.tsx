@@ -180,6 +180,22 @@ export default function DriverProfile() {
                     )
                   })}
                 </ol>
+                {report.fillIn && (
+                  <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-1 rounded-2xl border border-dashed border-[var(--color-line-2)] bg-[var(--color-paper)] px-5 py-4">
+                    <span className="font-body text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
+                      Fill-in duty
+                    </span>
+                    <span className="font-body text-sm text-[var(--color-ink-2)]">
+                      {report.fillIn.drives} {report.fillIn.drives === 1 ? 'drive' : 'drives'} ·{' '}
+                      {report.fillIn.points} Fill-In Cup pts
+                      {report.fillIn.bestFinish != null ? ` · best P${report.fillIn.bestFinish}` : ''}
+                      {report.fillIn.wins ? ` · ${report.fillIn.wins}W` : ''}
+                    </span>
+                    <Link to="/standings/fill-in" className="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--color-muted)] underline-offset-4 hover:underline">
+                      Cup table →
+                    </Link>
+                  </div>
+                )}
               </section>
 
               {/* Race craft */}
@@ -344,7 +360,16 @@ export function ResultsTable({
                 return (
                   <tr key={r.id} className="border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-cloud)]">
                     <td className="tabular px-4 py-3.5 text-[var(--color-muted)]">{r.event?.round ?? '—'}</td>
-                    <td className="px-4 py-3.5 font-body font-medium">{r.event?.name ?? r.event?.track?.name ?? '—'}</td>
+                    <td className="px-4 py-3.5 font-body font-medium">
+                      <span className="inline-flex items-center gap-2">
+                        {r.event?.name ?? r.event?.track?.name ?? '—'}
+                        {r.fill_in && (
+                          <span className="rounded border border-[var(--color-line-2)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-[var(--color-muted)]" title="Fill-in drive — scores the Fill-In Cup">
+                            Fill-In
+                          </span>
+                        )}
+                      </span>
+                    </td>
                     <td className="px-4 py-3.5">
                       <span className="inline-flex items-center gap-1.5 font-body text-[10px] font-semibold uppercase tracking-[0.12em]">
                         <span className="h-2 w-2 rounded-full" style={{ background: color, boxShadow: 'inset 0 0 0 1px rgba(20,24,28,0.28)' }} />

@@ -21,6 +21,24 @@ function finalize(map: Map<string, Accum>): StandingRow[] {
     .sort((a, b) => b.points - a.points || (a.bestFinish ?? 99) - (b.bestFinish ?? 99))
 }
 
+/** Row points: race + quali + steward adjustment. The single scoring formula. */
+export const rowPoints = (r: RaceResult) =>
+  (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)
+
+/**
+ * Rows that score the MAIN championship. Fill-in / guest entries (drivers whose
+ * class isn't on that round's grid, racing anyway) are excluded everywhere the
+ * title is at stake — they score the separate Fill-In Cup instead.
+ */
+export function championshipRows<T extends RaceResult>(rows: T[]): T[] {
+  return rows.filter((r) => !r.fill_in)
+}
+
+/** Rows that score the Fill-In Cup. */
+export function fillInRows<T extends RaceResult>(rows: T[]): T[] {
+  return rows.filter((r) => r.fill_in)
+}
+
 /**
  * Compute per-class driver + team standings from raw results rows.
  * Points = sum of (points + quali_points + adjust). Class position drives
@@ -38,9 +56,10 @@ export function computeStandings(
   const teamMap: Record<ClassId, Map<string, Accum>> = { GTP: new Map(), LMP2: new Map(), GTD: new Map() }
 
   for (const r of results) {
+    if (r.fill_in) continue // fill-in entries score the Fill-In Cup, not the title
     const cls = r.class_id as ClassId
     if (!CLASS_ORDER.includes(cls)) continue
-    const pts = (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)
+    const pts = rowPoints(r)
     const clsPos = r.cls_pos ?? null
 
     // Driver standings — keyed by driver name text (crew).
@@ -128,7 +147,7 @@ export function computeProgression(
   mode: 'drivers' | 'teams' = 'drivers',
 ): Progression {
   const teamById = new Map(teams.map((t) => [t.id, t]))
-  const rows = full.filter((r) => r.class_id === classId && r.event)
+  const rows = full.filter((r) => r.class_id === classId && r.event && !r.fill_in)
 
   // Distinct rounds, ordered.
   const roundMap = new Map<number, ProgressionRound>()
@@ -149,7 +168,7 @@ export function computeProgression(
   // per-series per-round point totals
   const seriesMap = new Map<string, { name: string; perRound: number[] }>()
   for (const r of rows) {
-    const pts = (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)
+    const pts = rowPoints(r)
     let key: string
     let name: string
     if (mode === 'teams') {
@@ -176,4 +195,33 @@ export function computeProgression(
   series.sort((a, b) => b.total - a.total)
 
   return { rounds, series }
+}
+
+/**
+ * Fill-In Cup: the side standings for guest/fill-in drives. One combined table
+ * across classes (a driver who fills in for two different classes appears once
+ * per class raced — that's honest, they're different machinery). Completely
+ * separate pool from the main championship points.
+ */
+export function computeFillInStandings(results: RaceResult[]): StandingRow[] {
+  const map = new Map<string, Accum>()
+  for (const r of results) {
+    if (!r.fill_in) continue
+    const cls = r.class_id as ClassId
+    if (!CLASS_ORDER.includes(cls)) continue
+    const clsPos = r.cls_pos ?? null
+    const dName = (r.drivers_text || '').trim() || `#${r.number}`
+    const key = `${dName.toLowerCase()}|${cls}`
+    const a =
+      map.get(key) ??
+      { key, name: dName, number: r.number, classId: cls, points: 0, starts: 0, wins: 0, podiums: 0, poles: 0, bestFinish: null }
+    a.points += rowPoints(r)
+    a.starts += 1
+    if (clsPos === 1) a.wins += 1
+    if (clsPos !== null && clsPos <= 3) a.podiums += 1
+    if (r.quali_pos === 1) a.poles += 1
+    a.bestFinish = a.bestFinish === null ? clsPos : Math.min(a.bestFinish, clsPos ?? 99)
+    map.set(key, a)
+  }
+  return finalize(map)
 }

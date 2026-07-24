@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useClasses, useCurrentSeason, useSeasonResults, useSeasonResultsFull, useTeams } from '../lib/queries'
 import { computeProgression, computeStandings } from '../lib/standings'
 import { CLASS_ORDER, classColor, classLineColor } from '../lib/format'
@@ -41,7 +42,7 @@ export default function Standings() {
 
   return (
     <Section eyebrow={`${season?.name ?? 'Season'} · Championship`} title="Standings" titleTag="h1">
-      <div className="mb-8 flex flex-wrap gap-1 border-b border-[var(--color-line)]">
+      <div className="mb-8 flex flex-wrap items-center gap-1 border-b border-[var(--color-line)]">
         {tabs.map((t) => {
           const active = tab === t.id
           const color = t.id === 'TEAMS' ? 'var(--color-brand)' : classColor(t.id, classes)
@@ -58,6 +59,12 @@ export default function Standings() {
             </button>
           )
         })}
+        <Link
+          to="/standings/fill-in"
+          className="ml-auto px-2 py-3 font-mono text-xs uppercase tracking-[0.14em] text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
+        >
+          Fill-In Cup →
+        </Link>
       </div>
 
       {isLoading ? (

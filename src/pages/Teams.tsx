@@ -21,7 +21,7 @@ export default function Teams() {
   const ptsByTeam = useMemo(() => {
     const m: Record<string, number> = {}
     for (const r of seasonRows ?? []) {
-      if (!r.team_id) continue
+      if (!r.team_id || r.fill_in) continue // fill-in drives don't bank team points
       m[r.team_id] = (m[r.team_id] ?? 0) + (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)
     }
     return m

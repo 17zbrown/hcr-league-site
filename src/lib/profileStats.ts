@@ -19,8 +19,9 @@ export function lapToSeconds(t?: string | null): number | null {
   return min * 60 + parseFloat(m[2])
 }
 
-/** Aggregate a set of result rows into headline stats. */
-export function computeEntityStats(rows: RaceResult[]): EntityStats {
+/** Aggregate a set of result rows into headline CHAMPIONSHIP stats (fill-in drives excluded). */
+export function computeEntityStats(allRows: RaceResult[]): EntityStats {
+  const rows = allRows.filter((r) => !r.fill_in)
   let wins = 0
   let podiums = 0
   let poles = 0

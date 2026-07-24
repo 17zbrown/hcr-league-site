@@ -21,6 +21,7 @@ export default function Footer() {
           <ul className="space-y-2.5 text-white/70">
             <li><Link className="hover:text-[var(--color-brand)]" to="/schedule">Schedule</Link></li>
             <li><Link className="hover:text-[var(--color-brand)]" to="/standings">Standings</Link></li>
+            <li><Link className="hover:text-[var(--color-brand)]" to="/standings/fill-in">Fill-In Cup</Link></li>
             <li><Link className="hover:text-[var(--color-brand)]" to="/results">Results</Link></li>
             <li><Link className="hover:text-[var(--color-brand)]" to="/drivers">Drivers</Link></li>
           </ul>

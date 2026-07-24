@@ -5,7 +5,7 @@ import type { Season } from './types'
 export type Field =
   | 'cls_pos' | 'pos' | 'class_id' | 'number' | 'drivers_text' | 'car'
   | 'grid' | 'laps' | 'total_time' | 'gap' | 'intvl' | 'best_lap' | 'best_on'
-  | 'inc' | 'status' | 'points' | 'quali_pos' | 'quali_points'
+  | 'inc' | 'status' | 'points' | 'quali_pos' | 'quali_points' | 'fill_in'
 
 export interface ImportedRow {
   cls_pos?: string
@@ -26,6 +26,7 @@ export interface ImportedRow {
   points?: string
   quali_pos?: string
   quali_points?: string
+  fill_in?: string
 }
 
 export const FIELD_LABELS: Record<Field, string> = {
@@ -33,14 +34,20 @@ export const FIELD_LABELS: Record<Field, string> = {
   drivers_text: 'Driver(s)', car: 'Car', grid: 'Grid', laps: 'Laps',
   total_time: 'Total Time', gap: 'Gap', intvl: 'Interval', best_lap: 'Best Lap',
   best_on: 'Best On', inc: 'Inc', status: 'Status', points: 'Pts',
-  quali_pos: 'Q Pos', quali_points: 'Q Pts',
+  quali_pos: 'Q Pos', quali_points: 'Q Pts', fill_in: 'Fill-In (y/n)',
 }
 
 // Columns shown in the review grid, in order.
 export const GRID_FIELDS: Field[] = [
   'cls_pos', 'pos', 'class_id', 'number', 'drivers_text', 'car', 'grid', 'laps',
-  'best_lap', 'inc', 'status', 'quali_pos', 'quali_points', 'points',
+  'best_lap', 'inc', 'status', 'quali_pos', 'quali_points', 'points', 'fill_in',
 ]
+
+/** True when a fill-in cell says yes: y / yes / true / 1 / x / fill / fill-in. */
+export function isFillIn(v?: string): boolean {
+  const s = (v ?? '').trim().toLowerCase()
+  return s === 'y' || s === 'yes' || s === 'true' || s === '1' || s === 'x' || s === 'fill' || s === 'fill-in' || s === 'fillin'
+}
 
 const SYNONYMS: Record<Field, string[]> = {
   cls_pos: ['clspos', 'classpos', 'classposition', 'posinclass', 'pic', 'inclass', 'clspos'],
@@ -61,6 +68,7 @@ const SYNONYMS: Record<Field, string[]> = {
   points: ['points', 'pts', 'championshippoints', 'champpts'],
   quali_pos: ['qualpos', 'qualifying', 'qualifyingposition', 'qpos', 'qualiposition', 'qual'],
   quali_points: ['qualpoints', 'qpts', 'polepoints', 'qualifyingpoints'],
+  fill_in: ['fillin', 'fill', 'guest', 'wildcard', 'nonscoring', 'invitational'],
 }
 
 function norm(s: string) {
@@ -221,5 +229,6 @@ export function toResultInsert(r: ImportedRow, eventId: string, teamByNumber: Ma
     quali_pos: numOrNull(r.quali_pos),
     quali_points: numOrNull(r.quali_points),
     team_id: number && teamByNumber.get(number) ? teamByNumber.get(number) : null,
+    fill_in: isFillIn(r.fill_in),
   }
 }

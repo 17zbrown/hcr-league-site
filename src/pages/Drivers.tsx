@@ -34,6 +34,7 @@ export default function Drivers() {
       let pts = 0
       let wins = 0
       for (const r of resultsForDriver(seasonRows, d.name)) {
+        if (r.fill_in) continue // Fill-In Cup points stay out of the roster teaser
         pts += (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)
         if (r.cls_pos === 1) wins += 1
       }

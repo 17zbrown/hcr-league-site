@@ -125,6 +125,8 @@ export interface RaceResult {
   adjust_note: string | null
   quali_pos: number | null
   quali_points: number | null
+  /** Guest/fill-in entry: scores the Fill-In Cup, never the main championship. */
+  fill_in: boolean
 }
 
 export interface WeatherRow {

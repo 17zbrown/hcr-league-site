@@ -46,6 +46,8 @@ export interface DriverReport {
   /** Best lap as a % off the fastest in class that race, averaged. */
   avgPaceGap: number | null
   form: RoundForm[]
+  /** Fill-in / guest drives (excluded from everything above; scores the Fill-In Cup). */
+  fillIn: { drives: number; points: number; wins: number; bestFinish: number | null } | null
 }
 
 const isDnf = (r: RaceResult) => {
@@ -60,7 +62,12 @@ const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.le
  * @param allRows   every result row, used to work out class-fastest laps
  */
 export function buildDriverReport(rows: FullRow[], allRows: FullRow[] = []): DriverReport {
-  const sorted = [...rows].sort((a, b) => (a.event?.round ?? 0) - (b.event?.round ?? 0))
+  // Fill-in drives never mix into championship stats — consistent denominators.
+  // They get their own summary block instead.
+  const fillRows = rows.filter((r) => r.fill_in)
+  const sorted = rows
+    .filter((r) => !r.fill_in)
+    .sort((a, b) => (a.event?.round ?? 0) - (b.event?.round ?? 0))
 
   let wins = 0, podiums = 0, poles = 0, top5 = 0, points = 0, totalLaps = 0, dnfs = 0
   let bestFinish: number | null = null
@@ -153,5 +160,16 @@ export function buildDriverReport(rows: FullRow[], allRows: FullRow[] = []): Dri
     consistency,
     avgPaceGap: paceGaps.length ? avg(paceGaps) : null,
     form,
+    fillIn: fillRows.length
+      ? {
+          drives: fillRows.length,
+          points: fillRows.reduce((a, r) => a + (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0), 0),
+          wins: fillRows.filter((r) => r.cls_pos === 1).length,
+          bestFinish: fillRows.reduce<number | null>(
+            (b, r) => (r.cls_pos == null ? b : b == null ? r.cls_pos : Math.min(b, r.cls_pos)),
+            null,
+          ),
+        }
+      : null,
   }
 }

@@ -31,7 +31,10 @@ const roundLabel = (r: FullRow) =>
  * @param allRows  every result row for the season (class-fastest laps, round count)
  */
 export function computeAchievements(rows: FullRow[], allRows: FullRow[]): Achievement[] {
-  const sorted = [...rows].sort((a, b) => (a.event?.round ?? 0) - (b.event?.round ?? 0))
+  // Trophies are championship silverware — fill-in drives don't unlock them.
+  const sorted = rows
+    .filter((r) => !r.fill_in)
+    .sort((a, b) => (a.event?.round ?? 0) - (b.event?.round ?? 0))
 
   // Class-fastest best lap per event+class, from the whole field.
   const fastest = new Map<string, number>()

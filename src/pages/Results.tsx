@@ -151,6 +151,11 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
                         <span className="inline-flex items-center gap-2">
                           <DriverName text={r.drivers_text} />
                           {isMe && <span className="rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-black">You</span>}
+                          {r.fill_in && (
+                            <span className="rounded border border-[var(--color-line-2)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-[var(--color-muted)]" title="Fill-in entry — scores the Fill-In Cup, not the championship">
+                              Fill-In
+                            </span>
+                          )}
                         </span>
                       </td>
                       <td className="tabular px-4 py-3 text-center">

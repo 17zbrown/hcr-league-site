@@ -11,6 +11,7 @@ import { RequireAdmin, RequireAuth, RequireManager, RequireRaceControl } from '.
 const Schedule = lazy(() => import('./pages/Schedule'))
 const RaceDetail = lazy(() => import('./pages/RaceDetail'))
 const Standings = lazy(() => import('./pages/Standings'))
+const FillInStandings = lazy(() => import('./pages/FillInStandings'))
 const Results = lazy(() => import('./pages/Results'))
 const Drivers = lazy(() => import('./pages/Drivers'))
 const DriverProfile = lazy(() => import('./pages/DriverProfile'))
@@ -56,6 +57,7 @@ export default function App() {
             <Route path="/schedule" element={<Schedule />} />
             <Route path="/schedule/:id" element={<RaceDetail />} />
             <Route path="/standings" element={<Standings />} />
+            <Route path="/standings/fill-in" element={<FillInStandings />} />
             <Route path="/results" element={<Results />} />
             <Route path="/drivers" element={<Drivers />} />
             <Route path="/drivers/:id" element={<DriverProfile />} />
