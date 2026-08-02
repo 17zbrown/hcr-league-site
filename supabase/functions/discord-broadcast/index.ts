@@ -5,33 +5,29 @@
 // was settled at insert time and cannot be lost. This function's only job is turning
 // a queued identifier into a message and getting it delivered.
 //
-// It renders from LIVE data rather than from anything stored on the queue row. A
-// result queued at 21:04 and posted at 21:06 shows whatever the results table says at
-// 21:06 — so fixing a mis-typed finishing position before the drain runs posts the
-// corrected version, and a steward adjustment applied in that window is included.
+// It renders from LIVE data rather than from anything stored on the queue row, which
+// is also what makes {"editSent": true} work: re-running the same renderer over the
+// same race a week later picks up every steward adjustment and every correction, so
+// an edit is just a send that PATCHes instead of POSTing.
 //
-// Idempotency is the queue's, not ours: dedupe_key is unique, so the same race cannot
-// be enqueued twice however many times it is re-imported, and a row that has been
-// sent is never picked up again. A failure leaves the row pending and increments a
-// counter; after MAX_ATTEMPTS it is parked as 'failed' rather than retried for ever,
-// because a message that has been refused five times is a bug to look at, not a
-// network blip to wait out.
+// Idempotency is the queue's: dedupe_key is unique, so a race cannot be enqueued
+// twice however many times it is re-imported. A failure leaves the row pending and
+// increments a counter; after MAX_ATTEMPTS it is parked as 'failed' rather than
+// retried for ever.
 //
 // SCORING IS A PORT, NOT AN INVENTION. The standings post uses the same crew keying
 // and the same points formula as src/lib/standings.ts — crew names normalised and
 // sorted so "A / B" and "B, A" are one entry, points = points + quali_points +
 // adjust, fill_in rows excluded because they score the Fill-In Cup instead. If that
-// file changes, change this. A public standings post that disagrees with the
-// standings page is worse than no post at all.
+// file changes, change this.
 //
-// Callable two ways, mirroring public.assert_admin_or_cron: an admin, or cron.
-// Cron must present a service-role credential; there is no unauthenticated path.
+// Callable two ways, mirroring public.assert_admin_or_cron: an admin, or cron. Cron
+// must present a service-role credential; there is deliberately no unauthenticated
+// path, because the gateway lets the PUBLIC publishable key through as `apikey` with
+// no Authorization header.
 //
 // Secrets (Supabase → Edge Functions):  DISCORD_BOT_TOKEN
 // Auto-provided:  SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
-//
-// The bot needs View Channel, Send Messages, Embed Links, and Create Posts on the
-// results forum.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const DISCORD = 'https://discord.com/api/v10'
@@ -47,17 +43,14 @@ const SITE = 'https://hcrleague.com'
 const HCR_YELLOW = 0xf2e114
 const SNOWFLAKE = /^\d{5,25}$/
 
-// One drain shouldn't be able to hit Discord's rate limit or run past the function
-// timeout. Anything left over is still pending and goes on the next run.
 const DEFAULT_LIMIT = 10
 const MAX_LIMIT = 25
-// Five refusals is a bug, not a blip.
 const MAX_ATTEMPTS = 5
 
 const CHAN_FORUM = 15
 const CLASS_ORDER = ['GTP', 'LMP2', 'GTD']
+const PODIUM = ['🥇', '🥈', '🥉']
 
-// Discord's limits, and the whole reason results posts don't just dump the field.
 const MAX_TITLE = 256
 const MAX_FIELD = 1024
 const MAX_DESC = 4096
@@ -70,14 +63,23 @@ interface OutboxRow {
   dedupe_key: string
   payload: Record<string, unknown>
   attempts: number
+  target_id: string | null
 }
 interface ResultRow {
   event_id?: string | null
   class_id?: string | null
   number?: string | null
   drivers_text?: string | null
+  pos?: number | null
   cls_pos?: number | null
+  grid?: number | null
   quali_pos?: number | null
+  inc?: number | null
+  laps?: number | null
+  best_lap?: string | null
+  best_on?: number | null
+  gap?: string | null
+  total_time?: string | null
   points?: number | null
   quali_points?: number | null
   adjust?: number | null
@@ -85,15 +87,12 @@ interface ResultRow {
   status?: string | null
   car?: string | null
 }
+interface Thread { id: string; name?: string | null; parent_id?: string | null }
 
 type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; message: string }
 
 async function discord<T>(
-  path: string,
-  method: 'GET' | 'POST',
-  token: string,
-  body?: unknown,
-  attempt = 0,
+  path: string, method: 'GET' | 'POST' | 'PATCH', token: string, body?: unknown, attempt = 0,
 ): Promise<ApiResult<T>> {
   let res: Response
   try {
@@ -112,11 +111,7 @@ async function discord<T>(
   }
   const text = await res.text()
   let parsed: unknown = null
-  if (text) {
-    try {
-      parsed = JSON.parse(text)
-    } catch (_) { /* not JSON */ }
-  }
+  if (text) { try { parsed = JSON.parse(text) } catch (_) { /* not JSON */ } }
   if (!res.ok) {
     const detail = (parsed as { message?: string } | null)?.message
     return { ok: false, status: res.status, message: `Discord API ${res.status}${detail ? `: ${detail}` : ''}` }
@@ -126,46 +121,36 @@ async function discord<T>(
 
 // --- crew identity: a port of crewKey from src/lib/standings.ts ---
 function normalizeName(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
 }
 function crewNames(driversText?: string | null): string[] {
   if (!driversText) return []
-  return driversText
-    .split(/\s*(?:\/|,|;|&|\+|\band\b)\s*/i)
-    .map((s) => normalizeName(s.trim()))
-    .filter(Boolean)
+  return driversText.split(/\s*(?:\/|,|;|&|\+|\band\b)\s*/i).map((s) => normalizeName(s.trim())).filter(Boolean)
 }
 function crewKey(driversText?: string | null, fallback = ''): string {
   const names = crewNames(driversText)
   return names.length ? names.sort().join('|') : fallback.toLowerCase()
 }
-/** Row points: race + quali + steward adjustment. The single scoring formula. */
 const rowPoints = (r: ResultRow) => (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)
 
-const ordinal = (n: number) => {
-  const s = ['th', 'st', 'nd', 'rd']
-  const v = n % 100
-  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`
+/** "1:35.433" / "95.4" / "1:02:03.1" → seconds. Null when it isn't a lap time. */
+function lapToSeconds(v?: string | null): number | null {
+  if (!v) return null
+  const parts = String(v).trim().split(':')
+  if (!parts.length || parts.some((p) => p === '' || isNaN(Number(p)))) return null
+  let sec = 0
+  for (const p of parts) sec = sec * 60 + Number(p)
+  return sec > 0 ? sec : null
 }
 
+const DNF_STATUS = new Set(['DNF', 'DNS', 'DSQ', 'DQ', 'RET'])
+const isDnf = (r: ResultRow) => DNF_STATUS.has(String(r.status ?? '').toUpperCase())
+const who = (r: ResultRow) => (r.drivers_text || `#${r.number ?? '?'}`).trim()
+
 /**
- * Is this a legacy service-role JWT?
- *
- * Only ever consulted for a token the Supabase gateway has ALREADY accepted, and
- * that is what makes reading an unverified claim sound here: this function is
- * deployed with verify_jwt on, so the signature was checked before any of this code
- * ran. A forged or unsigned token never arrives. The project's anon / publishable
- * key does arrive, but carries role "anon", so it fails this.
- *
- * Needed because Supabase is mid-migration between key formats: the runtime's
- * SUPABASE_SERVICE_ROLE_KEY on this project is an sb_secret_ string, while the
- * dashboard still issues a legacy service_role JWT. Both are the scheduler.
+ * Is this a legacy service-role JWT? Only consulted for a token the gateway has
+ * already accepted — verify_jwt is on, so the signature was checked before this ran.
  */
 function isServiceRoleJwt(token: string): boolean {
   const parts = token.split('.')
@@ -174,9 +159,7 @@ function isServiceRoleJwt(token: string): boolean {
     const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
     const payload = JSON.parse(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)))
     return (payload as { role?: unknown })?.role === 'service_role'
-  } catch {
-    return false
-  }
+  } catch { return false }
 }
 
 Deno.serve(async (req) => {
@@ -191,31 +174,25 @@ Deno.serve(async (req) => {
 
     let limit = DEFAULT_LIMIT
     let dryRun = false
+    // Re-render things already sent and PATCH them in place, instead of draining
+    // what's pending. Used after a steward adjustment, or when the report format
+    // itself improves and the archive should catch up.
+    let editSent = false
+    let onlyKind = ''
     try {
       const body = await req.json()
       if (body && typeof body === 'object') {
         const b = body as Record<string, unknown>
         const n = Number(b.limit)
         if (Number.isFinite(n) && n > 0) limit = Math.min(Math.floor(n), MAX_LIMIT)
-        // Unlike the destructive functions, this one defaults to actually sending:
-        // it is a queue drain, and a drain that does nothing by default is a drain
-        // nobody remembers to arm. dryRun is here for looking at the queue safely.
         if (b.dryRun === true) dryRun = true
+        if (b.editSent === true) editSent = true
+        if (typeof b.kind === 'string') onlyKind = b.kind
       }
-    } catch (_) { /* empty body — defaults stand */ }
+    } catch (_) { /* defaults stand */ }
 
-    // --- auth: an admin, or cron ---
     const authz = req.headers.get('Authorization') ?? ''
     const bearer = authz.replace(/^Bearer\s+/i, '').trim()
-    // An ABSENT bearer token is not cron. The gateway accepts the project's
-    // publishable key via the `apikey` header with no Authorization header at all,
-    // and that key ships inside the public frontend bundle — so treating "no token"
-    // as "this must be the scheduler" left every one of these functions callable by
-    // anybody who could guess the slug. It did, until this line changed.
-    //
-    // What actually identifies the scheduler is a service-role credential: either an
-    // exact match on the runtime's own key, or a legacy service_role JWT whose
-    // signature the gateway has already verified.
     const viaCron = bearer.length > 0 && (bearer === service || isServiceRoleJwt(bearer))
     if (!viaCron) {
       const userClient = createClient(url, anon, { global: { headers: { Authorization: authz } } })
@@ -232,8 +209,8 @@ Deno.serve(async (req) => {
     const cfg = (cfgRow ?? null) as Record<string, unknown> | null
     if (!cfg?.enabled) return json({ skipped: 'Discord integration is disabled in config.' })
     if (!botToken) return json({ error: 'DISCORD_BOT_TOKEN secret is not set.' }, 400)
+    const guildId = String(cfg.guild_id ?? '').trim()
 
-    // channel_key -> the channel it posts into.
     const channelFor: Record<string, string> = {
       results: String(cfg.channel_results ?? '').trim(),
       standings: String(cfg.channel_standings ?? '').trim(),
@@ -241,19 +218,30 @@ Deno.serve(async (req) => {
       license_ups: String(cfg.channel_license_ups ?? '').trim(),
     }
 
-    const { data: queued, error: qErr } = await db
-      .from('discord_outbox')
-      .select('id, kind, channel_key, dedupe_key, payload, attempts')
-      .eq('status', 'pending')
+    let q = db.from('discord_outbox')
+      .select('id, kind, channel_key, dedupe_key, payload, attempts, target_id')
+      .eq('status', editSent ? 'sent' : 'pending')
       .order('created_at', { ascending: true })
       .limit(limit)
+    if (onlyKind) q = q.eq('kind', onlyKind)
+    const { data: queued, error: qErr } = await q
     if (qErr) return json({ error: `Could not read the outbox — ${qErr.message}` }, 500)
 
     const rows = (queued ?? []) as OutboxRow[]
-    if (rows.length === 0) return json({ ok: true, drained: 0, message: 'Nothing waiting to be announced.' })
+    if (rows.length === 0) {
+      return json({ ok: true, drained: 0, editSent, message: editSent ? 'Nothing sent yet to edit.' : 'Nothing waiting to be announced.' })
+    }
 
-    // Forum channels take a thread, everything else takes a message. Looked up once
-    // per channel per run rather than guessed from the channel_key.
+    // Editing needs a message id per row, and the first four race reports predate
+    // the column. A forum post's thread id IS its starter message id, so the ids can
+    // be recovered by matching thread names — but only for threads Discord still
+    // considers active. An archived one is reported rather than silently skipped.
+    let activeThreads: Thread[] = []
+    if (editSent && guildId) {
+      const t = await discord<{ threads?: Thread[] }>(`/guilds/${guildId}/threads/active`, 'GET', botToken)
+      if (t.ok) activeThreads = t.data?.threads ?? []
+    }
+
     const channelType = new Map<string, number>()
     const typeOf = async (id: string): Promise<number | null> => {
       if (channelType.has(id)) return channelType.get(id)!
@@ -271,36 +259,34 @@ Deno.serve(async (req) => {
     for (const row of rows) {
       const channelId = channelFor[row.channel_key] ?? ''
       if (!SNOWFLAKE.test(channelId)) {
-        // Not a retryable problem — nobody has told the league where this goes.
         skipped.push({ key: row.dedupe_key, reason: `No channel is configured for "${row.channel_key}".` })
-        if (!dryRun) {
-          await db.from('discord_outbox')
-            .update({ status: 'skipped', last_error: `No channel configured for ${row.channel_key}` })
-            .eq('id', row.id)
+        if (!dryRun && !editSent) {
+          await db.from('discord_outbox').update({ status: 'skipped', last_error: `No channel configured for ${row.channel_key}` }).eq('id', row.id)
         }
         continue
       }
 
-      // --- render ---
       let title = ''
       let embed: Record<string, unknown> | null = null
 
+      // ------------------------------------------------------------ result ----
       if (row.kind === 'result') {
         const eventId = String(row.payload?.event_id ?? '')
         const { data: ev } = await db
-          .from('events').select('id, round, name, date, track_id, season_id').eq('id', eventId).maybeSingle()
+          .from('events').select('id, round, name, date, track_id, season_id, duration_h, duration_min')
+          .eq('id', eventId).maybeSingle()
         const { data: track } = ev?.track_id
           ? await db.from('tracks').select('name, config').eq('id', ev.track_id).maybeSingle()
           : { data: null }
         const { data: res } = await db
           .from('results')
-          .select('class_id, number, drivers_text, cls_pos, quali_pos, points, quali_points, adjust, fill_in, status, car')
+          .select('class_id, number, drivers_text, pos, cls_pos, grid, quali_pos, inc, laps, best_lap, best_on, gap, total_time, fill_in, status, car')
           .eq('event_id', eventId)
 
         const all = (res ?? []) as ResultRow[]
         if (all.length === 0) {
           skipped.push({ key: row.dedupe_key, reason: 'The race has no result rows any more.' })
-          if (!dryRun) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'no result rows' }).eq('id', row.id)
+          if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'no result rows' }).eq('id', row.id)
           continue
         }
 
@@ -308,27 +294,87 @@ Deno.serve(async (req) => {
         const roundLabel = ev?.round != null ? `Round ${ev.round}` : 'Race'
         title = clip([roundLabel, ev?.name || where || null].filter(Boolean).join(' — '), MAX_TITLE)
 
-        const fields = CLASS_ORDER.map((cls) => {
-          const podium = all
-            .filter((r) => r.class_id === cls && !r.fill_in && r.cls_pos != null)
+        // Championship entries only, so the podium here agrees with the standings
+        // page. Fill-ins raced but score the Fill-In Cup, and are counted separately
+        // in the notes below rather than quietly mixed in.
+        const scoring = all.filter((r) => !r.fill_in)
+        const fillIns = all.length - scoring.length
+
+        const fields: Record<string, unknown>[] = []
+        for (const cls of CLASS_ORDER) {
+          const inClass = scoring
+            .filter((r) => r.class_id === cls && r.cls_pos != null)
             .sort((a, b) => (a.cls_pos ?? 99) - (b.cls_pos ?? 99))
             .slice(0, 5)
-          if (podium.length === 0) return null
-          const medal = ['🥇', '🥈', '🥉']
-          const lines = podium.map((r, i) => {
-            const mark = medal[i] ?? `${ordinal(r.cls_pos ?? i + 1)}`
-            const who = (r.drivers_text || `#${r.number ?? '?'}`).trim()
-            const pole = r.quali_pos === 1 ? ' · pole' : ''
-            return `${mark} ${who}${pole}`
+          if (inClass.length === 0) continue
+          const lines = inClass.map((r, i) => {
+            const mark = PODIUM[i] ?? `\`P${r.cls_pos}\``
+            // Gap is only recorded from Round 3 on; laps is always there, so the
+            // winner's distance stands in for it and everyone else shows a gap when
+            // one exists.
+            const detail: string[] = []
+            if (i > 0 && String(r.gap ?? '').trim()) detail.push(`+${String(r.gap).trim().replace(/^\+/, '')}`)
+            else if (r.laps != null) detail.push(`${r.laps} laps`)
+            if (r.best_lap) detail.push(r.best_lap)
+            if (isDnf(r)) detail.push(String(r.status).toUpperCase())
+            const pole = r.quali_pos === 1 ? ' 🅿️' : ''
+            return `${mark} **${who(r)}**${pole}${detail.length ? ` · ${detail.join(' · ')}` : ''}`
           })
-          return { name: cls, value: clip(lines.join('\n'), MAX_FIELD), inline: false }
-        }).filter(Boolean)
+          fields.push({ name: cls, value: clip(lines.join('\n'), MAX_FIELD), inline: false })
+        }
 
         if (fields.length === 0) {
           skipped.push({ key: row.dedupe_key, reason: 'No classified finishers to announce.' })
-          if (!dryRun) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'no classified finishers' }).eq('id', row.id)
+          if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'no classified finishers' }).eq('id', row.id)
           continue
         }
+
+        // --- the talking points ---
+        // Deliberately a handful of superlatives rather than a data dump: the
+        // question this block answers is "what would somebody argue about in the
+        // replies", not "what happened".
+        const notes: string[] = []
+
+        const timed = all.map((r) => ({ r, s: lapToSeconds(r.best_lap) }))
+          .filter((x): x is { r: ResultRow; s: number } => x.s !== null)
+        if (timed.length) {
+          const fl = timed.reduce((a, b) => (b.s < a.s ? b : a))
+          notes.push(`⏱️ **Fastest lap** — ${who(fl.r)} · \`${fl.r.best_lap}\`${fl.r.best_on ? ` on lap ${fl.r.best_on}` : ''}`)
+        }
+
+        const maxLaps = all.reduce((m, r) => Math.max(m, r.laps ?? 0), 0)
+        if (maxLaps > 0) {
+          const mins = Number(ev?.duration_min ?? 0) || Number(ev?.duration_h ?? 0) * 60
+          notes.push(`🏁 **Distance** — ${maxLaps} laps${mins ? ` · ${mins} minutes` : ''}`)
+        }
+
+        const withInc = all.filter((r) => r.inc != null)
+        if (withInc.length) {
+          const total = withInc.reduce((s, r) => s + (r.inc ?? 0), 0)
+          const clean = withInc.filter((r) => (r.laps ?? 0) > 0).sort((a, b) => (a.inc ?? 0) - (b.inc ?? 0))[0]
+          const messy = withInc.reduce((a, b) => ((b.inc ?? 0) > (a.inc ?? 0) ? b : a))
+          notes.push(`💥 **Incidents** — ${total}x across the field`)
+          if (clean) notes.push(`🧼 **Cleanest run** — ${who(clean)} · ${clean.inc}x`)
+          if (messy && (messy.inc ?? 0) > (clean?.inc ?? 0)) notes.push(`🔧 **Most incidents** — ${who(messy)} · ${messy.inc}x`)
+        }
+
+        // Grid position minus finishing position. Only meaningful for cars that were
+        // actually classified, so retirements are excluded — "gained 9 places" is a
+        // silly thing to say about somebody who parked it.
+        const movers = all
+          .filter((r) => r.grid != null && r.pos != null && !isDnf(r))
+          .map((r) => ({ r, gain: (r.grid ?? 0) - (r.pos ?? 0) }))
+          .filter((x) => x.gain > 0)
+        if (movers.length) {
+          const best = movers.reduce((a, b) => (b.gain > a.gain ? b : a))
+          notes.push(`📈 **Biggest mover** — ${who(best.r)} · P${best.r.grid} → P${best.r.pos} (+${best.gain})`)
+        }
+
+        const dnfs = all.filter(isDnf).length
+        if (dnfs > 0) notes.push(`🚧 **Did not finish** — ${dnfs}`)
+        if (fillIns > 0) notes.push(`🎟️ **Fill-In Cup entries** — ${fillIns} (scored separately)`)
+
+        if (notes.length) fields.push({ name: 'Race notes', value: clip(notes.join('\n'), MAX_FIELD), inline: false })
 
         embed = {
           title,
@@ -336,22 +382,21 @@ Deno.serve(async (req) => {
           description: clip(where ? `Provisional classification — ${where}` : 'Provisional classification', MAX_DESC),
           color: HCR_YELLOW,
           fields,
-          footer: { text: 'HCR League · full classification and lap times on the site' },
+          footer: { text: 'HCR League · 🅿️ pole · full classification and lap times on the site' },
         }
+      // -------------------------------------------------------------- news ----
       } else if (row.kind === 'news') {
         const newsId = String(row.payload?.news_id ?? '')
         const { data: article } = await db
           .from('news').select('id, slug, title, dek, author, cover_url, is_published, category').eq('id', newsId).maybeSingle()
         if (!article) {
           skipped.push({ key: row.dedupe_key, reason: 'The article no longer exists.' })
-          if (!dryRun) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'article deleted' }).eq('id', row.id)
+          if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'article deleted' }).eq('id', row.id)
           continue
         }
-        // Unpublished between queueing and draining: the queue is not the authority
-        // on whether something is still meant to be public. Don't post it.
         if (article.is_published !== true) {
           skipped.push({ key: row.dedupe_key, reason: 'The article was unpublished before this ran.' })
-          if (!dryRun) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'unpublished before send' }).eq('id', row.id)
+          if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'unpublished before send' }).eq('id', row.id)
           continue
         }
         title = clip(String(article.title ?? 'League news'), MAX_TITLE)
@@ -361,17 +406,17 @@ Deno.serve(async (req) => {
           description: clip(String(article.dek ?? ''), MAX_DESC),
           color: HCR_YELLOW,
           ...(article.cover_url && /^https?:\/\//i.test(String(article.cover_url))
-            ? { image: { url: String(article.cover_url) } }
-            : {}),
+            ? { image: { url: String(article.cover_url) } } : {}),
           footer: { text: article.author ? `HCR League · ${article.author}` : 'HCR League' },
         }
+      // --------------------------------------------------------- standings ----
       } else if (row.kind === 'standings') {
         const eventId = String(row.payload?.after_event_id ?? '')
         const { data: ev } = await db.from('events').select('id, round, season_id').eq('id', eventId).maybeSingle()
         const seasonId = ev?.season_id ?? null
         if (!seasonId) {
           skipped.push({ key: row.dedupe_key, reason: 'That race is not attached to a season.' })
-          if (!dryRun) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'no season' }).eq('id', row.id)
+          if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'no season' }).eq('id', row.id)
           continue
         }
         const { data: seasonEvents } = await db.from('events').select('id').eq('season_id', seasonId)
@@ -381,9 +426,7 @@ Deno.serve(async (req) => {
           .select('class_id, number, drivers_text, cls_pos, points, quali_points, adjust, fill_in')
           .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000'])
 
-        // The port of computeStandings: crew-keyed, fill-ins excluded, sorted on
-        // points then best class finish.
-        const perClass = new Map<string, Map<string, { name: string; points: number; best: number | null }>>()
+        const perClass = new Map<string, Map<string, { name: string; points: number; best: number | null; starts: number }>>()
         for (const r of ((res ?? []) as ResultRow[])) {
           if (r.fill_in) continue
           const cls = String(r.class_id ?? '')
@@ -391,8 +434,9 @@ Deno.serve(async (req) => {
           const name = (r.drivers_text || '').trim() || `#${r.number ?? '?'}`
           const key = crewKey(r.drivers_text, name)
           const bucket = perClass.get(cls) ?? new Map()
-          const cur = bucket.get(key) ?? { name, points: 0, best: null }
+          const cur = bucket.get(key) ?? { name, points: 0, best: null, starts: 0 }
           cur.points += rowPoints(r)
+          cur.starts += 1
           const p = r.cls_pos ?? null
           cur.best = cur.best === null ? p : Math.min(cur.best, p ?? 99)
           bucket.set(key, cur)
@@ -403,51 +447,82 @@ Deno.serve(async (req) => {
           const bucket = perClass.get(cls)
           if (!bucket || bucket.size === 0) return null
           const top = [...bucket.values()]
-            .sort((a, b) => b.points - a.points || (a.best ?? 99) - (b.best ?? 99))
-            .slice(0, 5)
-          const lines = top.map((t, i) => `\`${String(i + 1).padStart(2)}\` ${t.name} — **${Math.round(t.points * 100) / 100}**`)
+            .sort((a, b) => b.points - a.points || (a.best ?? 99) - (b.best ?? 99)).slice(0, 5)
+          const leader = top[0]?.points ?? 0
+          const lines = top.map((t, i) => {
+            const pts = Math.round(t.points * 100) / 100
+            const behind = i === 0 ? 'leader' : `−${Math.round((leader - t.points) * 100) / 100}`
+            return `\`${String(i + 1).padStart(2)}\` ${t.name} — **${pts}** · ${behind}`
+          })
           return { name: cls, value: clip(lines.join('\n'), MAX_FIELD), inline: false }
-        }).filter(Boolean)
+        }).filter(Boolean) as Record<string, unknown>[]
 
         if (fields.length === 0) {
           skipped.push({ key: row.dedupe_key, reason: 'No championship points to show yet.' })
-          if (!dryRun) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'no points' }).eq('id', row.id)
+          if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'no points' }).eq('id', row.id)
           continue
         }
 
         title = clip(ev?.round != null ? `Championship after Round ${ev.round}` : 'Championship standings', MAX_TITLE)
         embed = {
-          title,
-          url: `${SITE}/standings`,
-          color: HCR_YELLOW,
-          fields,
+          title, url: `${SITE}/standings`, color: HCR_YELLOW, fields,
           footer: { text: 'HCR League · top five per class · full table on the site' },
         }
       } else {
         skipped.push({ key: row.dedupe_key, reason: `Unknown announcement kind "${row.kind}".` })
-        if (!dryRun) await db.from('discord_outbox').update({ status: 'skipped', last_error: `unknown kind ${row.kind}` }).eq('id', row.id)
+        if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: `unknown kind ${row.kind}` }).eq('id', row.id)
         continue
       }
 
-      if (dryRun) { sent.push(`${row.dedupe_key} → ${title}`); continue }
       if (!embed) continue
+      if (dryRun) { sent.push(`${row.dedupe_key} → ${title}`); continue }
 
-      // --- deliver ---
+      // ----------------------------------------------------------- deliver ----
+      if (editSent) {
+        // Recover the id if this row predates the target_id column. A forum post's
+        // thread id doubles as its starter message id, so a name match is enough.
+        let targetId = String(row.target_id ?? '').trim()
+        if (!SNOWFLAKE.test(targetId)) {
+          const match = activeThreads.find(
+            (t) => String(t.parent_id ?? '') === channelId && String(t.name ?? '').trim() === title.trim(),
+          )
+          targetId = String(match?.id ?? '')
+        }
+        if (!SNOWFLAKE.test(targetId)) {
+          skipped.push({ key: row.dedupe_key, reason: `Could not find the post for "${title}" — it may have been archived or renamed, so there was nothing to edit.` })
+          continue
+        }
+        const patch = await discord(`/channels/${targetId}/messages/${targetId}`, 'PATCH', botToken, { embeds: [embed] })
+        if (patch.ok) {
+          sent.push(`edited: ${title}`)
+          await db.from('discord_outbox').update({ target_id: targetId, edited_at: new Date().toISOString() }).eq('id', row.id)
+        } else {
+          failed.push({ key: row.dedupe_key, reason: patch.message })
+        }
+        continue
+      }
+
       const t = await typeOf(channelId)
       const post = t === CHAN_FORUM
-        // A forum has no message list to post into — every message is a thread, and
-        // the thread needs a name up front.
-        ? await discord(`/channels/${channelId}/threads`, 'POST', botToken, {
-            name: clip(title || 'HCR League', 100),
-            message: { embeds: [embed] },
-          })
-        : await discord(`/channels/${channelId}/messages`, 'POST', botToken, { embeds: [embed] })
+        ? await discord<{ id?: string; message?: { id?: string } }>(
+            `/channels/${channelId}/threads`, 'POST', botToken,
+            { name: clip(title || 'HCR League', 100), message: { embeds: [embed] } })
+        : await discord<{ id?: string }>(`/channels/${channelId}/messages`, 'POST', botToken, { embeds: [embed] })
 
       if (post.ok) {
+        // For a forum the thread id is also the starter message id; for a normal
+        // channel it is just the message id. Either way this is the handle an edit
+        // will need later, and not recording it was the reason the first four race
+        // reports had to be found again by name.
+        const targetId = String(
+          (post.data as { id?: string; message?: { id?: string } })?.message?.id ??
+          (post.data as { id?: string })?.id ?? '',
+        )
         sent.push(`${row.dedupe_key} → ${title}`)
-        await db.from('discord_outbox')
-          .update({ status: 'sent', sent_at: new Date().toISOString(), attempts: row.attempts + 1, last_error: null })
-          .eq('id', row.id)
+        await db.from('discord_outbox').update({
+          status: 'sent', sent_at: new Date().toISOString(), attempts: row.attempts + 1,
+          last_error: null, target_id: SNOWFLAKE.test(targetId) ? targetId : null,
+        }).eq('id', row.id)
         continue
       }
 
@@ -459,14 +534,7 @@ Deno.serve(async (req) => {
         .eq('id', row.id)
     }
 
-    return json({
-      ok: failed.length === 0,
-      dryRun,
-      drained: sent.length,
-      sent,
-      skipped,
-      failed,
-    })
+    return json({ ok: failed.length === 0, dryRun, editSent, drained: sent.length, sent, skipped, failed })
   } catch (e) {
     return json({ error: `Broadcast failed — ${String((e as Error)?.message ?? e)}` }, 500)
   }
