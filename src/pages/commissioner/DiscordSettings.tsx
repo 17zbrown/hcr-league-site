@@ -946,6 +946,131 @@ const readPruneReport = (body: Record<string, unknown>, asked: boolean): PruneRe
   }
 }
 
+// ── Safety & onboarding ──────────────────────────────────────────────────────
+// discord-community-setup turns on the settings that live several screens deep
+// in Discord's own Server Settings: verification, the content filter, the
+// community channels, AutoMod, who can see PADDOCK, and the onboarding
+// questions. It reports each one as its own row, so a run where the bot lost a
+// permission halfway still says exactly which settings landed and which didn't.
+// Read as loosely as everything above.
+
+type CommunityOutcome = 'applied' | 'skipped' | 'failed'
+
+interface CommunityStep {
+  key: string
+  label: string
+  /** The value it set, or why it didn't — whichever the function gave us. */
+  detail: string
+  outcome: CommunityOutcome
+}
+
+interface CommunityReport {
+  /** What actually happened, not what we asked for — same rule as the rebuild. */
+  dryRun: boolean
+  applied: CommunityStep[]
+  skipped: CommunityStep[]
+  failed: CommunityStep[]
+  /** The one toggle no bot can flick, so it gets its own callout. */
+  raidNote: string | null
+  warnings: string[]
+  note: string | null
+}
+
+/** "would apply" is still an apply — the tense lives on the chip, not here. */
+const toCommunityOutcome = (o: Record<string, unknown>): CommunityOutcome | null => {
+  if (o.applied === true) return 'applied'
+  if (o.applied === false) return 'skipped'
+  const s = (
+    text(o.outcome) ||
+    text(o.status) ||
+    text(o.result) ||
+    text(o.action) ||
+    text(o.state)
+  ).toLowerCase()
+  if (!s) return null
+  if (s.includes('fail') || s.includes('error') || s.includes('refus') || s.includes('forbidden'))
+    return 'failed'
+  if (s.includes('skip') || s.includes('unchanged') || s.includes('already') || s.includes('kept'))
+    return 'skipped'
+  if (s.includes('appl') || s.includes('set') || s.includes('creat') || s.includes('updat') || s.includes('would'))
+    return 'applied'
+  return null
+}
+
+const toCommunityStep = (raw: unknown, i: number, fallback: CommunityOutcome): CommunityStep | null => {
+  if (typeof raw === 'string') {
+    const s = raw.trim()
+    return s ? { key: `step-${i}`, label: s, detail: '', outcome: fallback } : null
+  }
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const label =
+    text(o.label) || text(o.name) || text(o.setting) || text(o.step) || prettify(text(o.key))
+  if (!label) return null
+  return {
+    key: text(o.key) || text(o.setting) || `${label}-${i}`,
+    label,
+    detail:
+      text(o.detail) ||
+      text(o.value) ||
+      text(o.reason) ||
+      text(o.message) ||
+      text(o.note) ||
+      text(o.error),
+    outcome: toCommunityOutcome(o) ?? fallback,
+  }
+}
+
+const toCommunitySteps = (raw: unknown, fallback: CommunityOutcome): CommunityStep[] =>
+  (Array.isArray(raw) ? raw : [])
+    .map((entry, i) => toCommunityStep(entry, i, fallback))
+    .filter((s): s is CommunityStep => s !== null)
+
+const readCommunityReport = (body: Record<string, unknown>, asked: boolean): CommunityReport => {
+  // Believe the function over the button, exactly as the rebuild does.
+  const said = body.dry_run ?? body.dryRun
+  const dryRun = typeof said === 'boolean' ? said : asked
+
+  // Rows may arrive sorted into buckets or as one flat list where each row names
+  // its own outcome. Prefer the buckets and fall back to the flat list, so a
+  // function that sends both shapes never lists the same setting twice.
+  const buckets: [unknown, CommunityOutcome][] = [
+    [body.applied ?? body.would_apply ?? body.wouldApply ?? body.changes, 'applied'],
+    [body.skipped ?? body.unchanged ?? body.left_alone, 'skipped'],
+    [body.failed ?? body.errors, 'failed'],
+  ]
+  const bucketed = buckets.flatMap(([raw, outcome]) => toCommunitySteps(raw, outcome))
+  // A flat row that never said what happened to it is counted as applied: these
+  // are settings, not people, and a genuine refusal lands in `warnings` anyway.
+  const steps =
+    bucketed.length > 0
+      ? bucketed
+      : toCommunitySteps(
+          [body.steps, body.settings, body.results, body.items].find((v) => Array.isArray(v)),
+          'applied',
+        )
+
+  const of = (outcome: CommunityOutcome): CommunityStep[] => steps.filter((s) => s.outcome === outcome)
+
+  const raid = (body.raid_protection && typeof body.raid_protection === 'object'
+    ? body.raid_protection
+    : {}) as Record<string, unknown>
+
+  return {
+    dryRun,
+    applied: of('applied'),
+    skipped: of('skipped'),
+    failed: of('failed'),
+    raidNote:
+      text(body.raid_protection_note) ||
+      text(body.raidProtectionNote) ||
+      text(body.raid_note) ||
+      text(raid.note) ||
+      null,
+    warnings: Array.from(new Set(toStrings(body.warnings))),
+    note: typeof body.skipped === 'string' ? body.skipped : text(body.message) || null,
+  }
+}
+
 /**
  * `functions.invoke` swallows the response body on a non-2xx and hands back a
  * bare "Edge Function returned a non-2xx status code" — useless to a
@@ -1041,6 +1166,20 @@ const pruneConfirm = (n: number): string =>
     'Only the people listed in the preview will be removed.',
   ].join('\n')
 
+/**
+ * Most of what this button does is invisible until something goes wrong — a
+ * filter, a verification level, three AutoMod rules. Two parts are not, and they
+ * are the two a commissioner would be annoyed to discover afterwards, so those
+ * are the two the dialog leads with.
+ */
+const COMMUNITY_CONFIRM = [
+  'Apply the safety and onboarding settings?',
+  '',
+  'Two of these are visible to every member straight away: PADDOCK opens up so everyone in the server can see it, and new arrivals answer two onboarding questions instead of dropping straight into the server.',
+  '',
+  'The rest is quieter — verification level, the explicit-content filter, the rules and alert channels, and the AutoMod rules. Nothing is deleted, no channel is removed and no messages are touched.',
+].join('\n')
+
 /** The roles the panel manages, so a gate reported as an ID can be named. */
 const NAMED_ROLE_FIELDS: { key: keyof Cfg; label: string }[] = [
   { key: 'role_site_admin', label: 'Admin' },
@@ -1092,6 +1231,15 @@ export default function DiscordSettings() {
   /** The rehearsal. Its presence is also what unlocks the real run. */
   const [prunePreview, setPrunePreview] = useState<PruneReport | null>(null)
   const [pruneDone, setPruneDone] = useState<PruneReport | null>(null)
+
+  // Safety & onboarding. On its own `communityRunning` for the same reason the
+  // prune card has one: this card locks itself while it works without changing
+  // when any other button on the page is available.
+  const [communityRunning, setCommunityRunning] = useState<'preview' | 'apply' | null>(null)
+  const [communityErr, setCommunityErr] = useState<string | null>(null)
+  /** The rehearsal. Its presence is also what unlocks the real run. */
+  const [communityPreview, setCommunityPreview] = useState<CommunityReport | null>(null)
+  const [communityDone, setCommunityDone] = useState<CommunityReport | null>(null)
 
   /**
    * `keepSwitches` is for the post-setup refresh: setup writes the ids but
@@ -1294,6 +1442,35 @@ export default function DiscordSettings() {
     // re-locks the button until somebody looks at a fresh list.
     setPrunePreview(null)
     setPruneRunning(null)
+  }
+
+  /** Nothing else on the page may be mid-flight — these settings are guild-wide. */
+  const communityBusy = running !== null || pruneRunning !== null || communityRunning !== null
+
+  // Rehearsal only: dryRun asks the function to describe every setting it would
+  // touch and change nothing at all. Safe to run whenever, and the only way to
+  // unlock the button below it.
+  const previewCommunity = async () => {
+    if (communityBusy) return
+    setCommunityRunning('preview'); setCommunityErr(null); setCommunityPreview(null); setCommunityDone(null)
+    const { body, error } = await invokeFn('discord-community-setup', { dryRun: true })
+    if (error) { setCommunityErr(error); setCommunityRunning(null); return }
+    setCommunityPreview(readCommunityReport(body ?? {}, true))
+    setCommunityRunning(null)
+  }
+
+  const applyCommunity = async () => {
+    // The button is disabled without a preview; this is the belt to that brace.
+    if (!communityPreview || communityBusy) return
+    if (!window.confirm(COMMUNITY_CONFIRM)) return
+    setCommunityRunning('apply'); setCommunityErr(null); setCommunityDone(null)
+    const { body, error } = await invokeFn('discord-community-setup', { dryRun: false })
+    if (error) { setCommunityErr(error); setCommunityRunning(null); return }
+    setCommunityDone(readCommunityReport(body ?? {}, false))
+    // The preview described a server that has just changed, so it isn't true any
+    // more — drop it, which also re-locks the button until the next preview.
+    setCommunityPreview(null)
+    setCommunityRunning(null)
   }
 
   const field = (key: keyof Cfg, label: string, hint?: string) => (
@@ -1629,6 +1806,89 @@ export default function DiscordSettings() {
           )}
 
           {linkReport && <LinkDriversView report={linkReport} />}
+        </div>
+      </section>
+
+      {/* ── Safety & onboarding ─────────────────────────────────────────── */}
+      {/* Every setting in here lives several screens deep in Discord's own
+          Server Settings, in four different menus. Doing it by hand is mostly a
+          memory test, so this card does the whole set in one go — and shows the
+          set before it touches any of it. */}
+      <section className="mb-6 max-w-2xl rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
+        <h3 className="text-xl">Safety &amp; onboarding</h3>
+        <p className="mt-1 text-sm text-[var(--color-muted)]">
+          This applies the league's safety and onboarding settings to the server directly, so you
+          don't have to hunt through Discord's menus for them.
+        </p>
+
+        <span className="mt-4 block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+          What it sets
+        </span>
+        <ul className="mt-1.5 space-y-1 text-sm text-[var(--color-ink-2)]">
+          <li>Verification level set to Medium, so a brand-new account can't post the moment it arrives.</li>
+          <li>Explicit-content filter switched on.</li>
+          <li>Rules, community-updates and safety-alerts channels wired up to the right channels.</li>
+          <li>AutoMod rules for spam, mention spam and flagged words.</li>
+          <li>
+            <span className="font-mono">PADDOCK</span> opened up so everyone in the server can see it.
+          </li>
+          <li>Onboarding turned on, with two questions for new members to answer.</li>
+        </ul>
+
+        <div className="mt-4">
+          <button
+            type="button"
+            onClick={previewCommunity}
+            disabled={communityBusy}
+            aria-busy={communityRunning === 'preview'}
+            className="hcr-btn hcr-btn-ghost"
+          >
+            {communityRunning === 'preview' ? 'Previewing…' : 'Preview settings'}
+          </button>
+          <p className="mt-2 text-xs text-[var(--color-faint)]">
+            Previewing reads the server and lists what it would change. It sets nothing.
+          </p>
+        </div>
+
+        <div aria-live="polite">
+          {communityErr && (
+            <p className="mt-4 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">
+              {communityErr}
+            </p>
+          )}
+
+          {communityPreview && <CommunityView report={communityPreview} />}
+          {communityDone && <CommunityView report={communityDone} />}
+        </div>
+
+        {/* The control that actually changes the server, kept apart from the
+            read-only button above and locked until a preview has been read. */}
+        <div className="mt-5 rounded-lg border border-[var(--color-line)] bg-[var(--color-cloud)] p-4">
+          <span className="block font-mono text-[11px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+            Apply the settings
+          </span>
+          <p className="mt-1 text-sm text-[var(--color-ink-2)]">
+            Two of these show up for members straight away: <span className="font-mono">PADDOCK</span>{' '}
+            becomes visible to everyone, and new arrivals answer the onboarding questions before they
+            land. Nothing is deleted and no messages are touched.
+          </p>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={applyCommunity}
+              disabled={communityBusy || !communityPreview}
+              aria-busy={communityRunning === 'apply'}
+              aria-describedby="community-gate"
+              className="hcr-btn hcr-btn-primary"
+            >
+              {communityRunning === 'apply' ? 'Applying…' : 'Apply settings'}
+            </button>
+          </div>
+          <p id="community-gate" className="mt-2 text-xs text-[var(--color-faint)]">
+            {communityPreview
+              ? 'The preview above is what will be set. You’ll be asked to confirm once more.'
+              : 'Preview the settings first — this unlocks once you’ve read what would change.'}
+          </p>
         </div>
       </section>
 
@@ -2460,6 +2720,142 @@ function PruneRows({ rows, groupKey }: { rows: PruneRow[]; groupKey: string }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+/**
+ * What the safety run set, or would set — the same block for the rehearsal and
+ * the real run, with only the tense of the chips changing. A setting the bot
+ * couldn't touch gets its own red block rather than a chip in a list: a
+ * half-applied server is the one outcome worth noticing here.
+ */
+function CommunityView({ report }: { report: CommunityReport }) {
+  const nothing =
+    report.applied.length === 0 &&
+    report.skipped.length === 0 &&
+    report.failed.length === 0 &&
+    report.warnings.length === 0 &&
+    !report.raidNote &&
+    !report.note
+
+  return (
+    <div className="mt-5 border-t border-[var(--color-line)] pt-4">
+      <span className="block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+        {report.dryRun ? 'Preview — nothing has been changed yet' : 'Safety & onboarding'}
+      </span>
+
+      <CommunitySteps
+        title={report.dryRun ? 'Would be set' : 'Set'}
+        steps={report.applied}
+        dryRun={report.dryRun}
+        groupKey="applied"
+      />
+
+      {report.skipped.length > 0 && (
+        <div className="mt-4">
+          <span className="mb-1 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">
+            Left alone
+          </span>
+          <p className="text-sm text-[var(--color-muted)]">
+            These already matched what the league wants, so they weren't touched.
+          </p>
+          <CommunitySteps steps={report.skipped} dryRun={report.dryRun} groupKey="skipped" />
+        </div>
+      )}
+
+      {/* A refusal from Discord, which almost always means a permission the bot
+          doesn't have — so the block names the fix, not just the failure. */}
+      {report.failed.length > 0 && (
+        <div className="mt-4 rounded-lg border border-[var(--color-red)]/40 bg-[var(--color-red)]/10 px-4 py-3">
+          <span className="block font-mono text-[11px] font-bold uppercase tracking-wider text-[var(--color-red)]">
+            Could not be set
+          </span>
+          <ul className="mt-1.5 space-y-1 text-sm text-[var(--color-ink-2)]">
+            {report.failed.map((f, i) => (
+              <li key={`community-failed-${f.key}-${i}`}>
+                <span className="font-semibold">{f.label}</span>
+                {f.detail && <span> — {f.detail}</span>}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-sm text-[var(--color-ink-2)]">
+            Everything else on the list still went through. Usually the bot is missing a permission —
+            fix it in Server Settings → Roles, then preview and apply again.
+          </p>
+        </div>
+      )}
+
+      {report.note && <p className="mt-3 text-sm text-[var(--color-muted)]">{report.note}</p>}
+
+      {report.warnings.length > 0 && <Callout title="Needs your attention" lines={report.warnings} />}
+
+      {/* Raid protection can't be turned on through the API at all, so this is
+          the one thing the run can only ever tell somebody about. */}
+      {report.raidNote && <Callout title="One switch you still have to flick yourself" lines={[report.raidNote]} />}
+
+      {nothing && (
+        <p className="mt-2 text-sm text-[var(--color-muted)]">
+          The run finished, but nothing came back to show.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** One setting per row: what it is, what it's set to, and where it stands. */
+function CommunitySteps({
+  title,
+  steps,
+  dryRun,
+  groupKey,
+}: {
+  title?: string
+  steps: CommunityStep[]
+  dryRun: boolean
+  groupKey: string
+}) {
+  if (steps.length === 0) return null
+  return (
+    <div className="mt-4">
+      {title && (
+        <span className="mb-1 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">
+          {title}
+        </span>
+      )}
+      <ul className="divide-y divide-[var(--color-line)]">
+        {steps.map((s, i) => (
+          <li
+            key={`${groupKey}-${s.key}-${i}`}
+            className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
+          >
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold">{s.label}</span>
+            {s.detail && (
+              <span className="font-mono text-[11px] text-[var(--color-muted)]">{s.detail}</span>
+            )}
+            <CommunityChip outcome={s.outcome} dryRun={dryRun} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+/** Same pill as StateChip, in the future tense while the run is only a plan. */
+function CommunityChip({ outcome, dryRun }: { outcome: CommunityOutcome; dryRun: boolean }) {
+  const labels: Record<CommunityOutcome, string> = dryRun
+    ? { applied: 'will set', skipped: 'in place', failed: 'failed' }
+    : { applied: 'set', skipped: 'in place', failed: 'failed' }
+  const styles: Record<CommunityOutcome, string> = {
+    applied: 'border-[var(--color-brand-deep)]/40 bg-[var(--color-brand)]/15 text-[var(--color-brand-deep)]',
+    skipped: 'border-[var(--color-line-2)] text-[var(--color-muted)]',
+    failed: 'border-[var(--color-red)]/40 bg-[var(--color-red)]/10 text-[var(--color-red)]',
+  }
+  return (
+    <span
+      className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider ${styles[outcome]}`}
+    >
+      {labels[outcome]}
+    </span>
   )
 }
 
