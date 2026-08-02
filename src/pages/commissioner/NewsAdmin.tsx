@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
+import { invokeIfEnabled } from '../../lib/automations'
 import type { NewsArticle } from '../../lib/types'
 import { dateKey } from '../../lib/format'
 import { LoadError, Skeleton } from '../../components/ui'
@@ -171,9 +172,9 @@ function ArticleRow({
     // Publishing queued a Discord announcement (a database trigger, in the same
     // transaction as the update). Draining here just makes it land in seconds
     // rather than at the next scheduled drain; the queue is what guarantees it
-    // arrives, so a failed invoke here costs nothing. Unpublishing queues
+    // arrives, so this costs nothing if it doesn't happen. Unpublishing queues
     // nothing, and an article pulled before the drain runs is skipped at send.
-    if (publishing) supabase.functions.invoke('discord-broadcast').catch(() => {})
+    if (publishing) void invokeIfEnabled('discord-broadcast')
   }
 
   const togglePin = () => update({ pinned: !article.pinned })

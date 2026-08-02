@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { Skeleton } from '../../components/ui'
+import DiscordAutomations, { Switch } from './DiscordAutomations'
 
 interface Cfg {
   guild_id: string
@@ -2073,37 +2074,43 @@ export default function DiscordSettings() {
         </div>
       </section>
 
-      {/* ── Server layout ───────────────────────────────────────────────── */}
-      {/* The rebuild built the right categories and then left them at the bottom
-          of the sidebar, underneath six emptied-out legacy categories and
-          ARCHIVE's 36 dead channels. Opening the server looked like nothing had
-          been created at all. This card owns the running order so that can't
-          quietly happen again. */}
+      {/* ── Automations ─────────────────────────────────────────────────── */}
+      {/* The category ordering that used to have its own card here is now one of
+          these, so the manual version is gone. What survives below it is the part
+          that is NOT automated and never should be: the one-off clear-out. */}
+      <DiscordAutomations />
+
+      {/* ── One-off clean-up ────────────────────────────────────────────── */}
+      {/* Deliberately not an automation. Everything here is a deletion, it only
+          ever needs doing once, and a scheduled job that removes things is a very
+          different risk from one that adds them. Once it has run and the server
+          looks right, this card has no further use. */}
       <section className="mb-6 max-w-2xl rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
-        <h3 className="text-xl">Server layout</h3>
+        <h3 className="text-xl">One-off clean-up</h3>
         <p className="mt-1 text-sm text-[var(--color-muted)]">
-          Puts the categories in a deliberate order and sorts the channels inside each one, so the
-          server reads top to bottom the way somebody actually uses it.
+          Clears out what the server rebuild left behind. Run it once and you can forget this card.
+          Ordering is handled by the <span className="font-mono">Sidebar order</span> automation
+          above, so this is only about removing things.
         </p>
 
-        <span className="mt-4 block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
-          The order it sets
-        </span>
-        <ol className="mt-1.5 space-y-1 font-mono text-sm text-[var(--color-ink-2)]">
-          <li>START HERE — where a newcomer lands</li>
-          <li>LEAGUE — the main championship</li>
-          <li>PADDOCK — public, the one place both halves of the server meet</li>
-          <li>ENDURANCE — the separate team</li>
-          <li>RACE CONTROL, then ADMIN — staff, below the rooms they police</li>
-          <li>ARCHIVE — always last</li>
-        </ol>
+        <ul className="mt-3 space-y-1 text-sm text-[var(--color-ink-2)]">
+          <li>
+            Six emptied-out legacy categories — Server Landing, Server General, HCR Endurance Team,
+            HCR League, Off Track, Stewards&rsquo; Office.
+          </li>
+          <li>
+            The <span className="font-mono">#verification</span> channel, replaced by Discord&rsquo;s
+            own rules screening.
+          </li>
+          <li>Five retired roles — Verified, Clanker, General, Season 0 Driver, Browner.</li>
+        </ul>
 
         <div className="mt-4 border-t border-[var(--color-line)] pt-4">
           <Switch
             checked={layoutTidy}
             onChange={setLayoutTidy}
-            label="Also clear out what the rebuild left behind"
-            hint="Removes the six emptied-out legacy categories, the #verification channel, and five retired roles — Verified, Clanker, General, Season 0 Driver and Browner. A channel that has ever held a message is never deleted, whatever this is set to. Deleting a role takes it off everyone who had it."
+            label="Include the deletions"
+            hint="With this off it only re-orders and removes nothing. A channel that has ever held a message is never deleted either way. Deleting a role takes it off everyone who had it."
           />
         </div>
 
@@ -2115,11 +2122,11 @@ export default function DiscordSettings() {
             aria-busy={layoutRunning === 'preview'}
             className="hcr-btn hcr-btn-ghost"
           >
-            {layoutRunning === 'preview' ? 'Previewing…' : 'Preview layout'}
+            {layoutRunning === 'preview' ? 'Previewing…' : 'Preview'}
           </button>
           <p className="mt-2 text-xs text-[var(--color-faint)]">
-            Previewing reads the server and lists the order it would set and anything it would
-            remove. It changes nothing.
+            Previewing lists everything it would remove, with a reason for anything it refuses to
+            touch. It changes nothing.
           </p>
         </div>
 
@@ -2129,20 +2136,16 @@ export default function DiscordSettings() {
               {layoutErr}
             </p>
           )}
-
           {layoutPreview && <LayoutView report={layoutPreview} />}
           {layoutDone && <LayoutView report={layoutDone} />}
         </div>
 
-        {/* The control that actually changes the server, kept apart from the
-            read-only button above and locked until a preview has been read. */}
         <div className="mt-5 rounded-lg border border-[var(--color-line)] bg-[var(--color-cloud)] p-4">
           <span className="block font-mono text-[11px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
-            Apply the layout
+            Apply
           </span>
           <p className="mt-1 text-sm text-[var(--color-ink-2)]">
-            Reordering is reversible — you can drag anything back. Deleting a role is not: it comes
-            off everybody who had it.
+            Deleting a role cannot be undone from here — it comes off everybody who had it.
           </p>
           <div className="mt-3">
             <button
@@ -2153,13 +2156,13 @@ export default function DiscordSettings() {
               aria-describedby="layout-gate"
               className="hcr-btn hcr-btn-primary"
             >
-              {layoutRunning === 'apply' ? 'Applying…' : 'Apply layout'}
+              {layoutRunning === 'apply' ? 'Applying…' : 'Apply clean-up'}
             </button>
           </div>
           <p id="layout-gate" className="mt-2 text-xs text-[var(--color-faint)]">
             {layoutPreview
-              ? 'The preview above is what will happen. You’ll be asked to confirm once more.'
-              : 'Preview the layout first — this unlocks once you’ve read what would change.'}
+              ? 'The preview above is what will happen. You\u2019ll be asked to confirm once more.'
+              : 'Preview first \u2014 this unlocks once you\u2019ve read what would go.'}
           </p>
         </div>
       </section>
@@ -3361,51 +3364,6 @@ function CommunityChip({ outcome, dryRun }: { outcome: CommunityOutcome; dryRun:
  * the automation panel uses, so a toggle behaves the same wherever a
  * commissioner meets one.
  */
-function Switch({
-  checked,
-  onChange,
-  label,
-  hint,
-}: {
-  checked: boolean
-  onChange: (next: boolean) => void
-  label: string
-  hint?: string
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4 py-1">
-      <div className="min-w-0">
-        <div className="text-sm font-semibold">{label}</div>
-        {hint && <div className="text-xs text-[var(--color-muted)]">{hint}</div>}
-      </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        aria-label={label}
-        onClick={() => onChange(!checked)}
-        className="inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center"
-      >
-        <span
-          aria-hidden="true"
-          className={`relative inline-block h-7 w-12 rounded-full border transition-colors ${
-            checked
-              ? 'border-[var(--color-brand)] bg-[var(--color-brand)]'
-              : 'border-[var(--color-line-2)] bg-[var(--color-mist)]'
-          }`}
-        >
-          <span
-            className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full transition-[left] ${
-              checked
-                ? 'left-[calc(100%-1.5rem)] bg-black'
-                : 'left-1 bg-white shadow-[inset_0_0_0_1px_var(--color-line-2)]'
-            }`}
-          />
-        </span>
-      </button>
-    </div>
-  )
-}
 
 function Count({ label, value }: { label: string; value: number | string }) {
   return (

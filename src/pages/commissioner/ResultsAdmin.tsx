@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
+import { invokeIfEnabled } from '../../lib/automations'
 import { useCurrentSeason, useEvents, useTeams } from '../../lib/queries'
 import {
   GRID_FIELDS,
@@ -117,13 +118,12 @@ export default function ResultsAdmin() {
     qc.invalidateQueries({ queryKey: ['news'] }) // the import may have composed a story
     qc.invalidateQueries({ queryKey: ['events'] })
     qc.invalidateQueries({ queryKey: ['drivers'] })
-    // Push any license/role changes to Discord (no-op if the integration is off).
-    supabase.functions.invoke('discord-sync').catch(() => {})
-    // Saving the import queued a race report and a standings refresh (database
-    // triggers, same transaction as the results). Draining here just makes them
-    // land in seconds instead of waiting for the scheduled drain — the queue is
-    // the thing that guarantees delivery, so a failure here loses nothing.
-    supabase.functions.invoke('discord-broadcast').catch(() => {})
+    // Push any license/role changes to Discord, and drain the announcement queue
+    // the import just filled (database triggers, same transaction as the results).
+    // Both respect their switch in Admin → Discord → Automations; both are nudges
+    // rather than the mechanism, since the schedule would pick either up anyway.
+    void invokeIfEnabled('discord-sync')
+    void invokeIfEnabled('discord-broadcast')
     setNote(`Saved ${saved ?? inserts.length} results. Standings updated.`)
     setRows([])
     if (fileRef.current) fileRef.current.value = '' // allow re-uploading the same file
