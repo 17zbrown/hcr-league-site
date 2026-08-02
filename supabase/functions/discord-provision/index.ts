@@ -272,9 +272,13 @@ Deno.serve(async (req) => {
       }
       return json({ error: `Could not read the server's channels — ${chRes.message}` }, 502)
     }
-    // type 0 = text, type 5 = announcement. Both take messages and webhooks, so
-    // an existing announcement channel is perfectly good to adopt.
-    const channels = (chRes.data ?? []).filter((c) => c?.id && (c.type === 0 || c.type === 5))
+    // type 0 = text, 5 = announcement, 15 = forum. All three take webhooks, so
+    // all three are adoptable. Forums matter especially: discord-rebuild creates
+    // race-results and incident-protests as forums, and leaving 15 out of this
+    // list made setup blind to them — it decided race-results was missing,
+    // created a duplicate plain-text one at the top level, and repointed the
+    // config and its webhook at the empty duplicate.
+    const channels = (chRes.data ?? []).filter((c) => c?.id && (c.type === 0 || c.type === 5 || c.type === 15))
     const channelsById = new Map(channels.map((c) => [c.id, c]))
 
     const resolved: { key: string; webhookKey: string; name: string; id: string; created: boolean }[] = []
