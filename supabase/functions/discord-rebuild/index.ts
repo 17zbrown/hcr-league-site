@@ -198,6 +198,11 @@ const STRUCTURE: WantedCategory[] = [
       { name: 'admin-chat', type: TEXT },
       { name: 'iracing-names', type: TEXT },
       { name: 'bot-log', type: TEXT },
+      // Discord's Community features each need a channel to point at. Both are
+      // staff-facing — Discord posts to them, members never should — so they
+      // live behind the ADMIN gate rather than anywhere public.
+      { name: 'community-updates', type: TEXT },
+      { name: 'safety-alerts', type: TEXT },
     ],
   },
 ]

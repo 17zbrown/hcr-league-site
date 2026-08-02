@@ -660,6 +660,142 @@ const readReconcileReport = (body: Record<string, unknown>): ReconcileReport => 
   }
 }
 
+// ── Driver linking ───────────────────────────────────────────────────────────
+// discord-link-drivers matches the roster to Discord accounts by name and hands
+// the League Member role to anyone who has actually raced. It only ever adds, so
+// the interesting half of its report is who it deliberately left alone: a driver
+// two Discord accounts could plausibly be gets no guess at all.
+
+interface LinkedDriver {
+  key: string
+  driver: string
+  /** The Discord side — a handle where we were given one, else the bare id. */
+  label: string
+}
+
+interface AmbiguousDriver {
+  key: string
+  driver: string
+  candidates: string[]
+}
+
+interface LinkReport {
+  considered: number | null
+  linked: LinkedDriver[]
+  /** Tallies, which may arrive without the list behind them. */
+  linkedCount: number | null
+  granted: string[]
+  grantedCount: number | null
+  alreadyLinked: number | null
+  ambiguous: AmbiguousDriver[]
+  warnings: string[]
+  note: string | null
+}
+
+/** The roster side of a row: whatever the function called the driver. */
+const driverName = (o: Record<string, unknown>): string =>
+  text(o.driver_name) || text(o.driver) || text(o.roster_name) || text(o.name)
+
+/**
+ * The Discord side. A name a commissioner can recognise beats a snowflake, but a
+ * snowflake beats nothing — an id can at least be looked up in the server.
+ */
+const discordLabel = (o: Record<string, unknown>): string =>
+  text(o.discord_label) ||
+  text(o.discord_username) ||
+  text(o.username) ||
+  text(o.global_name) ||
+  text(o.display_name) ||
+  text(o.label) ||
+  text(o.nick) ||
+  snowflake(o.discord_user_id) ||
+  snowflake(o.user_id) ||
+  snowflake(o.id) ||
+  ''
+
+const toLinked = (raw: unknown, i: number): LinkedDriver | null => {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const driver = driverName(o)
+  if (!driver) return null
+  return {
+    key: text(o.driver_id) || snowflake(o.discord_user_id) || `${driver}-${i}`,
+    driver,
+    label: discordLabel(o),
+  }
+}
+
+/** The grant list names people, so a bare string is the shape to expect. */
+const toGrantedNames = (raw: unknown): string[] =>
+  (Array.isArray(raw) ? raw : [])
+    .map((v) => {
+      if (typeof v === 'string') return v.trim()
+      const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+      return driverName(o) || discordLabel(o)
+    })
+    .filter(Boolean)
+
+/** A candidate is a Discord account the function could have picked, and didn't. */
+const toCandidates = (raw: unknown): string[] =>
+  (Array.isArray(raw) ? raw : raw == null ? [] : [raw])
+    .map((v) => {
+      if (typeof v === 'string') return v.trim()
+      const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+      return discordLabel(o)
+    })
+    .filter(Boolean)
+
+const toAmbiguous = (raw: unknown, i: number): AmbiguousDriver | null => {
+  if (typeof raw === 'string') {
+    const s = raw.trim()
+    return s ? { key: `ambiguous-${i}`, driver: s, candidates: [] } : null
+  }
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const driver = driverName(o)
+  if (!driver) return null
+  return {
+    key: text(o.driver_id) || `${driver}-${i}`,
+    driver,
+    candidates: toCandidates(o.candidates ?? o.matches ?? o.options ?? o.possible),
+  }
+}
+
+const readLinkReport = (body: Record<string, unknown>): LinkReport => {
+  const counts = (body.counts && typeof body.counts === 'object' ? body.counts : body) as Record<string, unknown>
+
+  const listed = (a: unknown, b: unknown): unknown[] =>
+    Array.isArray(a) ? a : Array.isArray(b) ? b : []
+
+  const linked = listed(body.linked, counts.linked)
+    .map((entry, i) => toLinked(entry, i))
+    .filter((l): l is LinkedDriver => l !== null)
+
+  const granted = toGrantedNames(
+    [body.granted, body.granted_league_member, body.granted_member, body.roles_granted, counts.granted].find((v) =>
+      Array.isArray(v),
+    ),
+  )
+
+  const ambiguous = listed(body.ambiguous, counts.ambiguous)
+    .map((entry, i) => toAmbiguous(entry, i))
+    .filter((a): a is AmbiguousDriver => a !== null)
+
+  const linkedCount = num(counts.linked)
+  const grantedCount = num(counts.granted ?? counts.granted_league_member ?? counts.roles_granted)
+
+  return {
+    considered: num(counts.considered ?? counts.checked ?? counts.scanned ?? counts.drivers ?? counts.total),
+    linked,
+    // A tally we were never given still shows if the list itself came through.
+    linkedCount: linkedCount ?? (linked.length > 0 ? linked.length : null),
+    granted,
+    grantedCount: grantedCount ?? (granted.length > 0 ? granted.length : null),
+    alreadyLinked: num(counts.already_linked ?? counts.alreadyLinked ?? counts.already),
+    ambiguous,
+    warnings: Array.from(new Set(toStrings(body.warnings))),
+    note: typeof body.skipped === 'string' ? body.skipped : text(body.message) || null,
+  }
+}
+
 /**
  * `functions.invoke` swallows the response body on a non-2xx and hands back a
  * bare "Edge Function returned a non-2xx status code" — useless to a
@@ -741,7 +877,9 @@ export default function DiscordSettings() {
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [running, setRunning] = useState<'setup' | 'events' | 'audit' | 'preview' | 'rebuild' | 'roles' | null>(null)
+  const [running, setRunning] = useState<
+    'setup' | 'events' | 'audit' | 'preview' | 'rebuild' | 'roles' | 'link' | null
+  >(null)
   const [setupErr, setSetupErr] = useState<string | null>(null)
   const [setupReport, setSetupReport] = useState<SetupReport | null>(null)
   const [eventsErr, setEventsErr] = useState<string | null>(null)
@@ -754,6 +892,8 @@ export default function DiscordSettings() {
   const [rebuildDone, setRebuildDone] = useState<RebuildReport | null>(null)
   const [rolesErr, setRolesErr] = useState<string | null>(null)
   const [rolesReport, setRolesReport] = useState<ReconcileReport | null>(null)
+  const [linkErr, setLinkErr] = useState<string | null>(null)
+  const [linkReport, setLinkReport] = useState<LinkReport | null>(null)
 
   /**
    * `keepSwitches` is for the post-setup refresh: setup writes the ids but
@@ -853,6 +993,17 @@ export default function DiscordSettings() {
     const { body, error } = await invokeFn('discord-role-reconcile')
     if (error) { setRolesErr(error); setRunning(null); return }
     setRolesReport(readReconcileReport(body ?? {}))
+    setRunning(null)
+  }
+
+  // Additive only: this hands out the League Member role and fills in the
+  // driver ↔ Discord links. It writes nothing into discord_config, so there is
+  // nothing to reload afterwards either.
+  const linkDrivers = async () => {
+    setRunning('link'); setLinkErr(null); setLinkReport(null)
+    const { body, error } = await invokeFn('discord-link-drivers')
+    if (error) { setLinkErr(error); setRunning(null); return }
+    setLinkReport(readLinkReport(body ?? {}))
     setRunning(null)
   }
 
@@ -972,10 +1123,24 @@ export default function DiscordSettings() {
           >
             {running === 'roles' ? 'Syncing…' : 'Sync roles now'}
           </button>
+          <button
+            type="button"
+            onClick={linkDrivers}
+            disabled={running !== null}
+            aria-busy={running === 'link'}
+            aria-describedby="link-drivers-note"
+            className="hcr-btn hcr-btn-ghost"
+          >
+            {running === 'link' ? 'Linking…' : 'Link drivers & grant roles'}
+          </button>
         </div>
         <p className="mt-2 text-xs text-[var(--color-faint)]">
           Scanning and previewing read the server and report back — neither creates, renames or
           deletes anything.
+        </p>
+        <p id="link-drivers-note" className="mt-2 text-xs text-[var(--color-faint)]">
+          Linking drivers matches roster drivers to Discord accounts by name and gives anyone who
+          has raced the League Member role. It only ever adds roles, never removes them.
         </p>
 
         {/* The one control here that reshapes the server, kept apart from the
@@ -1177,6 +1342,14 @@ export default function DiscordSettings() {
           )}
 
           {rolesReport && <RoleSyncView report={rolesReport} />}
+
+          {linkErr && (
+            <p className="mt-4 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">
+              {linkErr}
+            </p>
+          )}
+
+          {linkReport && <LinkDriversView report={linkReport} />}
         </div>
       </section>
 
@@ -1616,6 +1789,117 @@ function RoleSyncView({ report }: { report: ReconcileReport }) {
       {report.note && <p className="mt-3 text-sm text-[var(--color-muted)]">{report.note}</p>}
 
       {report.warnings.length > 0 && <Callout title="Needs your attention" lines={report.warnings} />}
+    </div>
+  )
+}
+
+/**
+ * Who got linked, who got the role, and — the part worth reading — who was left
+ * alone. The ambiguous list is a deliberate non-action, so it says so in words
+ * before it names anybody.
+ */
+function LinkDriversView({ report }: { report: LinkReport }) {
+  const anyCount =
+    report.considered !== null ||
+    report.linkedCount !== null ||
+    report.grantedCount !== null ||
+    report.alreadyLinked !== null
+
+  const anyList =
+    report.linked.length > 0 || report.granted.length > 0 || report.ambiguous.length > 0
+
+  return (
+    <div className="mt-5 border-t border-[var(--color-line)] pt-4">
+      <span className="block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+        Driver linking
+      </span>
+
+      {anyCount && (
+        <dl className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/* A tally we were never given is a dash, never a zero. */}
+          <Count label="Considered" value={report.considered ?? '—'} />
+          <Count label="Linked" value={report.linkedCount ?? '—'} />
+          <Count label="Granted" value={report.grantedCount ?? '—'} />
+          <Count label="Already linked" value={report.alreadyLinked ?? '—'} />
+        </dl>
+      )}
+
+      {report.linked.length > 0 && (
+        <div className="mt-4">
+          <span className="mb-1 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">
+            Newly linked
+          </span>
+          <ul className="divide-y divide-[var(--color-line)]">
+            {report.linked.map((l, i) => (
+              <li key={`${l.key}-${i}`} className="flex flex-wrap items-center gap-x-2 gap-y-1 py-2">
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold">{l.driver}</span>
+                <span aria-hidden="true" className="text-sm text-[var(--color-faint)]">→</span>
+                <span className="sr-only">linked to</span>
+                <span className="font-mono text-[11px] text-[var(--color-muted)]">
+                  {l.label || 'a Discord account'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {report.granted.length > 0 && (
+        <div className="mt-4">
+          <span className="mb-1 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">
+            Given the League Member role
+          </span>
+          <ul className="divide-y divide-[var(--color-line)]">
+            {report.granted.map((name, i) => (
+              <li key={`${name}-${i}`} className="py-2 text-sm font-semibold">
+                {name}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {report.ambiguous.length > 0 && (
+        <div className="mt-4">
+          <span className="mb-1 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">
+            Left alone
+          </span>
+          <p className="text-sm text-[var(--color-muted)]">
+            More than one person plausibly matched each of these drivers, so nothing was linked and
+            no role was handed out — a wrong guess is worse than waiting. Each one sorts itself out
+            the moment that driver signs in to the site with Discord.
+          </p>
+          <ul className="mt-1 divide-y divide-[var(--color-line)]">
+            {report.ambiguous.map((a, i) => (
+              <li key={`${a.key}-${i}`} className="py-2">
+                <span className="block text-sm font-semibold">{a.driver}</span>
+                {a.candidates.length > 0 && (
+                  <span className="mt-0.5 block font-mono text-[11px] text-[var(--color-muted)]">
+                    {a.candidates.join(' · ')}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {anyCount && !anyList && !report.note && (
+        <p className="mt-2 text-sm text-[var(--color-muted)]">
+          Nothing new to link — everyone who could be matched already has their account and their
+          role.
+        </p>
+      )}
+
+      {report.note && <p className="mt-3 text-sm text-[var(--color-muted)]">{report.note}</p>}
+
+      {report.warnings.length > 0 && <Callout title="Needs your attention" lines={report.warnings} />}
+
+      {!anyCount && !anyList && !report.note && report.warnings.length === 0 && (
+        <p className="mt-2 text-sm text-[var(--color-muted)]">
+          The run finished, but nothing came back to show.
+        </p>
+      )}
     </div>
   )
 }
