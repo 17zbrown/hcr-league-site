@@ -1071,6 +1071,108 @@ const readCommunityReport = (body: Record<string, unknown>, asked: boolean): Com
   }
 }
 
+// discord-driver-roles mirrors what the website says about a driver onto their
+// Discord account — the class(es) they race, and their licence tier. The licence
+// half is the only thing in the whole panel that takes a role away, so removals get
+// their own line in the report rather than being folded into a count.
+interface DriverRolesReport {
+  dryRun: boolean
+  linked: number
+  withResults: number
+  classGranted: string[]
+  licenseGranted: string[]
+  licenseRemoved: string[]
+  unchanged: number
+  warnings: string[]
+  note: string | null
+}
+
+const readDriverRolesReport = (body: Record<string, unknown>, asked: boolean): DriverRolesReport => {
+  const num = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0)
+  return {
+    dryRun: typeof body.dryRun === 'boolean' ? body.dryRun : asked,
+    linked: num(body.drivers_linked),
+    withResults: num(body.drivers_with_results),
+    classGranted: toStrings(body.class_granted),
+    licenseGranted: toStrings(body.license_granted),
+    licenseRemoved: toStrings(body.license_removed),
+    unchanged: num(body.unchanged),
+    warnings: Array.from(new Set(toStrings(body.warnings))),
+    note: typeof body.skipped === 'string' ? body.skipped : text(body.message) || null,
+  }
+}
+
+// discord-layout puts the sidebar in a deliberate order and, when asked, clears
+// out empty categories and named channels/roles. Its report is two halves: the
+// running order it would set, and a line per thing it was asked to delete saying
+// whether it will and why. The "why" matters more than the verdict — a skip here
+// is usually the function refusing to touch something with history in it.
+interface LayoutDeletion {
+  name: string
+  action: 'delete' | 'skip'
+  reason: string
+}
+interface LayoutReport {
+  dryRun: boolean
+  categoryOrder: string[]
+  channels: LayoutDeletion[]
+  categories: LayoutDeletion[]
+  roles: LayoutDeletion[]
+  appliedSummary: string[]
+  warnings: string[]
+  note: string | null
+}
+
+const toLayoutDeletions = (raw: unknown): LayoutDeletion[] =>
+  (Array.isArray(raw) ? raw : [])
+    .map((entry) => {
+      if (!entry || typeof entry !== 'object') return null
+      const o = entry as Record<string, unknown>
+      const name = text(o.name)
+      if (!name) return null
+      return {
+        name,
+        action: o.action === 'delete' ? ('delete' as const) : ('skip' as const),
+        reason: text(o.reason) || '',
+      }
+    })
+    .filter((d): d is LayoutDeletion => d !== null)
+
+const readLayoutReport = (body: Record<string, unknown>, asked: boolean): LayoutReport => {
+  const dryRun = typeof body.dryRun === 'boolean' ? body.dryRun : asked
+  const plan = (body.plan && typeof body.plan === 'object' ? body.plan : {}) as Record<string, unknown>
+  const applied = (body.applied && typeof body.applied === 'object' ? body.applied : null) as Record<string, unknown> | null
+
+  // The applied block is counts and name-lists; flatten it into plain sentences
+  // rather than making the card understand five separate shapes.
+  const summary: string[] = []
+  if (applied) {
+    const n = (v: unknown) => (Number.isFinite(Number(v)) ? Number(v) : 0)
+    const cats = n(applied.categoriesReordered)
+    const chans = n(applied.channelsReordered)
+    if (cats) summary.push(`Reordered ${cats} categor${cats === 1 ? 'y' : 'ies'}.`)
+    if (chans) summary.push(`Reordered ${chans} channel${chans === 1 ? '' : 's'}.`)
+    const list = (v: unknown) => toStrings(v)
+    const delChans = list(applied.channelsDeleted)
+    const delCats = list(applied.categoriesDeleted)
+    const delRoles = list(applied.rolesDeleted)
+    if (delChans.length) summary.push(`Deleted ${delChans.length} channel${delChans.length === 1 ? '' : 's'}: ${delChans.join(', ')}.`)
+    if (delCats.length) summary.push(`Deleted ${delCats.length} empty categor${delCats.length === 1 ? 'y' : 'ies'}: ${delCats.join(', ')}.`)
+    if (delRoles.length) summary.push(`Deleted ${delRoles.length} role${delRoles.length === 1 ? '' : 's'}: ${delRoles.join(', ')}.`)
+  }
+
+  return {
+    dryRun,
+    categoryOrder: toStrings(plan.categoryOrder),
+    channels: toLayoutDeletions(plan.channels),
+    categories: toLayoutDeletions(plan.categories),
+    roles: toLayoutDeletions(plan.roles),
+    appliedSummary: summary,
+    warnings: Array.from(new Set(toStrings(body.warnings))),
+    note: typeof body.skipped === 'string' ? body.skipped : text(body.message) || null,
+  }
+}
+
 /**
  * `functions.invoke` swallows the response body on a non-2xx and hands back a
  * bare "Edge Function returned a non-2xx status code" — useless to a
@@ -1180,6 +1282,20 @@ const COMMUNITY_CONFIRM = [
   'The rest is quieter — verification level, the explicit-content filter, the rules and alert channels, and the AutoMod rules. Nothing is deleted, no channel is removed and no messages are touched.',
 ].join('\n')
 
+/**
+ * The layout run is mostly harmless — reordering a sidebar is undoable by dragging
+ * — but the same button can delete empty categories and named roles, and deleting
+ * a role takes it off everybody who had it. So the confirm names the destructive
+ * half specifically rather than talking about "changes".
+ */
+const LAYOUT_CONFIRM = [
+  'Apply the server layout?',
+  '',
+  'Categories are reordered so START HERE, LEAGUE, PADDOCK, ENDURANCE, RACE CONTROL and ADMIN sit at the top, and ARCHIVE drops to the bottom. Channels inside each category are put in a sensible reading order too.',
+  '',
+  'Anything listed above as "will be deleted" goes as well. Empty categories hold nothing. A channel is only ever deleted if it has never held a message — one with history is skipped no matter what. Deleting a role removes it from everyone who had it, and that cannot be undone from here.',
+].join('\n')
+
 /** The roles the panel manages, so a gate reported as an ID can be named. */
 const NAMED_ROLE_FIELDS: { key: keyof Cfg; label: string }[] = [
   { key: 'role_site_admin', label: 'Admin' },
@@ -1240,6 +1356,19 @@ export default function DiscordSettings() {
   /** The rehearsal. Its presence is also what unlocks the real run. */
   const [communityPreview, setCommunityPreview] = useState<CommunityReport | null>(null)
   const [communityDone, setCommunityDone] = useState<CommunityReport | null>(null)
+
+  const [driverRolesRunning, setDriverRolesRunning] = useState<'preview' | 'apply' | null>(null)
+  const [driverRolesErr, setDriverRolesErr] = useState<string | null>(null)
+  const [driverRolesPreview, setDriverRolesPreview] = useState<DriverRolesReport | null>(null)
+  const [driverRolesDone, setDriverRolesDone] = useState<DriverRolesReport | null>(null)
+
+  const [layoutRunning, setLayoutRunning] = useState<'preview' | 'apply' | null>(null)
+  const [layoutErr, setLayoutErr] = useState<string | null>(null)
+  const [layoutPreview, setLayoutPreview] = useState<LayoutReport | null>(null)
+  const [layoutDone, setLayoutDone] = useState<LayoutReport | null>(null)
+  // Off by default. Reordering is reversible by dragging; removing the husks is
+  // not, so it takes a deliberate tick rather than riding along with the reorder.
+  const [layoutTidy, setLayoutTidy] = useState(false)
 
   /**
    * `keepSwitches` is for the post-setup refresh: setup writes the ids but
@@ -1473,6 +1602,92 @@ export default function DiscordSettings() {
     setCommunityRunning(null)
   }
 
+  /** Same rule as the community card: guild-wide changes never overlap. */
+  const layoutBusy =
+    running !== null || pruneRunning !== null || communityRunning !== null || layoutRunning !== null ||
+    driverRolesRunning !== null
+
+  // Rehearsal only: the function works out every class and licence role it would
+  // hand out or take back, and sends nothing to Discord.
+  const previewDriverRoles = async () => {
+    if (layoutBusy) return
+    setDriverRolesRunning('preview'); setDriverRolesErr(null); setDriverRolesPreview(null); setDriverRolesDone(null)
+    const { body, error } = await invokeFn('discord-driver-roles', { dryRun: true })
+    if (error) { setDriverRolesErr(error); setDriverRolesRunning(null); return }
+    setDriverRolesPreview(readDriverRolesReport(body ?? {}, true))
+    setDriverRolesRunning(null)
+  }
+
+  const applyDriverRoles = async () => {
+    if (!driverRolesPreview || layoutBusy) return
+    setDriverRolesRunning('apply'); setDriverRolesErr(null); setDriverRolesDone(null)
+    const { body, error } = await invokeFn('discord-driver-roles', { dryRun: false })
+    if (error) { setDriverRolesErr(error); setDriverRolesRunning(null); return }
+    setDriverRolesDone(readDriverRolesReport(body ?? {}, false))
+    // The preview described a server that has just changed — drop it, which also
+    // re-locks the button until somebody reads a fresh one.
+    setDriverRolesPreview(null)
+    setDriverRolesRunning(null)
+  }
+
+  // What the tidy tick actually asks for.
+  //
+  // Empty categories are the general case: any container holding nothing, which
+  // after the rebuild means the six legacy ones it emptied out.
+  //
+  // The rest is a specific, one-time clear-out of what the old server accumulated,
+  // agreed item by item. #verification and Verified did a job Discord's own rules
+  // screening now does. Clanker was never used. General, Season 0 Driver and
+  // Browner are leftovers from before the league had a shape.
+  //
+  // Named by id rather than by name on purpose — a future channel that happens to
+  // be called "verification", or a new role called "General", can never be caught
+  // by this list. Once the server is clean these can go.
+  const RETIRED_CHANNELS = [
+    '1533477093617303713', // #verification
+  ]
+  const RETIRED_ROLES = [
+    '1500995319599726746', // Verified — 57 members, replaced by rules screening
+    '1500988211890225203', // Clanker — 0 members
+    '1500998379310809128', // General — 8 members
+    '1519813359363428576', // Season 0 Driver — 4 members, abandoned partway
+    '1524422713681117330', // Browner — 2 members
+  ]
+
+  const layoutPayload = (dryRun: boolean) => ({
+    dryRun,
+    reorder: true,
+    deleteEmptyCategories: layoutTidy,
+    ...(layoutTidy ? { deleteChannelIds: RETIRED_CHANNELS, deleteRoleIds: RETIRED_ROLES } : {}),
+  })
+
+  // Rehearsal only: the function describes the order it would set and lists every
+  // deletion with a verdict, and touches nothing.
+  const previewLayout = async () => {
+    if (layoutBusy) return
+    setLayoutRunning('preview'); setLayoutErr(null); setLayoutPreview(null); setLayoutDone(null)
+    const { body, error } = await invokeFn('discord-layout', layoutPayload(true))
+    if (error) { setLayoutErr(error); setLayoutRunning(null); return }
+    setLayoutPreview(readLayoutReport(body ?? {}, true))
+    setLayoutRunning(null)
+  }
+
+  const applyLayout = async () => {
+    if (!layoutPreview || layoutBusy) return
+    if (!window.confirm(LAYOUT_CONFIRM)) return
+    setLayoutRunning('apply'); setLayoutErr(null); setLayoutDone(null)
+    const { body, error } = await invokeFn('discord-layout', layoutPayload(false))
+    if (error) { setLayoutErr(error); setLayoutRunning(null); return }
+    setLayoutDone(readLayoutReport(body ?? {}, false))
+    // The preview described a server that has just changed shape — drop it, which
+    // also re-locks the button until somebody reads a fresh one.
+    setLayoutPreview(null)
+    // Deleting a role clears the config pointer that referenced it, so pull the
+    // form back in rather than leaving a stale id on screen.
+    await loadConfig(true)
+    setLayoutRunning(null)
+  }
+
   const field = (key: keyof Cfg, label: string, hint?: string) => (
     <label className="block">
       <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">{label}</span>
@@ -1598,6 +1813,56 @@ export default function DiscordSettings() {
           Linking drivers matches roster drivers to Discord accounts by name and gives anyone who
           has raced the League Member role. It only ever adds roles, never removes them.
         </p>
+
+        {/* Class and licence roles are a different job from linking: linking decides
+            WHO somebody is, this decides what they should be wearing. It runs off
+            drivers who are already linked, so it belongs after that button. */}
+        <div className="mt-4 border-t border-[var(--color-line)] pt-4">
+          <span className="block font-mono text-[11px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+            Class &amp; licence roles
+          </span>
+          <p className="mt-1 text-sm text-[var(--color-ink-2)]">
+            Gives every linked driver the role for the class they race, and the licence tier their
+            profile shows on the website — worked out from race results with the same formula the
+            site uses, so the two always agree.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={previewDriverRoles}
+              disabled={layoutBusy}
+              aria-busy={driverRolesRunning === 'preview'}
+              className="hcr-btn hcr-btn-ghost"
+            >
+              {driverRolesRunning === 'preview' ? 'Previewing…' : 'Preview class & licence'}
+            </button>
+            <button
+              type="button"
+              onClick={applyDriverRoles}
+              disabled={layoutBusy || !driverRolesPreview}
+              aria-busy={driverRolesRunning === 'apply'}
+              aria-describedby="driver-roles-gate"
+              className="hcr-btn hcr-btn-primary"
+            >
+              {driverRolesRunning === 'apply' ? 'Applying…' : 'Apply'}
+            </button>
+          </div>
+          <p id="driver-roles-gate" className="mt-2 text-xs text-[var(--color-faint)]">
+            {driverRolesPreview
+              ? 'The preview below is what will happen.'
+              : 'A licence is a ladder, so promoting somebody takes the tier below back off them — the only place this panel removes a role. Preview first.'}
+          </p>
+
+          <div aria-live="polite">
+            {driverRolesErr && (
+              <p className="mt-4 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">
+                {driverRolesErr}
+              </p>
+            )}
+            {driverRolesPreview && <DriverRolesView report={driverRolesPreview} />}
+            {driverRolesDone && <DriverRolesView report={driverRolesDone} />}
+          </div>
+        </div>
 
         {/* The one control here that reshapes the server, kept apart from the
             read-only buttons above and locked until a plan has been seen. */}
@@ -1806,6 +2071,97 @@ export default function DiscordSettings() {
           )}
 
           {linkReport && <LinkDriversView report={linkReport} />}
+        </div>
+      </section>
+
+      {/* ── Server layout ───────────────────────────────────────────────── */}
+      {/* The rebuild built the right categories and then left them at the bottom
+          of the sidebar, underneath six emptied-out legacy categories and
+          ARCHIVE's 36 dead channels. Opening the server looked like nothing had
+          been created at all. This card owns the running order so that can't
+          quietly happen again. */}
+      <section className="mb-6 max-w-2xl rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
+        <h3 className="text-xl">Server layout</h3>
+        <p className="mt-1 text-sm text-[var(--color-muted)]">
+          Puts the categories in a deliberate order and sorts the channels inside each one, so the
+          server reads top to bottom the way somebody actually uses it.
+        </p>
+
+        <span className="mt-4 block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+          The order it sets
+        </span>
+        <ol className="mt-1.5 space-y-1 font-mono text-sm text-[var(--color-ink-2)]">
+          <li>START HERE — where a newcomer lands</li>
+          <li>LEAGUE — the main championship</li>
+          <li>PADDOCK — public, the one place both halves of the server meet</li>
+          <li>ENDURANCE — the separate team</li>
+          <li>RACE CONTROL, then ADMIN — staff, below the rooms they police</li>
+          <li>ARCHIVE — always last</li>
+        </ol>
+
+        <div className="mt-4 border-t border-[var(--color-line)] pt-4">
+          <Switch
+            checked={layoutTidy}
+            onChange={setLayoutTidy}
+            label="Also clear out what the rebuild left behind"
+            hint="Removes the six emptied-out legacy categories, the #verification channel, and five retired roles — Verified, Clanker, General, Season 0 Driver and Browner. A channel that has ever held a message is never deleted, whatever this is set to. Deleting a role takes it off everyone who had it."
+          />
+        </div>
+
+        <div className="mt-4">
+          <button
+            type="button"
+            onClick={previewLayout}
+            disabled={layoutBusy}
+            aria-busy={layoutRunning === 'preview'}
+            className="hcr-btn hcr-btn-ghost"
+          >
+            {layoutRunning === 'preview' ? 'Previewing…' : 'Preview layout'}
+          </button>
+          <p className="mt-2 text-xs text-[var(--color-faint)]">
+            Previewing reads the server and lists the order it would set and anything it would
+            remove. It changes nothing.
+          </p>
+        </div>
+
+        <div aria-live="polite">
+          {layoutErr && (
+            <p className="mt-4 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">
+              {layoutErr}
+            </p>
+          )}
+
+          {layoutPreview && <LayoutView report={layoutPreview} />}
+          {layoutDone && <LayoutView report={layoutDone} />}
+        </div>
+
+        {/* The control that actually changes the server, kept apart from the
+            read-only button above and locked until a preview has been read. */}
+        <div className="mt-5 rounded-lg border border-[var(--color-line)] bg-[var(--color-cloud)] p-4">
+          <span className="block font-mono text-[11px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+            Apply the layout
+          </span>
+          <p className="mt-1 text-sm text-[var(--color-ink-2)]">
+            Reordering is reversible — you can drag anything back. Deleting a role is not: it comes
+            off everybody who had it.
+          </p>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={applyLayout}
+              disabled={layoutBusy || !layoutPreview}
+              aria-busy={layoutRunning === 'apply'}
+              aria-describedby="layout-gate"
+              className="hcr-btn hcr-btn-primary"
+            >
+              {layoutRunning === 'apply' ? 'Applying…' : 'Apply layout'}
+            </button>
+          </div>
+          <p id="layout-gate" className="mt-2 text-xs text-[var(--color-faint)]">
+            {layoutPreview
+              ? 'The preview above is what will happen. You’ll be asked to confirm once more.'
+              : 'Preview the layout first — this unlocks once you’ve read what would change.'}
+          </p>
         </div>
       </section>
 
@@ -2729,6 +3085,166 @@ function PruneRows({ rows, groupKey }: { rows: PruneRow[]; groupKey: string }) {
  * couldn't touch gets its own red block rather than a chip in a list: a
  * half-applied server is the one outcome worth noticing here.
  */
+function DriverRolesView({ report }: { report: DriverRolesReport }) {
+  const list = (title: string, items: string[], tone: 'add' | 'remove') =>
+    items.length === 0 ? null : (
+      <div className="mt-3">
+        <span
+          className={`mb-1 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] ${
+            tone === 'remove' ? 'text-[var(--color-red)]' : 'text-[var(--color-muted)]'
+          }`}
+        >
+          {title}
+        </span>
+        <ul className="space-y-0.5 font-mono text-sm text-[var(--color-ink-2)]">
+          {items.map((s, i) => (
+            <li key={`${title}-${i}`}>{s}</li>
+          ))}
+        </ul>
+      </div>
+    )
+
+  const nothing =
+    report.classGranted.length === 0 &&
+    report.licenseGranted.length === 0 &&
+    report.licenseRemoved.length === 0
+
+  return (
+    <div className="mt-4 border-t border-[var(--color-line)] pt-4">
+      <span className="block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+        {report.dryRun ? 'Preview — nothing has been changed yet' : 'Class & licence roles'}
+      </span>
+      <p className="mt-1 text-sm text-[var(--color-muted)]">
+        {report.linked} driver{report.linked === 1 ? '' : 's'} have a Discord account attached,{' '}
+        {report.withResults} of them {report.withResults === 1 ? 'has' : 'have'} raced.
+      </p>
+
+      {list(report.dryRun ? 'Class roles it would add' : 'Class roles added', report.classGranted, 'add')}
+      {list(report.dryRun ? 'Licences it would set' : 'Licences set', report.licenseGranted, 'add')}
+      {list(
+        report.dryRun ? 'Old licence tiers it would remove' : 'Old licence tiers removed',
+        report.licenseRemoved,
+        'remove',
+      )}
+
+      {nothing && (
+        <p className="mt-2 text-sm text-[var(--color-muted)]">
+          Everyone already holds what the website says they should — nothing to change.
+        </p>
+      )}
+      {report.unchanged > 0 && !nothing && (
+        <p className="mt-3 text-sm text-[var(--color-faint)]">
+          {report.unchanged} driver{report.unchanged === 1 ? ' was' : 's were'} already correct.
+        </p>
+      )}
+
+      {report.note && <p className="mt-3 text-sm text-[var(--color-muted)]">{report.note}</p>}
+      {report.warnings.length > 0 && <Callout title="Needs your attention" lines={report.warnings} />}
+    </div>
+  )
+}
+
+/**
+ * The deletion half of a layout report. Split by verdict rather than listed flat,
+ * because "these are going" and "these are staying put, here's why" are two
+ * different things to read and the second is the one that needs the reason shown.
+ */
+function LayoutDeletions({ title, items }: { title: string; items: LayoutDeletion[] }) {
+  if (items.length === 0) return null
+  const going = items.filter((i) => i.action === 'delete')
+  const staying = items.filter((i) => i.action === 'skip')
+
+  return (
+    <div className="mt-4">
+      <span className="mb-1 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
+        {title}
+      </span>
+      {going.length > 0 && (
+        <ul className="space-y-1 text-sm text-[var(--color-ink-2)]">
+          {going.map((d, i) => (
+            <li key={`go-${title}-${d.name}-${i}`}>
+              <span className="font-mono font-semibold">{d.name}</span>
+              {d.reason && <span className="text-[var(--color-muted)]"> — {d.reason}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      {staying.length > 0 && (
+        <div className={going.length > 0 ? 'mt-2' : ''}>
+          <span className="mb-1 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">
+            Left alone
+          </span>
+          <ul className="space-y-1 text-sm text-[var(--color-muted)]">
+            {staying.map((d, i) => (
+              <li key={`stay-${title}-${d.name}-${i}`}>
+                <span className="font-mono">{d.name}</span>
+                {d.reason && <span> — {d.reason}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LayoutView({ report }: { report: LayoutReport }) {
+  const nothing =
+    report.categoryOrder.length === 0 &&
+    report.channels.length === 0 &&
+    report.categories.length === 0 &&
+    report.roles.length === 0 &&
+    report.appliedSummary.length === 0 &&
+    report.warnings.length === 0 &&
+    !report.note
+
+  return (
+    <div className="mt-5 border-t border-[var(--color-line)] pt-4">
+      <span className="block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+        {report.dryRun ? 'Preview — nothing has been changed yet' : 'Server layout'}
+      </span>
+
+      {report.categoryOrder.length > 0 && (
+        <div className="mt-3">
+          <span className="mb-1 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
+            {report.dryRun ? 'Running order it would set' : 'Running order'}
+          </span>
+          <ol className="space-y-0.5 font-mono text-sm text-[var(--color-ink-2)]">
+            {report.categoryOrder.map((line, i) => (
+              <li key={`cat-order-${i}`}>{line}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      <LayoutDeletions title="Channels" items={report.channels} />
+      <LayoutDeletions title="Categories" items={report.categories} />
+      <LayoutDeletions title="Roles" items={report.roles} />
+
+      {report.appliedSummary.length > 0 && (
+        <div className="mt-4 rounded-lg border border-[var(--color-line)] bg-[var(--color-cloud)] px-4 py-3">
+          <span className="block font-mono text-[11px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+            What changed
+          </span>
+          <ul className="mt-1.5 space-y-1 text-sm text-[var(--color-ink-2)]">
+            {report.appliedSummary.map((line, i) => (
+              <li key={`layout-applied-${i}`}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {report.note && <p className="mt-3 text-sm text-[var(--color-muted)]">{report.note}</p>}
+
+      {report.warnings.length > 0 && <Callout title="Needs your attention" lines={report.warnings} />}
+
+      {nothing && (
+        <p className="mt-2 text-sm text-[var(--color-muted)]">The run finished, but nothing came back to show.</p>
+      )}
+    </div>
+  )
+}
+
 function CommunityView({ report }: { report: CommunityReport }) {
   const nothing =
     report.applied.length === 0 &&
