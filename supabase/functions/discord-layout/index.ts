@@ -144,6 +144,31 @@ function hasHistory(c: Channel): boolean {
   return false
 }
 
+/**
+ * Is this a legacy service-role JWT?
+ *
+ * Only ever consulted for a token the Supabase gateway has ALREADY accepted, and
+ * that is what makes reading an unverified claim sound here: this function is
+ * deployed with verify_jwt on, so the signature was checked before any of this code
+ * ran. A forged or unsigned token never arrives. The project's anon / publishable
+ * key does arrive, but carries role "anon", so it fails this.
+ *
+ * Needed because Supabase is mid-migration between key formats: the runtime's
+ * SUPABASE_SERVICE_ROLE_KEY on this project is an sb_secret_ string, while the
+ * dashboard still issues a legacy service_role JWT. Both are the scheduler.
+ */
+function isServiceRoleJwt(token: string): boolean {
+  const parts = token.split('.')
+  if (parts.length !== 3) return false
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const payload = JSON.parse(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)))
+    return (payload as { role?: unknown })?.role === 'service_role'
+  } catch {
+    return false
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
@@ -192,7 +217,16 @@ Deno.serve(async (req) => {
     // --- auth: an admin, or cron ---
     const authz = req.headers.get('Authorization') ?? ''
     const bearer = authz.replace(/^Bearer\s+/i, '').trim()
-    const viaCron = !bearer || bearer === service
+    // An ABSENT bearer token is not cron. The gateway accepts the project's
+    // publishable key via the `apikey` header with no Authorization header at all,
+    // and that key ships inside the public frontend bundle — so treating "no token"
+    // as "this must be the scheduler" left every one of these functions callable by
+    // anybody who could guess the slug. It did, until this line changed.
+    //
+    // What actually identifies the scheduler is a service-role credential: either an
+    // exact match on the runtime's own key, or a legacy service_role JWT whose
+    // signature the gateway has already verified.
+    const viaCron = bearer.length > 0 && (bearer === service || isServiceRoleJwt(bearer))
     if (!viaCron) {
       const userClient = createClient(url, anon, { global: { headers: { Authorization: authz } } })
       const { data: userData } = await userClient.auth.getUser()
