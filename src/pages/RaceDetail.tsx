@@ -185,7 +185,7 @@ export default function RaceDetail() {
                 Session times land here once the stewards post the running order.
               </p>
             ) : (
-              <ol className="overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+              <ol className="overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)]">
                 {sessions.map((s, i) => (
                   <li key={s.id} className="flex items-center gap-4 border-b border-[var(--color-line)] px-5 py-4 last:border-0">
                     <span className="font-display text-2xl text-[var(--color-faint)]">{String(i + 1).padStart(2, '0')}</span>
@@ -211,7 +211,7 @@ export default function RaceDetail() {
             </div>
 
             {/* Live real-world conditions */}
-            <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
+            <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
               <div className={`${MICRO} mb-3`}>Now at {track?.location ?? track?.name}</div>
               {track?.lat == null ? (
                 <p className="text-sm text-[var(--color-muted)]">No coordinates for this track.</p>
@@ -237,7 +237,7 @@ export default function RaceDetail() {
 
             {/* Real-world race-day forecast, centered on the in-sim start hour */}
             {track?.lat != null && (
-              <div className="mt-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
+              <div className="mt-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
                 <div className={`${MICRO} mb-3`}>
                   {pastRace ? 'Conditions on race day' : 'Race-day forecast'} · sim start {hourLabel(centerHour)}
                 </div>
@@ -252,11 +252,11 @@ export default function RaceDetail() {
                     {forecastHours.map((h) => (
                       <div
                         key={h.hour}
-                        className={`min-w-[62px] flex-1 rounded-xl border p-2 text-center ${
-                          h.isCenter ? 'border-[var(--color-brand)] bg-[var(--color-cloud)]' : 'border-[var(--color-line)]'
+                        className={`min-w-[62px] flex-1 rounded-lg border bg-[var(--color-paper)] p-2 text-center ${
+                          h.isCenter ? 'shadow-card border-[var(--color-brand)]' : 'border-[var(--color-line)]'
                         }`}
                       >
-                        <div className="font-body text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">{hourLabel(h.hour)}</div>
+                        <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">{hourLabel(h.hour)}</div>
                         <div className="my-0.5 text-2xl">{h.code != null ? wmo(h.code).icon : '—'}</div>
                         <div className="font-display text-lg leading-none">
                           {h.temp != null ? `${Math.round(h.temp)}°` : '—'}
@@ -275,7 +275,7 @@ export default function RaceDetail() {
 
             {/* In-sim race-day forecast */}
             {!!simWeather?.length && (
-              <div className="mt-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-5">
+              <div className="mt-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-5">
                 <div className={`${MICRO} mb-3`}>Sim race-day forecast</div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {simWeather.map((w) => (
@@ -307,14 +307,24 @@ export default function RaceDetail() {
               {winners.map((w) => {
                 const color = classColor(w.class_id, classes)
                 return (
-                  <div key={w.id} className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
-                    <div className="flex items-center gap-2">
-                      <span className="h-3 w-3 rounded-full" style={{ background: color, boxShadow: 'inset 0 0 0 1px rgba(20,24,28,0.28)' }} />
-                      <span className="font-display text-xl">{w.class_id}</span>
-                      <span className="ml-auto font-display text-2xl leading-none text-[var(--color-faint)]">P1</span>
+                  <div key={w.id} className="flex flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+                    <div className="flex-1 p-5">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          style={{ background: color, boxShadow: 'inset 0 0 0 1px rgba(20,24,28,0.28)' }}
+                          aria-hidden
+                        />
+                        <span className={MICRO}>{w.class_id}</span>
+                        <span className="ml-auto font-display text-3xl leading-none text-[var(--color-line-2)]">P1</span>
+                      </div>
+                      <div className="mt-3 font-display text-2xl leading-tight"><DriverName text={w.drivers_text} /></div>
                     </div>
-                    <div className="mt-2 font-semibold"><DriverName text={w.drivers_text} /></div>
-                    <div className="tabular mt-0.5 text-sm text-[var(--color-muted)]">#{w.number}{w.best_lap ? ` · ${w.best_lap}` : ''}</div>
+                    {/* Tiny mono meta bar — car number and best lap */}
+                    <div className="tabular flex items-center justify-between gap-3 border-t border-[var(--color-line)] bg-[var(--color-mist)] px-5 py-2.5 text-xs text-[var(--color-ink-2)]">
+                      <span>#{w.number}</span>
+                      {w.best_lap && <span>{w.best_lap}</span>}
+                    </div>
                   </div>
                 )
               })}

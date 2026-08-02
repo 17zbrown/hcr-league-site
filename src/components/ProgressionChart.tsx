@@ -49,7 +49,7 @@ export function ProgressionChart({ data, color, max = 8 }: { data: Progression; 
   const opacityFor = (key: string) => (hover && hover !== key ? 0.25 : 1)
 
   return (
-    <div className="shadow-card rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5 md:p-6">
+    <div className="shadow-card rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5 md:p-6">
       <div className="mb-4 flex items-baseline justify-between">
         <h3 className="font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
           Points progression

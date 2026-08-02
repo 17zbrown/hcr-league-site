@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from './supabase'
 import type {
+  NewsArticle,
   AppNotification,
   Champion,
   Driver,
@@ -234,6 +235,24 @@ export function useLicenseResults() {
         .select('drivers_text, event_id, class_id, cls_pos, quali_pos, grid, inc, laps, best_lap, status')
       if (error) throw error
       return data ?? []
+    },
+  })
+}
+
+/** Published news articles, pinned first then newest. */
+export function useNews(limit = 50) {
+  return useQuery({
+    queryKey: ['news', limit],
+    queryFn: async (): Promise<NewsArticle[]> => {
+      const { data, error } = await supabase
+        .from('news')
+        .select('*')
+        .eq('is_published', true)
+        .order('pinned', { ascending: false })
+        .order('published_at', { ascending: false })
+        .limit(limit)
+      if (error) throw error
+      return (data ?? []) as NewsArticle[]
     },
   })
 }

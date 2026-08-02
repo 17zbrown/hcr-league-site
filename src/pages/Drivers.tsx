@@ -2,20 +2,23 @@ import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useCurrentSeason, useDrivers, useLicenseResults, useSeasonResultsFull, useClasses } from '../lib/queries'
 import { buildPaceIndex, computeLicense, resultsForDriver, type LicenseInfo } from '../lib/license'
-import { classColor } from '../lib/format'
-import { Section, Skeleton } from '../components/ui'
+import { CLASS_ORDER, classColor } from '../lib/format'
+import type { ClassId } from '../lib/types'
+import { LoadError, Section, Skeleton } from '../components/ui'
 import { LicenseBadge } from '../components/LicenseBadge'
 import { Reveal } from '../components/motion'
 
 type SortKey = 'name' | 'points'
+type ClassFilter = 'All' | ClassId
 
 export default function Drivers() {
-  const { data: drivers, isLoading } = useDrivers()
+  const { data: drivers, isLoading, isError, refetch } = useDrivers()
   const { data: licenseResults } = useLicenseResults()
   const { data: season } = useCurrentSeason()
   const { data: seasonRows } = useSeasonResultsFull(season?.id)
   const { data: classes } = useClasses()
   const [sort, setSort] = useState<SortKey>('name')
+  const [classFilter, setClassFilter] = useState<ClassFilter>('All')
 
   const licenseByDriver = useMemo(() => {
     const paceIndex = buildPaceIndex(licenseResults ?? [])
@@ -43,6 +46,20 @@ export default function Drivers() {
     return map
   }, [drivers, seasonRows])
 
+  /** Classes a driver belongs to: their team's class plus any class they raced this season. */
+  const classesByDriver = useMemo(() => {
+    const map: Record<string, Set<string>> = {}
+    for (const d of drivers ?? []) {
+      const set = new Set<string>()
+      if (d.team?.class_id) set.add(d.team.class_id)
+      for (const r of resultsForDriver(seasonRows ?? [], d.name)) {
+        if (r.class_id) set.add(r.class_id)
+      }
+      map[d.id] = set
+    }
+    return map
+  }, [drivers, seasonRows])
+
   const sorted = useMemo(() => {
     const list = [...(drivers ?? [])]
     if (sort === 'points') {
@@ -56,6 +73,11 @@ export default function Drivers() {
     return list
   }, [drivers, sort, teaserByDriver])
 
+  const filtered = useMemo(() => {
+    if (classFilter === 'All') return sorted
+    return sorted.filter((d) => classesByDriver[d.id]?.has(classFilter))
+  }, [sorted, classFilter, classesByDriver])
+
   return (
     <Section
       eyebrow={`${drivers?.length ?? 0} registered`}
@@ -67,74 +89,134 @@ export default function Drivers() {
         </Link>
       }
     >
-      <div className="mb-6 flex items-center gap-3">
-        <div className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
-          Sort
-        </div>
-        <div className="flex gap-2">
-          {(['name', 'points'] as const).map((key) => (
+      <div className="mb-8 flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by class">
+          {(['All', ...CLASS_ORDER] as ClassFilter[]).map((key) => (
             <button
               key={key}
               type="button"
-              onClick={() => setSort(key)}
-              aria-pressed={sort === key}
-              className={`inline-flex min-h-11 items-center rounded-full px-5 font-alt text-xs font-bold uppercase tracking-wider transition-colors ${
-                sort === key
-                  ? 'bg-[var(--color-deep)] text-white'
-                  : 'bg-[var(--color-cloud)] text-[var(--color-ink-2)] hover:bg-[var(--color-mist)]'
-              }`}
+              onClick={() => setClassFilter(key)}
+              aria-pressed={classFilter === key}
+              className={`hcr-chip ${classFilter === key ? 'hcr-chip-active' : ''}`}
             >
-              {key === 'name' ? 'Name' : 'Points'}
+              {key !== 'All' && (
+                <span
+                  aria-hidden="true"
+                  className="h-2 w-2 rounded-full"
+                  style={{ background: classColor(key, classes), boxShadow: 'inset 0 0 0 1px rgba(20,24,28,0.28)' }}
+                />
+              )}
+              {key}
             </button>
           ))}
         </div>
+
+        <div className="flex items-center gap-3">
+          <span className="eyebrow">Sort</span>
+          <div className="flex gap-2" role="group" aria-label="Sort drivers">
+            {(['name', 'points'] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setSort(key)}
+                aria-pressed={sort === key}
+                className={`hcr-chip ${sort === key ? 'hcr-chip-active' : ''}`}
+              >
+                {key === 'name' ? 'Name' : 'Points'}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {isError ? (
+        <LoadError what="the roster" onRetry={() => refetch()} />
+      ) : isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 9 }).map((_, i) => (
-            <Skeleton key={i} className="h-24 w-full" />
+            <Skeleton key={i} className="h-48 w-full" />
           ))}
         </div>
+      ) : drivers && filtered.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-[var(--color-line-2)] bg-[var(--color-paper)] p-10 text-center">
+          <p className="font-display text-2xl">
+            {classFilter === 'All' ? 'No drivers yet.' : `No ${classFilter} drivers.`}
+          </p>
+          <p className="mx-auto mt-2 max-w-sm font-body text-sm text-[var(--color-muted)]">
+            {classFilter === 'All'
+              ? 'The roster is empty right now.'
+              : `No one on the roster is entered or has raced in ${classFilter} this season.`}
+          </p>
+        </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {sorted.map((d, i) => {
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((d, i) => {
             const teaser = teaserByDriver[d.id]
             const dotColor = d.team?.class_id ? classColor(d.team.class_id, classes) : null
+            const meta = [
+              d.team?.name ?? 'Free agent',
+              d.team?.class_id ?? null, // class in text, not color alone
+              d.team?.number ? `#${d.team.number}` : null,
+              d.irating ? `${d.irating} iR` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')
             return (
-              <Reveal key={d.id} delay={Math.min(i * 0.03, 0.3)}>
+              <Reveal key={d.id} delay={Math.min(i * 0.03, 0.3)} className="h-full">
                 <Link
                   to={`/drivers/${d.id}`}
-                  className="flex items-center gap-4 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 transition-all hover:-translate-y-1 hover:shadow-card"
+                  className="group flex h-full flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] transition hover:-translate-y-0.5 hover:shadow-card"
                 >
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--color-mist)] font-display text-2xl text-[var(--color-ink)]">
-                    {d.team?.number ?? d.name.slice(0, 1)}
+                  <div className="flex items-center justify-between gap-3 px-5 pt-5">
+                    {licenseByDriver[d.id] ? (
+                      <LicenseBadge tier={licenseByDriver[d.id].effective} size="xs" />
+                    ) : (
+                      <span />
+                    )}
+                    {dotColor && (
+                      <span
+                        className="h-3 w-3 shrink-0 rounded-full"
+                        title={d.team?.class_id}
+                        style={{ background: dotColor, boxShadow: 'inset 0 0 0 1px rgba(20,24,28,0.28)' }}
+                      />
+                    )}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate font-display text-2xl leading-none">{d.name}</span>
-                      {d.country && <span className="text-base leading-none">{d.country}</span>}
+
+                  <div className="px-5 pt-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="min-w-0 truncate font-display text-2xl leading-none">{d.name}</span>
+                      {d.country && <span className="shrink-0 text-base leading-none">{d.country}</span>}
                     </div>
-                    <div className="mt-1.5 flex min-w-0 items-center gap-2">
-                      <span className="truncate font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
-                        {d.team?.name ?? 'Free agent'}
+                    <div className="mt-2 truncate font-mono text-[11px] text-[var(--color-muted)]">{meta}</div>
+                  </div>
+
+                  {/* Season teaser — the card's "price" row */}
+                  <div className="mt-auto flex items-baseline justify-between gap-2 px-5 pb-4 pt-6">
+                    {teaser && teaser.pts > 0 ? (
+                      <>
+                        <span className="font-display text-2xl leading-none">
+                          {teaser.pts}
+                          <span className="ml-1.5 font-body text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
+                            pts
+                          </span>
+                        </span>
+                        {teaser.wins > 0 && (
+                          <span className="tabular text-xs text-[var(--color-muted)]">
+                            {teaser.wins}W
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span aria-hidden="true" className="font-mono text-[11px] text-[var(--color-faint)]">
+                        &mdash;
                       </span>
-                      {licenseByDriver[d.id] && <LicenseBadge tier={licenseByDriver[d.id].effective} size="xs" />}
-                    </div>
+                    )}
                   </div>
-                  {teaser && teaser.pts > 0 && (
-                    <div className="tabular shrink-0 text-right text-sm font-medium text-[var(--color-ink-2)]">
-                      {teaser.pts} pts
-                      {teaser.wins > 0 && <span className="text-[var(--color-muted)]"> &middot; {teaser.wins}W</span>}
-                    </div>
-                  )}
-                  {dotColor && (
-                    <span
-                      className="h-3 w-3 shrink-0 rounded-full"
-                      title={d.team?.class_id}
-                      style={{ background: dotColor, boxShadow: 'inset 0 0 0 1px rgba(20,24,28,0.28)' }}
-                    />
-                  )}
+
+                  <div className="flex items-center justify-between border-t border-[var(--color-line)] px-5 py-3.5 font-alt text-[11px] font-bold uppercase tracking-[0.08em] transition-colors group-hover:bg-[var(--color-deep)] group-hover:text-white group-focus-visible:bg-[var(--color-deep)] group-focus-visible:text-white">
+                    View profile
+                    <span aria-hidden="true">&rarr;</span>
+                  </div>
                 </Link>
               </Reveal>
             )

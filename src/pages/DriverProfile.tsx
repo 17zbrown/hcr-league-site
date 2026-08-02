@@ -70,7 +70,7 @@ export default function DriverProfile() {
         ← Drivers
       </Link>
 
-      {/* ---------- Feature header: navy panel, name in serif ---------- */}
+      {/* ---------- Feature header: black feature panel (on-navy inverts tokens) ---------- */}
       <section className="on-navy relative overflow-hidden rounded-3xl bg-[var(--color-deep)]">
         <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden="true" />
         <div
@@ -299,10 +299,7 @@ export default function DriverProfile() {
                 </ul>
               </div>
 
-              <Link
-                to={'/compare?a=' + driver.id}
-                className="inline-block font-body text-sm font-semibold text-[var(--color-blue)] underline-offset-4 hover:underline"
-              >
+              <Link to={'/compare?a=' + driver.id} className="hcr-btn hcr-btn-ghost w-full">
                 Compare with another driver →
               </Link>
             </aside>

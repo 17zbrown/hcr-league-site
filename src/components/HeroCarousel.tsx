@@ -6,7 +6,7 @@ import { computeStandings } from '../lib/standings'
 import { CLASS_ORDER, classColor, eventEnded, fmtDateLong } from '../lib/format'
 import Countdown from './Countdown'
 import { ClassChip } from './ui'
-import HeroYouTube from './HeroYouTube'
+import HeroVideo from './HeroVideo'
 import SmokeCanvas from './SmokeCanvas'
 import { DriverName } from './links'
 
@@ -32,7 +32,7 @@ export default function HeroCarousel() {
     const complete = sorted.filter((e) => e.status === 'complete')
     const next =
       sorted.find((e) => e.status === 'next') ??
-      sorted.find((e) => !eventEnded(e.date))
+      sorted.find((e) => e.status !== 'complete' && !eventEnded(e.date))
     const last = complete[complete.length - 1]
     const standings = computeStandings(results ?? [], teams ?? [])
     const leaders = CLASS_ORDER.map((c) => ({ cls: c, row: standings.drivers[c]?.[0] })).filter((x) => x.row)
@@ -154,15 +154,16 @@ export default function HeroCarousel() {
 
   const [idx, setIdx] = useState(0)
   const [paused, setPaused] = useState(false)
+  const [userPaused, setUserPaused] = useState(false)
   const [videoActive, setVideoActive] = useState(false)
   const count = slides.length
   const active = Math.min(idx, count - 1)
 
   useEffect(() => {
-    if (paused || reduce || count <= 1) return
+    if (paused || userPaused || reduce || count <= 1) return
     const id = setInterval(() => setIdx((i) => (i + 1) % count), AUTO_MS)
     return () => clearInterval(id)
-  }, [paused, reduce, count])
+  }, [paused, userPaused, reduce, count])
 
   if (!count) return null
 
@@ -176,17 +177,15 @@ export default function HeroCarousel() {
       aria-roledescription="carousel"
       aria-label="Featured league highlights"
     >
-      {/* Official iRacing trailer (falls back to the tire-smoke hero if the
-          embed can't autoplay / load). */}
+      {/* League race footage (falls back to the tire-smoke hero if the video
+          can't autoplay / load). */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden bg-[var(--color-deep)]">
-        <HeroYouTube onActive={setVideoActive} />
+        <HeroVideo onActive={setVideoActive} />
       </div>
 
-      {/* Opaque curtain over the player until it is genuinely PLAYING, so a
-          blocked-autoplay / loading / error frame never shows. The video is left
-          fully visible to the browser (opacity-gating the iframe itself makes
-          YouTube treat it as hidden and refuse to autoplay), so playback still
-          starts underneath the curtain, which then fades away. */}
+      {/* Opaque curtain over the video until it is genuinely playing, so a
+          blocked-autoplay / loading / error frame never shows; the smoke hero
+          runs underneath it in the meantime. */}
       <div
         className={`pointer-events-none absolute inset-0 bg-[var(--color-deep)] transition-opacity duration-700 ${
           videoActive ? 'opacity-0' : 'opacity-100'
@@ -201,7 +200,7 @@ export default function HeroCarousel() {
           className="pointer-events-none absolute inset-0"
           style={{
             background:
-              'linear-gradient(100deg, rgba(22,48,61,0.94) 0%, rgba(22,48,61,0.86) 38%, rgba(22,48,61,0.48) 72%, rgba(22,48,61,0.18) 100%)',
+              'linear-gradient(100deg, rgba(11,11,13,0.94) 0%, rgba(11,11,13,0.86) 38%, rgba(11,11,13,0.48) 72%, rgba(11,11,13,0.18) 100%)',
           }}
         />
       )}
@@ -216,25 +215,14 @@ export default function HeroCarousel() {
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            'linear-gradient(90deg, rgba(22,48,61,0.55) 0%, rgba(22,48,61,0.28) 46%, rgba(22,48,61,0.05) 78%, rgba(22,48,61,0.28) 100%)',
+            'linear-gradient(90deg, rgba(11,11,13,0.55) 0%, rgba(11,11,13,0.28) 46%, rgba(11,11,13,0.05) 78%, rgba(11,11,13,0.28) 100%)',
         }}
       />
       <div
         className="pointer-events-none absolute inset-x-0 bottom-0 h-24"
-        style={{ background: 'linear-gradient(to top, #16303d, transparent)' }}
+        style={{ background: 'linear-gradient(to top, var(--color-deep), transparent)' }}
       />
 
-      {/* Credit the rights-holder while their trailer is on screen. */}
-      {videoActive && (
-        <a
-          href="https://www.youtube.com/@iRacingOfficial"
-          target="_blank"
-          rel="noreferrer"
-          className="absolute bottom-2 right-3 z-10 font-mono text-[10px] uppercase tracking-[0.14em] text-white/60 transition-colors hover:text-white/90"
-        >
-          Trailer · iRacing
-        </a>
-      )}
 
       <div className="container-hcr relative py-14 md:py-20">
         <div className="relative min-h-[600px] sm:min-h-[540px] md:min-h-[460px]">
@@ -272,17 +260,30 @@ export default function HeroCarousel() {
         </div>
 
         {count > 1 && (
-          <div className="mt-8 flex items-center gap-3">
+          <div className="mt-6 flex items-center gap-1">
             {slides.map((s, i) => (
               <button
                 key={s.key}
                 onClick={() => setIdx(i)}
                 aria-label={`Go to slide ${i + 1}`}
                 aria-current={i === active ? 'true' : undefined}
-                className="h-2.5 rounded-full transition-all duration-300"
-                style={{ width: i === active ? 34 : 10, background: i === active ? 'var(--color-ink)' : 'var(--color-line-2)' }}
-              />
+                className="flex h-11 min-w-11 items-center justify-center px-1"
+              >
+                <span
+                  aria-hidden
+                  className="h-2.5 rounded-full transition-all duration-300"
+                  style={{ width: i === active ? 34 : 10, background: i === active ? 'var(--color-ink)' : 'var(--color-muted)' }}
+                />
+              </button>
             ))}
+            <button
+              onClick={() => setUserPaused((v) => !v)}
+              aria-pressed={userPaused}
+              aria-label={userPaused ? 'Resume slide rotation' : 'Pause slide rotation'}
+              className="ml-1 flex h-11 w-11 items-center justify-center rounded-lg border border-[var(--color-line-2)] font-mono text-xs text-[var(--color-ink-2)] transition-colors hover:border-[var(--color-ink)]"
+            >
+              {userPaused ? '►' : 'II'}
+            </button>
             <span className="tabular ml-2 font-mono text-xs text-[var(--color-faint)]">
               {String(active + 1).padStart(2, '0')} / {String(count).padStart(2, '0')}
             </span>

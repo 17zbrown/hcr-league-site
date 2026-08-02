@@ -22,6 +22,9 @@ export default function FillInStandings() {
   const meName = profile?.display_name ?? null
 
   const rows = useMemo(() => computeFillInStandings(results ?? []), [results])
+  // a driver who fills in across two classes appears once per class in the
+  // table — the headline stat counts PEOPLE, so dedupe on the crew part
+  const cupDrivers = useMemo(() => new Set(rows.map((r) => r.key.split('::')[0])).size, [rows])
   const driveCount = useMemo(() => fillInRows(results ?? []).length, [results])
 
   return (
@@ -38,16 +41,19 @@ export default function FillInStandings() {
             table, its own bragging rights. Same points scale, separate title.
           </p>
         </div>
-        <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 shadow-card">
-          <div className="font-mono text-xs uppercase tracking-widest text-[var(--color-muted)]">This season</div>
-          <div className="mt-3 flex items-end gap-8">
-            <div>
-              <div className="font-display text-5xl leading-none"><CountUp value={driveCount} /></div>
-              <div className="mt-1.5 text-sm text-[var(--color-muted)]">fill-in drives</div>
-            </div>
-            <div>
-              <div className="font-display text-5xl leading-none"><CountUp value={rows.length} /></div>
-              <div className="mt-1.5 text-sm text-[var(--color-muted)]">drivers in the cup</div>
+        <div className="on-navy shadow-card relative overflow-hidden rounded-xl bg-[var(--color-deep)] p-6 md:p-7">
+          <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden />
+          <div className="relative">
+            <div className="font-mono text-xs uppercase tracking-widest text-[var(--color-muted)]">This season</div>
+            <div className="mt-4 flex items-end gap-10">
+              <div>
+                <div className="font-display text-5xl leading-none md:text-6xl"><CountUp value={driveCount} /></div>
+                <div className="mt-2 text-sm text-[var(--color-muted)]">fill-in drives</div>
+              </div>
+              <div>
+                <div className="font-display text-5xl leading-none md:text-6xl"><CountUp value={cupDrivers} /></div>
+                <div className="mt-2 text-sm text-[var(--color-muted)]">drivers in the cup</div>
+              </div>
             </div>
           </div>
         </div>
@@ -58,7 +64,7 @@ export default function FillInStandings() {
       ) : isLoading ? (
         <Skeleton className="h-72 w-full" />
       ) : rows.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-[var(--color-line-2)] bg-[var(--color-paper)] p-10 text-center">
+        <div className="rounded-xl border border-dashed border-[var(--color-line-2)] bg-[var(--color-paper)] p-10 text-center">
           <p className="font-display text-3xl">No fill-in drives yet.</p>
           <p className="mx-auto mt-3 max-w-md text-[var(--color-muted)]">
             The first time a driver races a round their class isn't part of, they'll show up
@@ -67,7 +73,7 @@ export default function FillInStandings() {
           <Link to="/standings" className="hcr-btn hcr-btn-dark mt-6 inline-flex">Main Championship</Link>
         </div>
       ) : (
-        <div className="shadow-card relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+        <div className="shadow-card relative overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)]">
           <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[var(--color-paper)] sm:hidden" aria-hidden />
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse">
@@ -124,7 +130,7 @@ export default function FillInStandings() {
       )}
 
       <div className="mt-8">
-        <Link to="/standings" className="font-mono text-xs uppercase tracking-[0.14em] text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]">
+        <Link to="/standings" className="inline-flex min-h-11 items-center font-mono text-xs uppercase tracking-[0.14em] text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]">
           ← Main championship standings
         </Link>
       </div>

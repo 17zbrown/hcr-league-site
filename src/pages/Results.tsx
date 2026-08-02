@@ -4,7 +4,7 @@ import { CLASS_ORDER, classColor, fmtDateLong } from '../lib/format'
 import { lapToSeconds } from '../lib/license'
 import { useAuth } from '../lib/auth'
 import { resultListsDriver } from '../lib/attribution'
-import { Section, Skeleton } from '../components/ui'
+import { LoadError, Section, Skeleton } from '../components/ui'
 import { DriverName } from '../components/links'
 
 /** The editorial micro-label: tiny, letterspaced, muted. */
@@ -12,7 +12,7 @@ const MICRO = 'font-body text-[11px] font-semibold uppercase tracking-[0.16em] t
 
 export default function Results() {
   const { data: season } = useCurrentSeason()
-  const { data: events } = useEvents(season?.id)
+  const { data: events, isError: eventsError, refetch: refetchEvents } = useEvents(season?.id)
   const completed = useMemo(
     () => (events ?? []).filter((e) => e.status === 'complete').sort((a, b) => b.round - a.round),
     [events],
@@ -26,7 +26,9 @@ export default function Results() {
 
   return (
     <Section eyebrow={`${season?.name ?? 'Season'} · Race results`} title="Results" titleTag="h1">
-      {completed.length === 0 ? (
+      {eventsError ? (
+        <LoadError what="the race calendar" onRetry={() => refetchEvents()} />
+      ) : completed.length === 0 ? (
         <p className="text-[var(--color-muted)]">No races have been run yet this season.</p>
       ) : (
         <>
@@ -36,20 +38,13 @@ export default function Results() {
               return (
                 <button
                   key={e.id}
+                  type="button"
                   onClick={() => setEventId(e.id)}
                   aria-pressed={isActive}
-                  className={`rounded-xl border px-4 py-2.5 text-left transition-all ${
-                    isActive
-                      ? 'on-navy shadow-card border-transparent bg-[var(--color-deep)]'
-                      : 'border-[var(--color-line)] bg-[var(--color-paper)] hover:border-[var(--color-line-2)]'
-                  }`}
+                  className={`hcr-chip ${isActive ? 'hcr-chip-active' : ''}`}
                 >
-                  <div className={MICRO}>Round {e.round}</div>
-                  <div className="font-display text-xl">
-                    <span className={isActive ? 'border-b-2 border-[var(--color-brand)] pb-px' : ''}>
-                      {e.track?.name}
-                    </span>
-                  </div>
+                  <span className="tabular">R{e.round}</span>
+                  {e.track?.name}
                 </button>
               )
             })}
@@ -57,7 +52,7 @@ export default function Results() {
 
           {active && (
             <div className="mb-6">
-              <h3 className="text-3xl">{active.name}</h3>
+              <h2 className="text-3xl">{active.name}</h2>
               <div className="tabular mt-1 text-[var(--color-muted)]">
                 {active.track?.name} · {fmtDateLong(active.date)}
               </div>
@@ -72,12 +67,13 @@ export default function Results() {
 }
 
 function ResultsTable({ eventId, report }: { eventId: string; report: string | null }) {
-  const { data: results, isLoading } = useResults(eventId)
+  const { data: results, isLoading, isError: resultsError, refetch: refetchResults } = useResults(eventId)
   const { data: classes } = useClasses()
   const { profile } = useAuth()
   const meName = profile?.display_name ?? null
 
   if (isLoading) return <Skeleton className="h-96 w-full" />
+  if (resultsError) return <LoadError what="this round's results" onRetry={() => refetchResults()} />
 
   return (
     <div className="space-y-10">
@@ -95,18 +91,20 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
           if (s != null && s < flSec) { flSec = s; flId = r.id }
         }
         return (
-          <div key={cls}>
-            <div className="mb-3 flex items-baseline gap-3">
+          <div key={cls} className="shadow-card overflow-hidden rounded-xl border border-[var(--color-line)]">
+            {/* Class header — black bar, inverted via on-navy tokens */}
+            <div className="on-navy flex items-center gap-3 bg-[var(--color-deep)] px-4 py-3 sm:px-5">
               <span
-                className="h-2.5 w-2.5 shrink-0 self-center rounded-full"
-                style={{ background: color, boxShadow: 'inset 0 0 0 1px rgba(20,24,28,0.28)' }}
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ background: color, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.3)' }}
                 aria-hidden
               />
-              <h3 className="text-2xl leading-none">{cls}</h3>
-              <span className={MICRO}>{rows.length} {rows.length === 1 ? 'car' : 'cars'}</span>
-              <span className="h-px flex-1 self-center bg-[var(--color-line)]" aria-hidden />
+              <h3 className="text-xl leading-none">{cls}</h3>
+              <span className="ml-auto font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
+                {rows.length} {rows.length === 1 ? 'car' : 'cars'}
+              </span>
             </div>
-            <div className="shadow-card relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+            <div className="relative bg-[var(--color-paper)]">
               <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[var(--color-paper)] sm:hidden" aria-hidden />
               <div className="overflow-x-auto" tabIndex={0} role="region" aria-label={`${cls} classification`}>
               <table className="w-full min-w-[820px] border-collapse text-sm">

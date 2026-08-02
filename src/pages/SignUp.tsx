@@ -17,44 +17,37 @@ export default function SignUp() {
 
   return (
     <>
-      <section className="relative overflow-hidden">
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{ background: 'radial-gradient(55% 55% at 82% -10%, rgba(242,225,20,0.16), transparent 62%)' }}
-        />
-        <div className="container-hcr relative py-16 md:py-24">
-          <Reveal>
-            <div className="mb-5 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Season registration</div>
-            <h1 className="max-w-3xl text-6xl md:text-8xl">Join the grid</h1>
-            <p className="mt-7 max-w-lg text-lg text-[var(--color-muted)]">
-              Create a member account, then enter the season from your account page. Every driver
-              starts on a Bronze license and earns upgrades from race results — pace, safety and
-              finishing position — climbing from GTD up to GTP. Team managers sign drivers from the
-              free-agent pool.
-            </p>
-            <div className="mt-9 flex flex-wrap gap-3">
-              <Link
-                to={session ? '/account' : '/login'}
-                className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-sm font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1"
+      <section className="container-hcr py-16 md:py-24">
+        <Reveal>
+          <div className="mb-5 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
+            Season registration
+          </div>
+          <h1 className="max-w-3xl text-6xl md:text-8xl">Join the grid</h1>
+          <p className="mt-7 max-w-lg text-lg text-[var(--color-muted)]">
+            Create a member account, then enter the season from your account page. Every driver
+            starts on a Bronze license and earns upgrades from race results — pace, safety and
+            finishing position — climbing from GTD up to GTP. Team managers sign drivers from the
+            free-agent pool.
+          </p>
+          <div className="mt-9 flex flex-wrap gap-3">
+            <Link to={session ? '/account' : '/login'} className="hcr-btn hcr-btn-primary px-7">
+              {session ? 'Enter the Season' : 'Create Account & Enter'}
+            </Link>
+            {settings?.discord_url && (
+              <a
+                href={settings.discord_url}
+                target="_blank"
+                rel="noreferrer"
+                className="hcr-btn hcr-btn-ghost px-7"
               >
-                {session ? 'Enter the Season' : 'Create Account & Enter'}
-              </Link>
-              {settings?.discord_url && (
-                <a
-                  href={settings.discord_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-alt text-sm font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]"
-                >
-                  Join the Discord
-                </a>
-              )}
-            </div>
-          </Reveal>
-        </div>
+                Join the Discord
+              </a>
+            )}
+          </div>
+        </Reveal>
       </section>
 
-      <div className="bg-[var(--color-mist)]">
+      <div className="on-navy bg-[var(--color-deep)]">
         <Section eyebrow="Eligibility" title="The license ladder">
           <div className="grid gap-px overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-line)] sm:grid-cols-2 md:grid-cols-4">
             {LADDER.map((l, i) => (
@@ -62,8 +55,16 @@ export default function SignUp() {
                 <div className="flex h-full flex-col p-6">
                   <div className="tabular text-sm text-[var(--color-faint)]">0{i + 1}</div>
                   <div className="mt-2 font-display text-3xl">{l.cat}</div>
-                  <div className="mt-1 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-blue)]">{l.classes}</div>
-                  <p className="mt-4 border-t border-[var(--color-line)] pt-3 text-sm text-[var(--color-muted)]">{l.desc}</p>
+                  <div className="mb-4 mt-3 flex flex-wrap gap-1.5">
+                    {l.classes.split(' · ').map((c) => (
+                      <span key={c} className="hcr-chip">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-auto border-t border-[var(--color-line)] pt-3 text-sm text-[var(--color-muted)]">
+                    {l.desc}
+                  </p>
                 </div>
               </Reveal>
             ))}

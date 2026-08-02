@@ -88,7 +88,7 @@ export default function TeamProfile() {
         ← Teams
       </Link>
 
-      {/* ---------- Feature header: navy panel, name in serif ---------- */}
+      {/* ---------- Feature header: black feature panel (on-navy inverts tokens) ---------- */}
       <section className="on-navy relative overflow-hidden rounded-3xl bg-[var(--color-deep)]">
         <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden="true" />
         <div
@@ -142,7 +142,7 @@ export default function TeamProfile() {
                 {m.driver ? (
                   <Link
                     to={`/drivers/${m.driver.id}`}
-                    className="group flex min-h-[68px] items-center gap-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 transition-all hover:-translate-y-1 hover:shadow-card"
+                    className="group flex min-h-[68px] items-center gap-3 rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 transition-all hover:-translate-y-0.5 hover:shadow-card"
                     style={{ borderLeft: `3px solid ${color}` }}
                   >
                     <div className="min-w-0">

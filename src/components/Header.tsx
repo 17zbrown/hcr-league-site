@@ -113,10 +113,12 @@ function FullMenu({
   isRaceControl: boolean
   discord: string | null
 }) {
+  // Sign-in is deliberately not surfaced (members don't log in for now —
+  // /login stays reachable by URL for staff). Portal links appear only for
+  // already-authenticated staff sessions.
   const accountLinks = [
-    session ? { to: '/portal', label: 'My Portal' } : { to: '/login', label: 'Sign In' },
-    ...(session ? [{ to: '/portal', label: 'File a Protest' }] : []),
-    { to: '/signup', label: session ? 'Enter the Season' : 'Create Account' },
+    ...(session ? [{ to: '/portal', label: 'My Portal' }] : []),
+    { to: '/signup', label: 'Enter the Season' },
     ...(isRaceControl ? [{ to: '/control', label: 'Race Control Portal' }] : []),
     ...(isAdmin ? [{ to: '/admin', label: 'Admin Portal' }] : []),
     ...(isManager ? [{ to: '/manager', label: 'Team Manager Portal' }] : []),

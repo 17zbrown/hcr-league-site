@@ -3,8 +3,8 @@ import { useReducedMotion } from 'framer-motion'
 
 /* ------------------------------------------------------------------ *
  * The editorial kit: the reference's language as reusable parts —
- * hairline-divided stat bands with big serif numerals, navy feature
- * panels, and eyebrow + serif section heads.
+ * hairline-divided stat bands with big display numerals, navy feature
+ * panels, and eyebrow + display section heads.
  * ------------------------------------------------------------------ */
 
 /** Fires once when the element scrolls into view. */

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useClasses, useCurrentSeason, useSeasonResultsFull, useTeams } from '../lib/queries'
-import { computeProgression, computeStandings } from '../lib/standings'
+import { computeProgression, computeStandings, type Progression } from '../lib/standings'
 import { CLASS_ORDER, classColor, classLineColor } from '../lib/format'
 import { useAuth } from '../lib/auth'
 import { resultListsDriver } from '../lib/attribution'
@@ -28,10 +28,27 @@ export default function Standings() {
   const progression = useMemo(() => {
     if (!fullResults) return null
     if (tab === 'TEAMS') {
-      // Merge all classes' team series for an overall team-points battle.
+      // Merge all classes' team series onto ONE union round axis — classes can
+      // run different calendars, so indexing by any single class's rounds
+      // misaligns every other class's line.
       const merged = CLASS_ORDER.map((c) => computeProgression(fullResults, c, teams ?? [], 'teams'))
-      const rounds = merged.find((m) => m.rounds.length)?.rounds ?? []
-      const series = merged.flatMap((m) => m.series).sort((a, b) => b.total - a.total)
+      const roundMap = new Map<number, Progression['rounds'][number]>()
+      for (const m of merged) for (const r of m.rounds) if (!roundMap.has(r.round)) roundMap.set(r.round, r)
+      const rounds = [...roundMap.values()].sort((a, b) => a.round - b.round)
+      const series = merged
+        .flatMap((m) => {
+          const idxByRound = new Map(m.rounds.map((r, i) => [r.round, i]))
+          return m.series.map((sr) => {
+            let run = 0
+            const cumulative = rounds.map((r) => {
+              const i = idxByRound.get(r.round)
+              if (i != null) run = sr.cumulative[i]
+              return run
+            })
+            return { ...sr, cumulative }
+          })
+        })
+        .sort((a, b) => b.total - a.total)
       return { rounds, series }
     }
     return computeProgression(fullResults, tab, teams ?? [], 'drivers')
@@ -44,27 +61,29 @@ export default function Standings() {
 
   return (
     <Section eyebrow={`${season?.name ?? 'Season'} · Championship`} title="Standings" titleTag="h1">
-      <div className="mb-8 flex flex-wrap items-center gap-1 border-b border-[var(--color-line)]">
+      <div className="mb-8 flex flex-wrap items-center gap-2">
         {tabs.map((t) => {
           const active = tab === t.id
           const color = t.id === 'TEAMS' ? 'var(--color-brand)' : classColor(t.id, classes)
           return (
             <button
               key={t.id}
+              type="button"
               onClick={() => setTab(t.id)}
-              className={`relative px-5 py-3 font-display text-3xl transition-colors ${
-                active ? 'text-[var(--color-ink)]' : 'text-[var(--color-faint)] hover:text-[var(--color-ink)]'
-              }`}
+              aria-pressed={active}
+              className={`hcr-chip ${active ? 'hcr-chip-active' : ''}`}
             >
+              {/* class-color dot; inset ring keeps the pale GTP yellow visible on white */}
+              <span
+                aria-hidden
+                className="h-2 w-2 rounded-full"
+                style={{ background: color, boxShadow: 'inset 0 0 0 1px rgba(20,24,28,0.28)' }}
+              />
               {t.label}
-              {active && <span className="absolute inset-x-0 -bottom-px h-[3px]" style={{ background: color }} />}
             </button>
           )
         })}
-        <Link
-          to="/standings/fill-in"
-          className="ml-auto px-2 py-3 font-mono text-xs uppercase tracking-[0.14em] text-[var(--color-muted)] transition-colors hover:text-[var(--color-ink)]"
-        >
+        <Link to="/standings/fill-in" className="hcr-chip ml-auto bg-transparent!">
           Fill-In Cup →
         </Link>
       </div>
@@ -78,7 +97,7 @@ export default function Standings() {
         {progression && progression.rounds.length > 0 && progression.series.length > 0 && (
           <ProgressionChart
             data={progression}
-            color={tab === 'TEAMS' ? '#97890a' : classLineColor(tab)}
+            color={tab === 'TEAMS' ? 'var(--color-brand-deep)' : classLineColor(tab)}
           />
         )}
         <StandingsTable
@@ -113,7 +132,7 @@ function StandingsTable({
   const leaderPts = data[0]?.points ?? 0
 
   return (
-    <div className="shadow-card relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+    <div className="shadow-card relative overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)]">
       <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[var(--color-paper)] sm:hidden" aria-hidden />
       <div className="overflow-x-auto">
       <table className="w-full min-w-[640px] border-collapse">

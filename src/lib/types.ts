@@ -225,6 +225,22 @@ export interface AppNotification {
   created_at: string
 }
 
+export interface NewsArticle {
+  id: string
+  slug: string
+  title: string
+  dek: string | null
+  body_md: string
+  category: string
+  event_id: string | null
+  cover_url: string | null
+  author: string
+  is_published: boolean
+  pinned: boolean
+  published_at: string
+  created_at: string
+}
+
 export interface SeasonRegistration {
   id: string
   season_id: string

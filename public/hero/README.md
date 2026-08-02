@@ -1,13 +1,11 @@
-# Hero background clips
+# Hero footage
 
-Drop your own race video clips here to play behind the home hero.
+`hero-1.mp4` is the self-hosted hero background (H.264, 960x540, ~42MB), played
+by `src/components/HeroVideo.tsx` — muted, looping, cover-cropped, behind a
+curtain that lifts once playback actually starts (tire-smoke canvas otherwise).
 
-- Filenames: `hero-1.mp4`, `hero-2.mp4`, `hero-3.mp4` (multiple clips cycle automatically).
-- Format: **MP4 (H.264)**, muted, ~8–15s each, 1080p or 720p, a few MB each (keep them
-  small so the page loads fast). `.webm` also works if you rename the list in
-  `src/components/HeroVideo.tsx`.
-- Use **your own league footage / broadcasts** — do not use copyrighted IMSA TV footage.
-- If no clips are present here, the hero automatically falls back to the animated 3D logo.
+Small screens (<640px), Save-Data and 2G connections skip the download and get
+the animated smoke hero instead; `prefers-reduced-motion` gets a settled haze.
 
-To change how many clips or their names, edit the `CLIPS` array in
-`src/components/HeroVideo.tsx`.
+To swap the clip: replace `hero-1.mp4` (keep the name) with H.264 MP4. On a Mac
+without ffmpeg: `avconvert --preset Preset960x540 --source in.mov --output hero-1.mp4`.

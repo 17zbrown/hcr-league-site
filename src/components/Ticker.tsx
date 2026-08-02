@@ -22,7 +22,7 @@ export default function Ticker() {
     const complete = sorted.filter((e) => e.status === 'complete')
     const next =
       sorted.find((e) => e.status === 'next') ??
-      sorted.find((e) => !eventEnded(e.date))
+      sorted.find((e) => e.status !== 'complete' && !eventEnded(e.date))
     const last = complete[complete.length - 1]
 
     if (season) out.push({ label: 'Season', value: season.name })

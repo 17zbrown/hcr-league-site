@@ -190,7 +190,7 @@ export default function Compare() {
       const m = new Map<number, FullRow>()
       for (const r of rows) {
         const rd = r.event?.round
-        if (rd == null || r.cls_pos == null) continue
+        if (rd == null || r.cls_pos == null || r.fill_in) continue // fill-in drives sit outside the duel
         const prev = m.get(rd)
         if (prev == null || r.cls_pos < (prev.cls_pos ?? Infinity)) m.set(rd, r)
       }
@@ -298,7 +298,7 @@ export default function Compare() {
           <FeaturePanel className="mt-8">
             <div className="grid items-center gap-6 p-7 md:grid-cols-[1fr_auto_1fr] md:gap-8 md:p-10">
               <HeadName driver={driverA!} classes={classes} side="a" />
-              <div className="text-center font-display text-3xl italic leading-none text-[var(--color-muted)] md:text-4xl">
+              <div className="text-center font-mono text-sm uppercase tracking-[0.3em] text-[var(--color-muted)]">
                 vs
               </div>
               <HeadName driver={driverB!} classes={classes} side="b" />

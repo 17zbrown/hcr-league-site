@@ -1,60 +1,109 @@
-import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useCurrentSeason, useEvents } from '../lib/queries'
+import { useNews } from '../lib/queries'
+import type { NewsArticle } from '../lib/types'
 import { fmtDateLong } from '../lib/format'
-import { Section } from '../components/ui'
+import { LoadError, Section, Skeleton } from '../components/ui'
 import { Reveal } from '../components/motion'
 
-/** Editorial feed of per-race reports (written by the commissioner on each event). */
-export default function Reports() {
-  const { data: season } = useCurrentSeason()
-  const { data: events } = useEvents(season?.id)
+/** Plain paragraphs from the stored body — split on blank lines, no markdown lib. */
+function paragraphs(body: string): string[] {
+  return body
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0)
+}
 
-  const reports = useMemo(
-    () =>
-      (events ?? [])
-        .filter((e) => (e.report ?? '').trim().length > 0)
-        .sort((a, b) => b.round - a.round),
-    [events],
+/** One story. Pinned articles render as the black feature panel. */
+function ArticleCard({ article }: { article: NewsArticle }) {
+  const feature = article.pinned
+  const paras = paragraphs(article.body_md)
+  return (
+    <article
+      className={
+        feature
+          ? 'on-navy relative overflow-hidden rounded-2xl bg-[var(--color-deep)] shadow-card'
+          : 'overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]'
+      }
+    >
+      {feature && <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden />}
+      <div className="relative p-6 md:p-10">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="hcr-chip">{article.category}</span>
+          {feature && (
+            <span className="rounded-full bg-[var(--color-brand)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-black">
+              Pinned
+            </span>
+          )}
+          <span className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
+            {fmtDateLong(article.published_at)}
+            <span aria-hidden> · </span>
+            By {article.author}
+          </span>
+        </div>
+        <h2 className={`mt-5 max-w-3xl ${feature ? 'text-4xl md:text-6xl' : 'text-3xl md:text-5xl'}`}>
+          {article.title}
+        </h2>
+        {article.dek && (
+          <p className="mt-4 max-w-2xl font-body text-lg leading-relaxed text-[var(--color-ink-2)]">
+            {article.dek}
+          </p>
+        )}
+        {paras.length > 0 && (
+          <div className="mt-6 max-w-prose space-y-4 font-body leading-relaxed text-[var(--color-ink-2)]">
+            {paras.map((p, i) => (
+              <p key={i}>{p}</p>
+            ))}
+          </div>
+        )}
+      </div>
+      {article.event_id && (
+        <Link
+          to={`/schedule/${article.event_id}`}
+          className="relative flex min-h-11 items-center justify-between border-t border-[var(--color-line)] px-6 py-4 font-alt text-xs font-bold uppercase tracking-wider text-[var(--color-ink)] transition-colors hover:bg-[var(--color-cloud)] md:px-10"
+        >
+          Race details
+          <span aria-hidden>&rarr;</span>
+        </Link>
+      )}
+    </article>
   )
+}
+
+/** League news feed — pinned stories first (the hook pre-sorts), then newest. */
+export default function Reports() {
+  const { data: articles, isLoading, isError, refetch } = useNews()
+  const list = articles ?? []
 
   return (
-    <Section eyebrow={`${season?.name ?? 'Season'} · Paddock notes`} title="Race Reports" titleTag="h1">
-      {reports.length === 0 ? (
+    <Section
+      eyebrow={
+        list.length > 0
+          ? `Paddock notes · ${list.length} ${list.length === 1 ? 'story' : 'stories'}`
+          : 'Paddock notes'
+      }
+      title="News & Reports"
+      titleTag="h1"
+    >
+      {isLoading ? (
+        <div className="space-y-6">
+          <Skeleton className="h-80 w-full" />
+          <Skeleton className="h-56 w-full" />
+          <Skeleton className="h-56 w-full" />
+        </div>
+      ) : isError ? (
+        <LoadError what="the news feed" onRetry={() => refetch()} />
+      ) : list.length === 0 ? (
         <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-12 text-center">
           <p className="mx-auto max-w-md text-[var(--color-muted)]">
-            Race reports land here after each round. Check back once the next race is in the books.
+            League news and race reports land here as they're published. Check back once the
+            next round is in the books.
           </p>
         </div>
       ) : (
         <div className="space-y-6">
-          {reports.map((e, i) => (
-            <Reveal key={e.id} delay={Math.min(i * 0.05, 0.3)}>
-              <article className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 md:p-10">
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
-                  <span className="text-[var(--color-brand-deep)]">Round {e.round}</span>
-                  <span aria-hidden>·</span>
-                  <span>{e.track?.name}</span>
-                  <span aria-hidden>·</span>
-                  <span>{fmtDateLong(e.date)}</span>
-                </div>
-                <h2 className="mt-3 text-4xl md:text-5xl">
-                  <Link to={`/schedule/${e.id}`} className="transition-colors hover:text-[var(--color-blue)]">
-                    {e.name ?? e.track?.name}
-                  </Link>
-                </h2>
-                <div className="font-body mt-5 max-w-prose whitespace-pre-line leading-relaxed text-[var(--color-ink-2)] first-letter:float-left first-letter:mr-3 first-letter:font-display first-letter:text-6xl first-letter:leading-[0.8] first-letter:text-[var(--color-ink)]">
-                  {e.report}
-                </div>
-                <div className="mt-5 flex flex-wrap gap-4 text-sm font-semibold">
-                  <Link to={`/schedule/${e.id}`} className="text-[var(--color-ink-2)] hover:text-[var(--color-blue)]">
-                    Race details →
-                  </Link>
-                  <Link to="/results" className="text-[var(--color-ink-2)] hover:text-[var(--color-blue)]">
-                    Full results →
-                  </Link>
-                </div>
-              </article>
+          {list.map((a, i) => (
+            <Reveal key={a.id} delay={Math.min(i * 0.05, 0.3)}>
+              <ArticleCard article={a} />
             </Reveal>
           ))}
         </div>
