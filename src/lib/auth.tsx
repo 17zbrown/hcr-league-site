@@ -45,12 +45,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     })
 
-    const { data: sub } = supabase.auth.onAuthStateChange(async (event, next) => {
+    // NB: this callback runs while supabase-js holds its internal auth lock, so
+    // calling back into the client from inside it (functions.invoke, .from(),
+    // anything that reads the session) deadlocks — the sign-in never settles.
+    // That is exactly what broke Discord OAuth: the redirect returned fine, then
+    // the app hung here. Keep the callback synchronous and defer the real work
+    // to a microtask, once the lock has been released.
+    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
       setSession(next)
-      if (next?.user) {
+      const user = next?.user
+      if (!user) {
+        setProfile(null)
+        return
+      }
+      const viaDiscord = (user.identities ?? []).some((i) => i.provider === 'discord')
+      setTimeout(async () => {
+        if (!active) return
         // On a fresh Discord sign-in, resolve portal access from server roles
         // before we read the profile. No-op unless the integration is configured.
-        const viaDiscord = (next.user.identities ?? []).some((i) => i.provider === 'discord')
         if (event === 'SIGNED_IN' && viaDiscord) {
           try {
             await supabase.functions.invoke('discord-role-sync')
@@ -58,10 +70,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             /* non-fatal — fall back to whatever role is already stored */
           }
         }
-        setProfile(await fetchProfile(next.user.id))
-      } else {
-        setProfile(null)
-      }
+        const p = await fetchProfile(user.id)
+        if (active) setProfile(p)
+      }, 0)
     })
     return () => {
       active = false

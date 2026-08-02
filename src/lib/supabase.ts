@@ -14,5 +14,10 @@ export const supabase = createClient(url, key, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
+    // OAuth returns to the site with a ?code= in the URL; this is what exchanges
+    // it for a session. It defaults to true, but Discord sign-in depends on it,
+    // so it is stated rather than assumed.
+    detectSessionInUrl: true,
+    flowType: 'pkce',
   },
 })
