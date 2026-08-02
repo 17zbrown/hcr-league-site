@@ -81,6 +81,15 @@ Deno.serve(async (req) => {
   if (cfg.role_site_race_control && roles.includes(cfg.role_site_race_control)) role = 'race_control'
   if (cfg.role_site_admin && roles.includes(cfg.role_site_admin)) role = 'admin'
 
+  // Lockout guard: profiles.is_admin is the hard owner flag, set out-of-band and
+  // never derived from Discord. If a misconfigured guild/role id would demote a
+  // permanent admin, leave their role alone — otherwise a bad id in the panel
+  // could strip the league owner of the portal that fixes it.
+  const { data: me } = await db.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
+  if (me?.is_admin && role !== 'admin') {
+    return json({ ok: true, role: 'admin', protected: true, discord_roles: roles.length })
+  }
+
   const { error } = await db.from('profiles').update({ role }).eq('id', user.id)
   if (error) return json({ error: error.message }, 500)
 
