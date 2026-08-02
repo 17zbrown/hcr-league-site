@@ -1071,18 +1071,15 @@ const readCommunityReport = (body: Record<string, unknown>, asked: boolean): Com
   }
 }
 
-// discord-driver-roles mirrors what the website says about a driver onto their
-// Discord account — the class(es) they race, and their licence tier. The licence
-// half is the only thing in the whole panel that takes a role away, so removals get
-// their own line in the report rather than being folded into a count.
+// discord-driver-roles gives each linked driver the role for the class they race.
+// Licence tiers are NOT its job — discord-sync owns those and runs after every
+// results import, so this card deliberately says nothing about them.
 interface DriverRolesReport {
   dryRun: boolean
   linked: number
-  withResults: number
-  classGranted: string[]
-  licenseGranted: string[]
-  licenseRemoved: string[]
-  unchanged: number
+  classesMapped: number
+  granted: string[]
+  alreadyCorrect: number
   warnings: string[]
   note: string | null
 }
@@ -1092,11 +1089,9 @@ const readDriverRolesReport = (body: Record<string, unknown>, asked: boolean): D
   return {
     dryRun: typeof body.dryRun === 'boolean' ? body.dryRun : asked,
     linked: num(body.drivers_linked),
-    withResults: num(body.drivers_with_results),
-    classGranted: toStrings(body.class_granted),
-    licenseGranted: toStrings(body.license_granted),
-    licenseRemoved: toStrings(body.license_removed),
-    unchanged: num(body.unchanged),
+    classesMapped: num(body.classes_mapped),
+    granted: toStrings(body.granted),
+    alreadyCorrect: num(body.already_correct),
     warnings: Array.from(new Set(toStrings(body.warnings))),
     note: typeof body.skipped === 'string' ? body.skipped : text(body.message) || null,
   }
@@ -1819,12 +1814,16 @@ export default function DiscordSettings() {
             drivers who are already linked, so it belongs after that button. */}
         <div className="mt-4 border-t border-[var(--color-line)] pt-4">
           <span className="block font-mono text-[11px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
-            Class &amp; licence roles
+            Class roles
           </span>
           <p className="mt-1 text-sm text-[var(--color-ink-2)]">
-            Gives every linked driver the role for the class they race, and the licence tier their
-            profile shows on the website — worked out from race results with the same formula the
-            site uses, so the two always agree.
+            Gives every linked driver the GTP, LMP2 or GTD role their race results say they belong
+            in. Only ever adds — a driver who has changed class keeps both roles and gets named in
+            the report so you can take the old one off.
+          </p>
+          <p className="mt-1 text-sm text-[var(--color-faint)]">
+            Licence tiers aren't handled here — those update on their own after every results
+            import, and announce promotions in <span className="font-mono">#license-ups</span>.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -1834,7 +1833,7 @@ export default function DiscordSettings() {
               aria-busy={driverRolesRunning === 'preview'}
               className="hcr-btn hcr-btn-ghost"
             >
-              {driverRolesRunning === 'preview' ? 'Previewing…' : 'Preview class & licence'}
+              {driverRolesRunning === 'preview' ? 'Previewing…' : 'Preview class roles'}
             </button>
             <button
               type="button"
@@ -1850,7 +1849,7 @@ export default function DiscordSettings() {
           <p id="driver-roles-gate" className="mt-2 text-xs text-[var(--color-faint)]">
             {driverRolesPreview
               ? 'The preview below is what will happen.'
-              : 'A licence is a ladder, so promoting somebody takes the tier below back off them — the only place this panel removes a role. Preview first.'}
+              : 'Preview first — it lists every role it would hand out and changes nothing.'}
           </p>
 
           <div aria-live="polite">
@@ -3086,55 +3085,37 @@ function PruneRows({ rows, groupKey }: { rows: PruneRow[]; groupKey: string }) {
  * half-applied server is the one outcome worth noticing here.
  */
 function DriverRolesView({ report }: { report: DriverRolesReport }) {
-  const list = (title: string, items: string[], tone: 'add' | 'remove') =>
-    items.length === 0 ? null : (
-      <div className="mt-3">
-        <span
-          className={`mb-1 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] ${
-            tone === 'remove' ? 'text-[var(--color-red)]' : 'text-[var(--color-muted)]'
-          }`}
-        >
-          {title}
-        </span>
-        <ul className="space-y-0.5 font-mono text-sm text-[var(--color-ink-2)]">
-          {items.map((s, i) => (
-            <li key={`${title}-${i}`}>{s}</li>
-          ))}
-        </ul>
-      </div>
-    )
-
-  const nothing =
-    report.classGranted.length === 0 &&
-    report.licenseGranted.length === 0 &&
-    report.licenseRemoved.length === 0
-
   return (
     <div className="mt-4 border-t border-[var(--color-line)] pt-4">
       <span className="block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
-        {report.dryRun ? 'Preview — nothing has been changed yet' : 'Class & licence roles'}
+        {report.dryRun ? 'Preview — nothing has been changed yet' : 'Class roles'}
       </span>
       <p className="mt-1 text-sm text-[var(--color-muted)]">
-        {report.linked} driver{report.linked === 1 ? '' : 's'} have a Discord account attached,{' '}
-        {report.withResults} of them {report.withResults === 1 ? 'has' : 'have'} raced.
+        {report.linked} driver{report.linked === 1 ? ' has' : 's have'} a Discord account attached,
+        across {report.classesMapped} mapped class{report.classesMapped === 1 ? '' : 'es'}.
       </p>
 
-      {list(report.dryRun ? 'Class roles it would add' : 'Class roles added', report.classGranted, 'add')}
-      {list(report.dryRun ? 'Licences it would set' : 'Licences set', report.licenseGranted, 'add')}
-      {list(
-        report.dryRun ? 'Old licence tiers it would remove' : 'Old licence tiers removed',
-        report.licenseRemoved,
-        'remove',
+      {report.granted.length > 0 && (
+        <div className="mt-3">
+          <span className="mb-1 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
+            {report.dryRun ? 'Would be given' : 'Given'}
+          </span>
+          <ul className="space-y-0.5 font-mono text-sm text-[var(--color-ink-2)]">
+            {report.granted.map((s, i) => (
+              <li key={`granted-${i}`}>{s}</li>
+            ))}
+          </ul>
+        </div>
       )}
 
-      {nothing && (
+      {report.granted.length === 0 && (
         <p className="mt-2 text-sm text-[var(--color-muted)]">
-          Everyone already holds what the website says they should — nothing to change.
+          Everyone already holds the class role their results say they should — nothing to change.
         </p>
       )}
-      {report.unchanged > 0 && !nothing && (
+      {report.alreadyCorrect > 0 && report.granted.length > 0 && (
         <p className="mt-3 text-sm text-[var(--color-faint)]">
-          {report.unchanged} driver{report.unchanged === 1 ? ' was' : 's were'} already correct.
+          {report.alreadyCorrect} driver{report.alreadyCorrect === 1 ? ' was' : 's were'} already correct.
         </p>
       )}
 

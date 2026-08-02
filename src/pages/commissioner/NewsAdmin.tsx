@@ -159,14 +159,22 @@ function ArticleRow({
     onChanged()
   }
 
-  const togglePublish = () =>
-    update(
+  const togglePublish = async () => {
+    const publishing = !article.is_published
+    await update(
       article.is_published
         ? { is_published: false }
         : // Publishing bumps the date so the story tops the public feed instead
           // of being buried under everything written while it sat in drafts.
           { is_published: true, published_at: new Date().toISOString() },
     )
+    // Publishing queued a Discord announcement (a database trigger, in the same
+    // transaction as the update). Draining here just makes it land in seconds
+    // rather than at the next scheduled drain; the queue is what guarantees it
+    // arrives, so a failed invoke here costs nothing. Unpublishing queues
+    // nothing, and an article pulled before the drain runs is skipped at send.
+    if (publishing) supabase.functions.invoke('discord-broadcast').catch(() => {})
+  }
 
   const togglePin = () => update({ pinned: !article.pinned })
 

@@ -119,6 +119,11 @@ export default function ResultsAdmin() {
     qc.invalidateQueries({ queryKey: ['drivers'] })
     // Push any license/role changes to Discord (no-op if the integration is off).
     supabase.functions.invoke('discord-sync').catch(() => {})
+    // Saving the import queued a race report and a standings refresh (database
+    // triggers, same transaction as the results). Draining here just makes them
+    // land in seconds instead of waiting for the scheduled drain — the queue is
+    // the thing that guarantees delivery, so a failure here loses nothing.
+    supabase.functions.invoke('discord-broadcast').catch(() => {})
     setNote(`Saved ${saved ?? inserts.length} results. Standings updated.`)
     setRows([])
     if (fileRef.current) fileRef.current.value = '' // allow re-uploading the same file
