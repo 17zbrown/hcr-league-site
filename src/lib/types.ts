@@ -228,6 +228,8 @@ export interface AppNotification {
 export interface NewsArticle {
   id: string
   slug: string
+  /** 'manual' | 'auto-results' | 'auto-preview' */
+  source?: string
   title: string
   dek: string | null
   body_md: string

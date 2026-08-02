@@ -114,6 +114,7 @@ export default function ResultsAdmin() {
       return
     }
     qc.invalidateQueries({ queryKey: ['results'] })
+    qc.invalidateQueries({ queryKey: ['news'] }) // the import may have composed a story
     qc.invalidateQueries({ queryKey: ['events'] })
     qc.invalidateQueries({ queryKey: ['drivers'] })
     // Push any license/role changes to Discord (no-op if the integration is off).
