@@ -155,6 +155,16 @@ const toStrings = (raw: unknown): string[] => {
     .filter(Boolean)
 }
 
+/** The candidate list a function hands back when the bot is in several servers. */
+const toGuilds = (raw: unknown): { id: string; name: string }[] =>
+  (Array.isArray(raw) ? raw : [])
+    .map((g) => {
+      const o = (g && typeof g === 'object' ? g : {}) as Record<string, unknown>
+      const id = snowflake(o.id)
+      return id ? { id, name: text(o.name) || 'Unnamed server' } : null
+    })
+    .filter((g): g is { id: string; name: string } => g !== null)
+
 const readSetupReport = (body: Record<string, unknown>): SetupReport => {
   const guild = (body.guild && typeof body.guild === 'object' ? body.guild : {}) as Record<string, unknown>
 
@@ -173,13 +183,7 @@ const readSetupReport = (body: Record<string, unknown>): SetupReport => {
   const message = text(body.message)
   if (choosing && message) warnings.unshift(message)
 
-  const guilds = (Array.isArray(body.guilds) ? body.guilds : [])
-    .map((g) => {
-      const o = (g && typeof g === 'object' ? g : {}) as Record<string, unknown>
-      const id = snowflake(o.id)
-      return id ? { id, name: text(o.name) || 'Unnamed server' } : null
-    })
-    .filter((g): g is { id: string; name: string } => g !== null)
+  const guilds = toGuilds(body.guilds)
 
   return {
     guildName: text(body.guild_name) || text(guild.name) || null,
@@ -213,6 +217,185 @@ const readEventsReport = (body: Record<string, unknown>): EventsReport => {
       .filter(Boolean),
     // A guard clause answers 200 with a plain `{ skipped: "…" }` string.
     note: typeof body.skipped === 'string' ? body.skipped : text(body.message) || null,
+  }
+}
+
+// ── Server scan ──────────────────────────────────────────────────────────────
+// discord-audit is the read-only sibling of setup: it looks at the server and
+// reports what's there, touching nothing. Same loose reading as above — we show
+// what we recognise and quietly drop the rest.
+
+interface AuditRole {
+  id: string | null
+  name: string
+  /** null when the scan couldn't count — that must not read as zero. */
+  members: number | null
+  staff: boolean
+}
+
+interface AuditChannel {
+  id: string | null
+  name: string
+  /** Raw instant; formatted at render. null when Discord never said. */
+  last: string | null
+  quiet: boolean
+}
+
+interface AuditGroup {
+  key: string
+  name: string
+  channels: AuditChannel[]
+}
+
+interface AuditReport {
+  guildName: string | null
+  guildId: string | null
+  members: number | null
+  roles: AuditRole[]
+  groups: AuditGroup[]
+  /** Populated only when the bot is in several servers and the scan stopped to ask. */
+  guilds: { id: string; name: string }[]
+  notes: string[]
+  choosing: boolean
+}
+
+/**
+ * A count we may not have been given — unlike `count` above, absent stays
+ * absent rather than collapsing to a zero the scan never claimed.
+ */
+const num = (v: unknown): number | null => {
+  if (Array.isArray(v)) return v.length
+  if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v)
+  const s = text(v).trim()
+  return /^\d+$/.test(s) ? Number(s) : null
+}
+
+/** Discord's own ordering, so the lists read like the server's own sidebar. */
+const pos = (raw: unknown): number => {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  return num(o.position) ?? 0
+}
+
+const QUIET_DAYS = 60
+
+/** "Quiet" is a judgement about a date, so make it once at read time. */
+const isQuiet = (iso: string | null): boolean => {
+  if (!iso) return false // "no activity" already says it, and may just mean unknown
+  const t = new Date(iso).getTime()
+  return Number.isFinite(t) && Date.now() - t > QUIET_DAYS * 86_400_000
+}
+
+const toAuditChannel = (raw: unknown): AuditChannel | null => {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const name = text(o.name)
+  if (!name) return null
+  // Discord type 4 is a category, not a channel — it heads a group, it isn't in one.
+  if (o.type === 4 || o.is_category === true) return null
+  const last =
+    text(o.last_active_at) ||
+    text(o.last_activity_at) ||
+    text(o.last_activity) ||
+    text(o.last_message_at) ||
+    null
+  return {
+    id: snowflake(o.id),
+    name,
+    last: last ? last.trim() : null,
+    quiet: o.quiet === true || o.stale === true || isQuiet(last),
+  }
+}
+
+const readAuditReport = (body: Record<string, unknown>): AuditReport => {
+  const guild = (body.guild && typeof body.guild === 'object' ? body.guild : {}) as Record<string, unknown>
+
+  const roles = (Array.isArray(body.roles) ? [...body.roles] : [])
+    // Highest role first, the way Server Settings → Roles stacks them.
+    .sort((a, b) => pos(b) - pos(a))
+    .map((raw) => {
+      const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+      const name = text(o.name)
+      if (!name) return null
+      return {
+        id: snowflake(o.id),
+        name,
+        members: num(o.member_count ?? o.members ?? o.count),
+        staff: o.is_staffish === true || o.staffish === true || o.is_staff === true,
+      }
+    })
+    .filter((r): r is AuditRole => r !== null)
+
+  // Channels are grouped the way Discord's sidebar groups them.
+  const groups: AuditGroup[] = []
+  const byKey = new Map<string, AuditGroup>()
+  const groupFor = (key: string, name: string): AuditGroup => {
+    const found = byKey.get(key)
+    if (found) return found
+    const made: AuditGroup = { key, name, channels: [] }
+    byKey.set(key, made)
+    groups.push(made)
+    return made
+  }
+  // A channel listed under its category AND in the flat list is still one channel.
+  const seen = new Set<string>()
+  const place = (key: string, groupName: string, raw: unknown) => {
+    const ch = toAuditChannel(raw)
+    if (!ch) return
+    const tag = ch.id ?? `${key}/${ch.name.toLowerCase()}`
+    if (seen.has(tag)) return
+    seen.add(tag)
+    groupFor(key, groupName).channels.push(ch)
+  }
+
+  // Seed the categories first so the list reads in the server's own order;
+  // empty ones drop out below.
+  for (const raw of (Array.isArray(body.categories) ? [...body.categories] : []).sort((a, b) => pos(a) - pos(b))) {
+    const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+    const key = snowflake(o.id) ?? text(o.name)
+    if (!key) continue
+    const name = text(o.name) || 'Category'
+    groupFor(key, name)
+    // Some reports nest the channels under their category instead of listing
+    // them flat — take either shape.
+    for (const child of (Array.isArray(o.channels) ? [...o.channels] : []).sort((a, b) => pos(a) - pos(b))) {
+      place(key, name, child)
+    }
+  }
+
+  // Sorted before grouping, so each category lists its channels in server order.
+  for (const raw of (Array.isArray(body.channels) ? [...body.channels] : []).sort((a, b) => pos(a) - pos(b))) {
+    const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+    const parentId =
+      snowflake(o.parent_id) ?? snowflake(o.category_id) ?? snowflake(o.parent) ?? snowflake(o.category)
+    // A category may arrive as a name rather than an id — group on that instead.
+    const parentName =
+      text(o.category_name) || text(o.parent_name) || (parentId ? '' : text(o.category) || text(o.parent))
+    const key = parentId ?? parentName
+    place(key, key ? parentName || 'Category' : 'No category', raw)
+  }
+
+  // "The bot is in several servers" is a question, not a result — same handling
+  // as setup: the ask goes in the callout with the candidates under it.
+  const choosing = body.needsGuildSelection === true
+  const message = text(body.message)
+  const notes = toStrings(body.notes)
+  // The guild question leads the callout; a plain remark reads fine after the
+  // scan's own notes.
+  if (message) {
+    if (choosing) notes.unshift(message)
+    else notes.push(message)
+  }
+
+  return {
+    guildName: text(body.guild_name) || text(guild.name) || null,
+    guildId: snowflake(body.guild_id) ?? snowflake(guild.id),
+    members: num(
+      guild.member_count ?? guild.approximate_member_count ?? body.member_count ?? body.approximate_member_count,
+    ),
+    roles,
+    groups: groups.filter((g) => g.channels.length > 0),
+    guilds: toGuilds(body.guilds),
+    notes: Array.from(new Set(notes)),
+    choosing,
   }
 }
 
@@ -270,11 +453,13 @@ export default function DiscordSettings() {
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [running, setRunning] = useState<'setup' | 'events' | null>(null)
+  const [running, setRunning] = useState<'setup' | 'events' | 'audit' | null>(null)
   const [setupErr, setSetupErr] = useState<string | null>(null)
   const [setupReport, setSetupReport] = useState<SetupReport | null>(null)
   const [eventsErr, setEventsErr] = useState<string | null>(null)
   const [eventsReport, setEventsReport] = useState<EventsReport | null>(null)
+  const [auditErr, setAuditErr] = useState<string | null>(null)
+  const [auditReport, setAuditReport] = useState<AuditReport | null>(null)
 
   /**
    * `keepSwitches` is for the post-setup refresh: setup writes the ids but
@@ -342,6 +527,16 @@ export default function DiscordSettings() {
     setRunning(null)
   }
 
+  // Read-only: the scan writes nothing back into discord_config, so unlike
+  // provision() there's nothing to reload afterwards.
+  const scan = async () => {
+    setRunning('audit'); setAuditErr(null); setAuditReport(null)
+    const { body, error } = await invokeFn('discord-audit')
+    if (error) { setAuditErr(error); setRunning(null); return }
+    setAuditReport(readAuditReport(body ?? {}))
+    setRunning(null)
+  }
+
   const field = (key: keyof Cfg, label: string, hint?: string) => (
     <label className="block">
       <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">{label}</span>
@@ -361,6 +556,9 @@ export default function DiscordSettings() {
     (setupReport.roles.length > 0 ||
       setupReport.channels.length > 0 ||
       setupReport.webhooks.length > 0)
+
+  const hasAuditDetail =
+    !!auditReport && (auditReport.roles.length > 0 || auditReport.groups.length > 0)
 
   const showEventCounts =
     !!eventsReport &&
@@ -410,7 +608,19 @@ export default function DiscordSettings() {
           >
             {running === 'events' ? 'Syncing…' : 'Sync race calendar to Discord'}
           </button>
+          <button
+            type="button"
+            onClick={scan}
+            disabled={running !== null}
+            aria-busy={running === 'audit'}
+            className="hcr-btn hcr-btn-ghost"
+          >
+            {running === 'audit' ? 'Scanning…' : 'Scan my server'}
+          </button>
         </div>
+        <p className="mt-2 text-xs text-[var(--color-faint)]">
+          Scanning reads the server and reports back — it never creates, renames or deletes anything.
+        </p>
 
         <div aria-live="polite">
           {setupErr && (
@@ -501,6 +711,66 @@ export default function DiscordSettings() {
               {eventsReport.reasons.length > 0 && (
                 <Callout title="Rounds that were skipped" lines={eventsReport.reasons} />
               )}
+            </div>
+          )}
+
+          {auditErr && (
+            <p className="mt-4 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">
+              {auditErr}
+            </p>
+          )}
+
+          {auditReport && (
+            <div className="mt-5 border-t border-[var(--color-line)] pt-4">
+              <span className="block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+                Server scan
+              </span>
+
+              {(auditReport.guildName || auditReport.guildId || auditReport.members !== null) && (
+                <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                  <span className="text-sm font-semibold">{auditReport.guildName ?? 'This server'}</span>
+                  {auditReport.guildId && (
+                    <span className="font-mono text-[11px] tabular text-[var(--color-faint)]">
+                      {auditReport.guildId}
+                    </span>
+                  )}
+                  {auditReport.members !== null && (
+                    <span className="font-mono text-[11px] tabular text-[var(--color-faint)]">
+                      {auditReport.members} member{auditReport.members === 1 ? '' : 's'}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <RoleTable roles={auditReport.roles} />
+              <ChannelGroups groups={auditReport.groups} />
+
+              {auditReport.notes.length > 0 && (
+                <Callout
+                  title={auditReport.choosing ? 'Needs your attention' : 'Notes'}
+                  lines={auditReport.notes}
+                >
+                  {auditReport.guilds.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {auditReport.guilds.map((g) => (
+                        <li key={g.id} className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                          <span className="font-semibold">{g.name}</span>
+                          <span className="font-mono text-[11px] tabular text-[var(--color-ink-2)]">{g.id}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Callout>
+              )}
+
+              {!auditReport.guildName &&
+                auditReport.members === null &&
+                !hasAuditDetail &&
+                auditReport.notes.length === 0 && (
+                  <p className="text-sm text-[var(--color-muted)]">
+                    The scan finished, but Discord sent nothing back to show.
+                  </p>
+                )}
             </div>
           )}
         </div>
@@ -651,6 +921,101 @@ function StateChip({ state }: { state: ItemState }) {
       className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider ${styles[state]}`}
     >
       {state}
+    </span>
+  )
+}
+
+/** Every role in the server as the scan found it — nothing here is editable. */
+function RoleTable({ roles }: { roles: AuditRole[] }) {
+  if (roles.length === 0) return null
+  return (
+    <div className="mt-4">
+      <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+        Roles
+      </span>
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-[var(--color-line)]">
+            <th
+              scope="col"
+              className="py-1.5 text-left font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]"
+            >
+              Role
+            </th>
+            <th
+              scope="col"
+              className="py-1.5 text-right font-mono text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]"
+            >
+              Members
+            </th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--color-line)]">
+          {roles.map((r, i) => (
+            <tr key={r.id ?? `${r.name}-${i}`}>
+              <th scope="row" className="py-2 pr-3 text-left font-body text-sm font-semibold">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="min-w-0 break-words">{r.name}</span>
+                  {r.staff && <MiniChip tone="brand">Staff</MiniChip>}
+                </span>
+              </th>
+              {/* An unknown count is a blank, never a zero. */}
+              <td className="py-2 text-right tabular text-sm">{r.members === null ? '—' : r.members}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/** Channels under their category, each with the last time anything happened. */
+function ChannelGroups({ groups }: { groups: AuditGroup[] }) {
+  if (groups.length === 0) return null
+  return (
+    <div className="mt-4">
+      <span className="mb-1 block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+        Channels
+      </span>
+      {groups.map((g) => (
+        <div key={g.key} className="mt-2">
+          <span className="block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">
+            {g.name}
+          </span>
+          <ul className="divide-y divide-[var(--color-line)]">
+            {g.channels.map((c, i) => (
+              <li
+                key={c.id ?? `${g.key}-${c.name}-${i}`}
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm font-semibold">{c.name}</span>
+                <span className="font-mono text-[11px] tabular text-[var(--color-faint)]">
+                  {c.last ? fmtStamp(c.last) : 'no activity'}
+                </span>
+                {c.quiet && <MiniChip tone="quiet">Quiet</MiniChip>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * The scan's small chips — the same pill as StateChip: brand tint when the chip
+ * flags something notable, plain outline when it's only an observation.
+ */
+function MiniChip({ tone, children }: { tone: 'brand' | 'quiet'; children: React.ReactNode }) {
+  const styles: Record<'brand' | 'quiet', string> = {
+    brand: 'border-[var(--color-brand-deep)]/40 bg-[var(--color-brand)]/15 text-[var(--color-brand-deep)]',
+    quiet: 'border-[var(--color-line-2)] text-[var(--color-muted)]',
+  }
+  return (
+    <span
+      className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider ${styles[tone]}`}
+    >
+      {children}
     </span>
   )
 }
