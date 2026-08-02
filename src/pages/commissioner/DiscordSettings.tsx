@@ -399,6 +399,267 @@ const readAuditReport = (body: Record<string, unknown>): AuditReport => {
   }
 }
 
+// ── Rebuild plan ─────────────────────────────────────────────────────────────
+// discord-rebuild answers with the same shape whether it's rehearsing or doing:
+// the categories it wants, the roles that gate each one, the channels beneath
+// them, and how many existing channels get moved into ARCHIVE. Read as loosely
+// as everything above — a plan a commissioner can't read is worse than no plan.
+
+/** null = the function gave no signal, so no chip is painted at all. */
+type PlanState = 'new' | 'exists' | 'failed'
+
+interface PlanChannel {
+  key: string
+  name: string
+  id: string | null
+  state: PlanState | null
+}
+
+interface PlanCategory {
+  key: string
+  name: string
+  id: string | null
+  state: PlanState | null
+  /** Role ids or names, whichever the function reported — named at render. */
+  roles: string[]
+  channels: PlanChannel[]
+}
+
+interface RebuildReport {
+  /** What actually happened, not what we asked for — see readRebuildReport. */
+  dryRun: boolean
+  guildName: string | null
+  guildId: string | null
+  categories: PlanCategory[]
+  /** Channels the plan lists outside any category. */
+  loose: PlanChannel[]
+  /** null when the function never said — that must not read as zero. */
+  archive: number | null
+  archiveName: string | null
+  warnings: string[]
+  note: string | null
+}
+
+const toPlanState = (raw: Record<string, unknown>): PlanState | null => {
+  if (raw.created === true || raw.will_create === true) return 'new'
+  const s = (
+    text(raw.action) ||
+    text(raw.status) ||
+    text(raw.state) ||
+    text(raw.plan) ||
+    text(raw.result)
+  ).toLowerCase()
+  if (s.includes('fail') || s.includes('error')) return 'failed'
+  if (s.includes('creat') || s.includes('new') || s.includes('add')) return 'new'
+  if (s.includes('exist') || s.includes('found') || s.includes('keep') || s.includes('kept') || s.includes('reus'))
+    return 'exists'
+  if (raw.created === false || raw.will_create === false) return 'exists'
+  return null
+}
+
+const toPlanChannel = (raw: unknown, i: number): PlanChannel | null => {
+  if (typeof raw === 'string') {
+    const name = raw.trim()
+    return name ? { key: `channel-${i}`, name, id: null, state: null } : null
+  }
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const name = text(o.name) || text(o.channel) || text(o.label) || prettify(text(o.key))
+  if (!name) return null
+  return {
+    key: text(o.key) || text(o.channel_key) || snowflake(o.id) || `${name}-${i}`,
+    name,
+    id: snowflake(o.id) ?? snowflake(o.channel_id),
+    state: toPlanState(o),
+  }
+}
+
+const toPlanChannels = (raw: unknown): PlanChannel[] =>
+  (Array.isArray(raw) ? raw : [])
+    .map((entry, i) => toPlanChannel(entry, i))
+    .filter((c): c is PlanChannel => c !== null)
+
+/** A gate may arrive as a role id, a role name, or `{ id, name }` — take any. */
+const toRoleRefs = (raw: unknown): string[] => {
+  const arr = Array.isArray(raw) ? raw : raw == null ? [] : [raw]
+  return arr
+    .map((v) => {
+      if (typeof v === 'string') return v.trim()
+      if (v && typeof v === 'object') {
+        const o = v as Record<string, unknown>
+        return text(o.name) || text(o.role) || text(o.key) || text(o.id)
+      }
+      return ''
+    })
+    .filter(Boolean)
+}
+
+const toPlanCategory = (key: string, raw: unknown, i: number): PlanCategory | null => {
+  // A category may arrive as nothing but its list of channels.
+  if (Array.isArray(raw)) {
+    const name = prettify(key)
+    return name
+      ? { key: key || `category-${i}`, name, id: null, state: null, roles: [], channels: toPlanChannels(raw) }
+      : null
+  }
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const name = text(o.name) || text(o.category) || text(o.label) || prettify(key)
+  if (!name) return null
+  return {
+    key: key || `category-${i}`,
+    name,
+    id: snowflake(o.id) ?? snowflake(o.category_id),
+    state: toPlanState(o),
+    roles: toRoleRefs(o.roles ?? o.gated_by ?? o.visible_to ?? o.allow ?? o.role_keys),
+    channels: toPlanChannels(o.channels ?? o.children),
+  }
+}
+
+/** Accepts either an array of categories or a `{ key: category }` map. */
+const toPlanCategories = (raw: unknown): PlanCategory[] => {
+  if (Array.isArray(raw)) {
+    return raw
+      .map((entry, i) => {
+        const o = (entry && typeof entry === 'object' ? entry : {}) as Record<string, unknown>
+        return toPlanCategory(text(o.key) || text(o.category_key) || text(o.name), entry, i)
+      })
+      .filter((c): c is PlanCategory => c !== null)
+  }
+  if (raw && typeof raw === 'object') {
+    return Object.entries(raw as Record<string, unknown>)
+      .map(([k, v], i) => toPlanCategory(k, v, i))
+      .filter((c): c is PlanCategory => c !== null)
+  }
+  return []
+}
+
+const readRebuildReport = (body: Record<string, unknown>, asked: boolean): RebuildReport => {
+  // The plan may sit at the top level or be wrapped in `plan: { … }`; flatten
+  // the wrapper over the envelope so the reads below only have one shape to know.
+  const wrapper =
+    body.plan && typeof body.plan === 'object' && !Array.isArray(body.plan)
+      ? (body.plan as Record<string, unknown>)
+      : {}
+  const src: Record<string, unknown> = { ...body, ...wrapper }
+
+  const guild = (src.guild && typeof src.guild === 'object' ? src.guild : {}) as Record<string, unknown>
+  const archive = (src.archive && typeof src.archive === 'object' ? src.archive : {}) as Record<string, unknown>
+
+  // Believe the function over the button: if it says it only rehearsed, this
+  // report is a rehearsal even though we asked for the real thing.
+  const said = src.dry_run ?? src.dryRun
+  const dryRun = typeof said === 'boolean' ? said : asked
+
+  const warnings = toStrings(src.warnings)
+  // Only add a missing role the prose hasn't already named, so the callout never
+  // says the same thing twice in two voices.
+  for (const key of toStrings(src.missing_roles ?? src.missing_staff_roles ?? src.missing)) {
+    const label = prettify(key)
+    if (!label || warnings.some((w) => w.toLowerCase().includes(label.toLowerCase()))) continue
+    warnings.push(`No ${label} role found — make it in Discord, then run setup so its ID is saved.`)
+  }
+
+  return {
+    dryRun,
+    guildName: text(src.guild_name) || text(guild.name) || null,
+    guildId: snowflake(src.guild_id) ?? snowflake(guild.id),
+    categories: toPlanCategories(
+      src.categories ?? (Array.isArray(body.plan) ? body.plan : null) ?? src.tree,
+    ),
+    loose: toPlanChannels(src.channels),
+    archive: num(
+      archive.moved ??
+        archive.count ??
+        archive.channels ??
+        src.archived ??
+        src.archived_channels ??
+        src.archive_count ??
+        src.moved ??
+        src.to_archive,
+    ),
+    archiveName: text(archive.name) || text(src.archive_name) || null,
+    warnings: Array.from(new Set(warnings)),
+    note: typeof src.skipped === 'string' ? src.skipped : text(src.message) || null,
+  }
+}
+
+// ── Role reconcile ───────────────────────────────────────────────────────────
+// discord-role-reconcile walks the members it knows about and puts each one's
+// Discord roles back in step with their license. It reports how many it looked
+// at, how many it touched, and who — that last list is the interesting one.
+
+interface RoleChange {
+  key: string
+  name: string
+  /** "+ Gold · − Silver", or whatever the function could tell us. */
+  detail: string
+}
+
+interface ReconcileReport {
+  checked: number | null
+  changed: number | null
+  members: RoleChange[]
+  warnings: string[]
+  note: string | null
+}
+
+const toRoleChange = (raw: unknown, i: number): RoleChange | null => {
+  if (typeof raw === 'string') {
+    const s = raw.trim()
+    return s ? { key: `member-${i}`, name: s, detail: '' } : null
+  }
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const name =
+    text(o.username) ||
+    text(o.discord_username) ||
+    text(o.display_name) ||
+    text(o.name) ||
+    text(o.driver) ||
+    text(o.member) ||
+    snowflake(o.discord_user_id) ||
+    snowflake(o.user_id) ||
+    snowflake(o.id) ||
+    ''
+  if (!name) return null
+
+  const parts: string[] = []
+  for (const r of toStrings(o.added ?? o.added_roles ?? o.granted)) parts.push(`+ ${r}`)
+  for (const r of toStrings(o.removed ?? o.removed_roles ?? o.revoked)) parts.push(`− ${r}`)
+  if (parts.length === 0) {
+    const from = text(o.from) || text(o.was) || text(o.old_role)
+    const to = text(o.to) || text(o.now) || text(o.new_role) || text(o.role) || text(o.license)
+    if (to) parts.push(from ? `${from} → ${to}` : to)
+  }
+
+  return {
+    key: snowflake(o.discord_user_id) ?? snowflake(o.user_id) ?? snowflake(o.id) ?? `${name}-${i}`,
+    name,
+    detail: parts.join(' · ') || text(o.change) || text(o.reason) || text(o.note),
+  }
+}
+
+const readReconcileReport = (body: Record<string, unknown>): ReconcileReport => {
+  const counts = (body.counts && typeof body.counts === 'object' ? body.counts : body) as Record<string, unknown>
+
+  // The roster of who moved may sit under any of these; only an array is a list.
+  const listed = [body.changes, counts.changed, body.changed, body.members, body.updated].find((v) =>
+    Array.isArray(v),
+  )
+  const members = (Array.isArray(listed) ? listed : [])
+    .map((entry, i) => toRoleChange(entry, i))
+    .filter((m): m is RoleChange => m !== null)
+
+  const changed = num(counts.changed ?? counts.updated ?? counts.synced)
+
+  return {
+    checked: num(counts.checked ?? counts.scanned ?? counts.considered ?? counts.total),
+    // A tally we were never given still shows if the list itself came through.
+    changed: changed ?? (members.length > 0 ? members.length : null),
+    members,
+    warnings: Array.from(new Set(toStrings(body.warnings))),
+    note: typeof body.skipped === 'string' ? body.skipped : text(body.message) || null,
+  }
+}
+
 /**
  * `functions.invoke` swallows the response body on a non-2xx and hands back a
  * bare "Edge Function returned a non-2xx status code" — useless to a
@@ -408,9 +669,13 @@ const readAuditReport = (body: Record<string, unknown>): AuditReport => {
  */
 async function invokeFn(
   name: string,
+  payload?: Record<string, unknown>,
 ): Promise<{ body: Record<string, unknown> | null; error: string | null }> {
   try {
-    const res = await supabase.functions.invoke<Record<string, unknown>>(name)
+    const res = await supabase.functions.invoke<Record<string, unknown>>(
+      name,
+      payload ? { body: payload } : undefined,
+    )
     if (res.error) {
       const ctx = (res.error as unknown as { context?: unknown }).context
       if (ctx instanceof Response) {
@@ -446,6 +711,29 @@ const fmtStamp = (iso: string): string => {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+/**
+ * The last thing standing between a click and a reshaped server, so it says
+ * plainly what happens — including the part that matters most: nothing is
+ * deleted, and the old channels are still there afterwards.
+ */
+const REBUILD_CONFIRM = [
+  'Run the rebuild?',
+  '',
+  "This creates the league's new categories and channels, then MOVES every channel that exists today into a hidden ARCHIVE category.",
+  '',
+  'Nothing is deleted. No messages are lost. The archived channels stay exactly as they are, out of sight of members, and you can delete them by hand later if you want to.',
+].join('\n')
+
+/** The roles the panel manages, so a gate reported as an ID can be named. */
+const NAMED_ROLE_FIELDS: { key: keyof Cfg; label: string }[] = [
+  { key: 'role_site_admin', label: 'Admin' },
+  { key: 'role_site_race_control', label: 'Race Control' },
+  { key: 'role_bronze', label: 'Bronze' },
+  { key: 'role_silver', label: 'Silver' },
+  { key: 'role_gold', label: 'Gold' },
+  { key: 'role_platinum', label: 'Platinum' },
+]
+
 export default function DiscordSettings() {
   const [form, setForm] = useState<Cfg>(EMPTY)
   const [provisionedAt, setProvisionedAt] = useState<string | null>(null)
@@ -453,13 +741,19 @@ export default function DiscordSettings() {
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const [running, setRunning] = useState<'setup' | 'events' | 'audit' | null>(null)
+  const [running, setRunning] = useState<'setup' | 'events' | 'audit' | 'preview' | 'rebuild' | 'roles' | null>(null)
   const [setupErr, setSetupErr] = useState<string | null>(null)
   const [setupReport, setSetupReport] = useState<SetupReport | null>(null)
   const [eventsErr, setEventsErr] = useState<string | null>(null)
   const [eventsReport, setEventsReport] = useState<EventsReport | null>(null)
   const [auditErr, setAuditErr] = useState<string | null>(null)
   const [auditReport, setAuditReport] = useState<AuditReport | null>(null)
+  const [rebuildErr, setRebuildErr] = useState<string | null>(null)
+  /** The rehearsal. Its presence is also what unlocks the real run. */
+  const [rebuildPlan, setRebuildPlan] = useState<RebuildReport | null>(null)
+  const [rebuildDone, setRebuildDone] = useState<RebuildReport | null>(null)
+  const [rolesErr, setRolesErr] = useState<string | null>(null)
+  const [rolesReport, setRolesReport] = useState<ReconcileReport | null>(null)
 
   /**
    * `keepSwitches` is for the post-setup refresh: setup writes the ids but
@@ -527,6 +821,41 @@ export default function DiscordSettings() {
     setRunning(null)
   }
 
+  // Rehearsal only: dryRun asks the function to describe what it would do and
+  // change nothing at all, so this is as safe as the scan above.
+  const previewRebuild = async () => {
+    setRunning('preview'); setRebuildErr(null); setRebuildPlan(null); setRebuildDone(null)
+    const { body, error } = await invokeFn('discord-rebuild', { dryRun: true })
+    if (error) { setRebuildErr(error); setRunning(null); return }
+    setRebuildPlan(readRebuildReport(body ?? {}, true))
+    setRunning(null)
+  }
+
+  const runRebuild = async () => {
+    // The button is disabled without a plan; this is the belt to that brace.
+    if (!rebuildPlan || running !== null) return
+    if (!window.confirm(REBUILD_CONFIRM)) return
+    setRunning('rebuild'); setRebuildErr(null); setRebuildDone(null)
+    const { body, error } = await invokeFn('discord-rebuild', { dryRun: false })
+    if (error) { setRebuildErr(error); setRunning(null); return }
+    setRebuildDone(readRebuildReport(body ?? {}, false))
+    // The plan described a server that has just changed shape, so it isn't true
+    // any more — drop it, which also re-locks the button until the next preview.
+    setRebuildPlan(null)
+    // The rebuild writes the new channel ids into discord_config; pull them back
+    // so the form below is right without a reload.
+    await loadConfig(true)
+    setRunning(null)
+  }
+
+  const syncRoles = async () => {
+    setRunning('roles'); setRolesErr(null); setRolesReport(null)
+    const { body, error } = await invokeFn('discord-role-reconcile')
+    if (error) { setRolesErr(error); setRunning(null); return }
+    setRolesReport(readReconcileReport(body ?? {}))
+    setRunning(null)
+  }
+
   // Read-only: the scan writes nothing back into discord_config, so unlike
   // provision() there's nothing to reload afterwards.
   const scan = async () => {
@@ -559,6 +888,14 @@ export default function DiscordSettings() {
 
   const hasAuditDetail =
     !!auditReport && (auditReport.roles.length > 0 || auditReport.groups.length > 0)
+
+  // A rebuild gates its categories by role ID; the panel already knows the names
+  // of the roles it manages, so show "Bronze" rather than an 18-digit number.
+  const roleNames = new Map<string, string>()
+  for (const f of NAMED_ROLE_FIELDS) {
+    const id = form[f.key]
+    if (typeof id === 'string' && id) roleNames.set(id, f.label)
+  }
 
   const showEventCounts =
     !!eventsReport &&
@@ -617,10 +954,60 @@ export default function DiscordSettings() {
           >
             {running === 'audit' ? 'Scanning…' : 'Scan my server'}
           </button>
+          <button
+            type="button"
+            onClick={previewRebuild}
+            disabled={running !== null}
+            aria-busy={running === 'preview'}
+            className="hcr-btn hcr-btn-ghost"
+          >
+            {running === 'preview' ? 'Previewing…' : 'Preview rebuild'}
+          </button>
+          <button
+            type="button"
+            onClick={syncRoles}
+            disabled={running !== null}
+            aria-busy={running === 'roles'}
+            className="hcr-btn hcr-btn-ghost"
+          >
+            {running === 'roles' ? 'Syncing…' : 'Sync roles now'}
+          </button>
         </div>
         <p className="mt-2 text-xs text-[var(--color-faint)]">
-          Scanning reads the server and reports back — it never creates, renames or deletes anything.
+          Scanning and previewing read the server and report back — neither creates, renames or
+          deletes anything.
         </p>
+
+        {/* The one control here that reshapes the server, kept apart from the
+            read-only buttons above and locked until a plan has been seen. */}
+        <div className="mt-5 rounded-lg border border-[var(--color-line)] bg-[var(--color-cloud)] p-4">
+          <span className="block font-mono text-[11px] font-bold uppercase tracking-wider text-[var(--color-muted)]">
+            Rebuild the layout
+          </span>
+          <p className="mt-1 text-sm text-[var(--color-muted)]">
+            Builds the league's categories and channels, sets who can see each one, then moves every
+            channel the server has today into a hidden <span className="font-mono">ARCHIVE</span>{' '}
+            category. Nothing is ever deleted — the old channels and all their messages stay put
+            until you remove them by hand.
+          </p>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={runRebuild}
+              disabled={running !== null || !rebuildPlan}
+              aria-busy={running === 'rebuild'}
+              aria-describedby="rebuild-gate"
+              className="hcr-btn hcr-btn-primary"
+            >
+              {running === 'rebuild' ? 'Rebuilding…' : 'Run rebuild'}
+            </button>
+          </div>
+          <p id="rebuild-gate" className="mt-2 text-xs text-[var(--color-faint)]">
+            {rebuildPlan
+              ? 'The plan below is what will be built. You’ll be asked to confirm once more.'
+              : 'Preview the rebuild first — this unlocks once you’ve read the plan.'}
+          </p>
+        </div>
 
         <div aria-live="polite">
           {setupErr && (
@@ -773,6 +1160,23 @@ export default function DiscordSettings() {
                 )}
             </div>
           )}
+
+          {rebuildErr && (
+            <p className="mt-4 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">
+              {rebuildErr}
+            </p>
+          )}
+
+          {rebuildPlan && <RebuildView report={rebuildPlan} names={roleNames} />}
+          {rebuildDone && <RebuildView report={rebuildDone} names={roleNames} />}
+
+          {rolesErr && (
+            <p className="mt-4 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">
+              {rolesErr}
+            </p>
+          )}
+
+          {rolesReport && <RoleSyncView report={rolesReport} />}
         </div>
       </section>
 
@@ -1020,7 +1424,203 @@ function MiniChip({ tone, children }: { tone: 'brand' | 'quiet'; children: React
   )
 }
 
-function Count({ label, value }: { label: string; value: number }) {
+/**
+ * The rebuild plan, read-only — the same block whether it's the rehearsal or the
+ * report from the real run; only the tense of the chips and the archive line
+ * changes.
+ */
+function RebuildView({ report, names }: { report: RebuildReport; names: Map<string, string> }) {
+  const nothing =
+    report.categories.length === 0 &&
+    report.loose.length === 0 &&
+    report.archive === null &&
+    !report.note &&
+    report.warnings.length === 0
+
+  return (
+    <div className="mt-5 border-t border-[var(--color-line)] pt-4">
+      <span className="block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+        {report.dryRun ? 'Rebuild preview — nothing has changed yet' : 'Rebuild'}
+      </span>
+
+      {(report.guildName || report.guildId) && (
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="text-sm font-semibold">{report.guildName ?? 'This server'}</span>
+          {report.guildId && (
+            <span className="font-mono text-[11px] tabular text-[var(--color-faint)]">{report.guildId}</span>
+          )}
+        </div>
+      )}
+
+      {report.categories.map((c, i) => (
+        <div key={`${c.key}-${i}`} className="mt-4">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="min-w-0 flex-1 break-words font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">
+              {c.name}
+            </span>
+            {c.state && <PlanChip state={c.state} dryRun={report.dryRun} />}
+          </div>
+          {/* Only claim a gate the function actually reported — silence here
+              means "not said", not "open to everyone". */}
+          {c.roles.length > 0 && <RoleGate roles={c.roles} names={names} />}
+          <PlanChannels channels={c.channels} dryRun={report.dryRun} groupKey={c.key} />
+        </div>
+      ))}
+
+      {report.loose.length > 0 && (
+        <div className="mt-4">
+          <span className="block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">
+            No category
+          </span>
+          <PlanChannels channels={report.loose} dryRun={report.dryRun} groupKey="loose" />
+        </div>
+      )}
+
+      {report.archive !== null && (
+        <p className="mt-3 font-mono text-[11px] uppercase tracking-wider text-[var(--color-faint)]">
+          {report.archive} channel{report.archive === 1 ? '' : 's'}{' '}
+          {report.dryRun ? 'will move to' : 'moved to'} {report.archiveName || 'ARCHIVE'}
+        </p>
+      )}
+
+      {!report.dryRun && (
+        <p className="mt-2 text-sm text-[var(--color-muted)]">
+          Your old channels are all in the <span className="font-mono">ARCHIVE</span> category now,
+          hidden from members. Nothing was deleted and every message is still there — delete them by
+          hand whenever you like, or leave them.
+        </p>
+      )}
+
+      {report.note && <p className="mt-3 text-sm text-[var(--color-muted)]">{report.note}</p>}
+
+      {report.warnings.length > 0 && <Callout title="Needs your attention" lines={report.warnings} />}
+
+      {report.dryRun && nothing && (
+        <p className="text-sm text-[var(--color-muted)]">
+          The preview finished, but nothing came back to show. Scan the server first, then try again.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Who will be able to see a category. A gate reported as a role ID is named
+ * where the panel knows the name and shown as the bare ID where it doesn't —
+ * an ID a commissioner can look up beats a guess.
+ */
+function RoleGate({ roles, names }: { roles: string[]; names: Map<string, string> }) {
+  return (
+    <p className="mt-1 text-xs text-[var(--color-muted)]">
+      Visible to{' '}
+      {roles.map((r, i) => {
+        const named = names.get(r)
+        return (
+          <span key={`${r}-${i}`}>
+            {i > 0 && ' · '}
+            {named ? (
+              named
+            ) : snowflake(r) ? (
+              <span className="font-mono tabular">{r}</span>
+            ) : (
+              r
+            )}
+          </span>
+        )
+      })}
+    </p>
+  )
+}
+
+/** The channels under one category in the plan. */
+function PlanChannels({
+  channels,
+  dryRun,
+  groupKey,
+}: {
+  channels: PlanChannel[]
+  dryRun: boolean
+  groupKey: string
+}) {
+  if (channels.length === 0) return null
+  return (
+    <ul className="divide-y divide-[var(--color-line)]">
+      {channels.map((c, i) => (
+        <li
+          key={c.id ?? `${groupKey}-${c.key}-${i}`}
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
+        >
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{c.name}</span>
+          {c.id && <span className="font-mono text-[11px] tabular text-[var(--color-faint)]">{c.id}</span>}
+          {c.state && <PlanChip state={c.state} dryRun={dryRun} />}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Same pill as StateChip, in the future tense while the run is only a plan. */
+function PlanChip({ state, dryRun }: { state: PlanState; dryRun: boolean }) {
+  const labels: Record<PlanState, string> = dryRun
+    ? { new: 'will create', exists: 'in place', failed: 'failed' }
+    : { new: 'created', exists: 'found', failed: 'failed' }
+  const styles: Record<PlanState, string> = {
+    new: 'border-[var(--color-brand-deep)]/40 bg-[var(--color-brand)]/15 text-[var(--color-brand-deep)]',
+    exists: 'border-[var(--color-line-2)] text-[var(--color-muted)]',
+    failed: 'border-[var(--color-red)]/40 bg-[var(--color-red)]/10 text-[var(--color-red)]',
+  }
+  return (
+    <span
+      className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider ${styles[state]}`}
+    >
+      {labels[state]}
+    </span>
+  )
+}
+
+/** What the role sync looked at, what it moved, and who. */
+function RoleSyncView({ report }: { report: ReconcileReport }) {
+  return (
+    <div className="mt-5 border-t border-[var(--color-line)] pt-4">
+      <span className="block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+        Role sync
+      </span>
+
+      {(report.checked !== null || report.changed !== null) && (
+        <dl className="mt-2 grid grid-cols-2 gap-3">
+          {/* A tally we were never given is a dash, never a zero. */}
+          <Count label="Checked" value={report.checked ?? '—'} />
+          <Count label="Changed" value={report.changed ?? '—'} />
+        </dl>
+      )}
+
+      {report.members.length > 0 && (
+        <ul className="mt-3 divide-y divide-[var(--color-line)]">
+          {report.members.map((m, i) => (
+            <li key={`${m.key}-${i}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold">{m.name}</span>
+              {m.detail && (
+                <span className="font-mono text-[11px] text-[var(--color-muted)]">{m.detail}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {report.changed === 0 && report.members.length === 0 && !report.note && (
+        <p className="mt-2 text-sm text-[var(--color-muted)]">
+          Every member's Discord roles already matched their license — nothing to change.
+        </p>
+      )}
+
+      {report.note && <p className="mt-3 text-sm text-[var(--color-muted)]">{report.note}</p>}
+
+      {report.warnings.length > 0 && <Callout title="Needs your attention" lines={report.warnings} />}
+    </div>
+  )
+}
+
+function Count({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-lg border border-[var(--color-line)] bg-[var(--color-cloud)] px-3 py-2">
       <dt className="font-mono text-[10px] uppercase tracking-wider text-[var(--color-muted)]">{label}</dt>
