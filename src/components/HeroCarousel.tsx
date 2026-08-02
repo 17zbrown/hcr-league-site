@@ -54,7 +54,7 @@ export default function HeroCarousel() {
                 <Link to="/schedule" className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Schedule</Link>
               </div>
             </div>
-            <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 shadow-card">
+            <Link to={`/schedule/${next.id}`} className="block rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 shadow-card transition-transform hover:-translate-y-0.5">
               <div className="mb-4 flex items-center justify-between">
                 <span className="font-mono text-xs font-bold uppercase tracking-widest text-[var(--color-blue)]">Green flag in</span>
                 <div className="flex gap-2">
@@ -64,7 +64,7 @@ export default function HeroCarousel() {
                 </div>
               </div>
               <Countdown target={next.date} />
-            </div>
+            </Link>
           </div>
         ),
       })
@@ -114,10 +114,10 @@ export default function HeroCarousel() {
               <Link to="/results" className="mt-8 inline-block rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1 shadow-glow">Race Results</Link>
             </div>
             <div className="hidden md:block">
-              <div className="rounded-2xl bg-[var(--color-deep-2)] p-8 text-center">
+              <Link to="/results" className="block rounded-2xl bg-[var(--color-deep-2)] p-8 text-center transition-transform hover:-translate-y-0.5">
                 <div className="font-display text-[7rem] leading-none text-[var(--color-brand)]">P1</div>
                 <div className="mt-2 font-mono text-xs uppercase tracking-widest text-white/60">Overall Victory</div>
-              </div>
+              </Link>
             </div>
           </div>
         ),

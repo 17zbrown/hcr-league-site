@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useReducedMotion } from 'framer-motion'
 
@@ -70,6 +71,8 @@ export function AnimatedStat({
 }
 
 export interface Stat {
+  /** Optional destination — the tile becomes a link. */
+  to?: string
   label: string
   value: number | null | undefined
   decimals?: number
@@ -90,24 +93,38 @@ export function StatBand({ stats, columns = 6 }: { stats: Stat[]; columns?: numb
     : columns === 5 ? 'sm:grid-cols-3 lg:grid-cols-5'
     : columns === 4 ? 'sm:grid-cols-2 lg:grid-cols-4'
     : 'sm:grid-cols-3'
+  // Tiles may link (Stat.to) — a plain grid, since <a> isn't valid inside <dl>.
+  const tile = (s: Stat) => (
+    <>
+      <div className="font-body text-[10px] font-semibold uppercase leading-tight tracking-[0.14em] text-[var(--color-muted)]">
+        {s.label}
+      </div>
+      <div className="mt-2 font-display text-4xl leading-none text-[var(--color-ink)] md:text-5xl">
+        {s.text !== undefined ? (
+          <span className={s.text ? 'tabular text-3xl md:text-4xl' : ''}>{s.text ?? '—'}</span>
+        ) : (
+          <AnimatedStat value={s.value} decimals={s.decimals} prefix={s.prefix} suffix={s.suffix} />
+        )}
+      </div>
+      {s.hint && <p className="mt-1.5 text-xs text-[var(--color-faint)]">{s.hint}</p>}
+    </>
+  )
   return (
-    <dl className={`grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--color-line)] ${cols}`}>
-      {stats.map((s) => (
-        <div key={s.label} className="bg-[var(--color-paper)] px-5 py-6">
-          <dt className="font-body text-[10px] font-semibold uppercase leading-tight tracking-[0.14em] text-[var(--color-muted)]">
-            {s.label}
-          </dt>
-          <dd className="mt-2 font-display text-4xl leading-none text-[var(--color-ink)] md:text-5xl">
-            {s.text !== undefined ? (
-              <span className={s.text ? 'tabular text-3xl md:text-4xl' : ''}>{s.text ?? '—'}</span>
-            ) : (
-              <AnimatedStat value={s.value} decimals={s.decimals} prefix={s.prefix} suffix={s.suffix} />
-            )}
-          </dd>
-          {s.hint && <p className="mt-1.5 text-xs text-[var(--color-faint)]">{s.hint}</p>}
-        </div>
-      ))}
-    </dl>
+    <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--color-line)] ${cols}`}>
+      {stats.map((s) =>
+        s.to ? (
+          <Link
+            key={s.label}
+            to={s.to}
+            className="group bg-[var(--color-paper)] px-5 py-6 transition-colors hover:bg-[var(--color-cloud)]"
+          >
+            {tile(s)}
+          </Link>
+        ) : (
+          <div key={s.label} className="bg-[var(--color-paper)] px-5 py-6">{tile(s)}</div>
+        ),
+      )}
+    </div>
   )
 }
 

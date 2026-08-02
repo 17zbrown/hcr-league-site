@@ -67,6 +67,23 @@ export default function Home() {
       <HeroCarousel />
       <Ticker />
 
+      {/* ---------- PADDOCK NEWS — first thing under the hero ---------- */}
+      <PaddockNews />
+
+      {/* ---------- LEAGUE PULSE ---------- */}
+      <Section eyebrow="The season so far" title="League pulse">
+        <StatBand
+          stats={[
+            { label: 'Rounds Complete', value: roundsDone, to: '/results' },
+            { label: 'Rounds To Go', value: (events?.length ?? 0) - roundsDone, to: '/schedule' },
+            { label: 'Drivers Scored', value: driversScored, to: '/drivers' },
+            { label: 'Race Starts', value: totalStarts, to: '/results' },
+            { label: 'Laps Recorded', value: totalLaps, to: '/results' },
+            ...(cleanRaces != null ? [{ label: 'Incident-Free Runs', value: cleanRaces, suffix: '%', to: '/standings' }] : []),
+          ]}
+        />
+      </Section>
+
       {/* ---------- LATEST RESULT ---------- */}
       {lastEvent && (
         <Section
@@ -81,20 +98,6 @@ export default function Home() {
           <LatestByClass eventId={lastEvent.id} />
         </Section>
       )}
-
-      {/* ---------- LEAGUE PULSE ---------- */}
-      <Section eyebrow="The season so far" title="League pulse">
-        <StatBand
-          stats={[
-            { label: 'Rounds Complete', value: roundsDone },
-            { label: 'Rounds To Go', value: (events?.length ?? 0) - roundsDone },
-            { label: 'Drivers Scored', value: driversScored },
-            { label: 'Race Starts', value: totalStarts },
-            { label: 'Laps Recorded', value: totalLaps },
-            ...(cleanRaces != null ? [{ label: 'Incident-Free Runs', value: cleanRaces, suffix: '%' }] : []),
-          ]}
-        />
-      </Section>
 
       {/* ---------- CHAMPIONSHIP SNAPSHOT — black feature panels ---------- */}
       <div className="bg-[var(--color-cloud)]">
@@ -114,10 +117,10 @@ export default function Home() {
               return (
                 <Reveal key={cls} delay={ci * 0.08} className="h-full">
                   <div className="on-navy flex h-full flex-col overflow-hidden rounded-xl bg-[var(--color-deep)] shadow-card transition-transform hover:-translate-y-0.5">
-                    <div className="flex items-center justify-between border-b border-[var(--color-line)] px-5 py-4">
+                    <Link to="/standings" className="flex min-h-11 items-center justify-between border-b border-[var(--color-line)] px-5 py-4 transition-colors hover:bg-[var(--color-deep-2)]">
                       <span className="font-display text-3xl leading-none">{cls}</span>
                       <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} aria-hidden />
-                    </div>
+                    </Link>
                     <ol className="flex-1">
                       {rows.length === 0 && <li className="px-5 py-7 font-body text-sm text-[var(--color-muted)]">No results scored yet.</li>}
                       {rows.map((row, i) => (
@@ -196,8 +199,6 @@ export default function Home() {
 
       <Champions />
 
-      {/* ---------- PADDOCK NEWS — last strip before the footer CTA ---------- */}
-      <PaddockNews />
     </>
   )
 }
@@ -241,13 +242,13 @@ function LatestByClass({ eventId }: { eventId: string }) {
           <Reveal key={cls} delay={ci * 0.08} className="h-full">
             <div className="flex h-full flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] transition-transform hover:-translate-y-0.5">
               {/* Black class-header bar — the catalog's product-tile label */}
-              <div className="on-navy flex items-center justify-between bg-[var(--color-deep)] px-5 py-4">
+              <Link to="/results" className="on-navy flex min-h-11 items-center justify-between bg-[var(--color-deep)] px-5 py-4 transition-colors hover:bg-[var(--color-deep-2)]">
                 <span className="font-display text-2xl leading-none text-[var(--color-ink)]">{cls}</span>
                 <span className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} aria-hidden />
                   <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Result</span>
                 </span>
-              </div>
+              </Link>
               <ol className="flex-1">
                 {rows.length === 0 && (
                   <li className="px-5 py-7 font-body text-sm text-[var(--color-muted)]">No result scored.</li>
@@ -306,7 +307,7 @@ function Champions() {
                 {champs.map((c) => (
                   <div key={c.id} className="flex items-center gap-3">
                     <ClassChip classId={c.class_id} />
-                    <span className="font-body font-semibold">{c.label}</span>
+                    <DriverName text={c.label} className="font-body font-semibold" />
                   </div>
                 ))}
               </div>
@@ -338,7 +339,10 @@ function PaddockNews() {
         <div className="grid gap-5 md:grid-cols-3">
           {news.slice(0, 3).map((a, i) => (
             <Reveal key={a.id} delay={i * 0.06} className="h-full">
-              <article className="flex h-full flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] transition-transform hover:-translate-y-0.5">
+              <Link
+                to="/reports"
+                className="group flex h-full flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] transition-transform hover:-translate-y-0.5 hover:shadow-card"
+              >
                 <div className="flex flex-1 flex-col p-5">
                   <div className="flex items-center justify-between gap-3">
                     {a.category && (
@@ -356,13 +360,12 @@ function PaddockNews() {
                   {a.dek && <p className="mt-2 line-clamp-3 font-body text-sm text-[var(--color-muted)]">{a.dek}</p>}
                   <div className="tabular mt-auto pt-4 text-xs text-[var(--color-faint)]">{fmtDateLong(a.published_at)}</div>
                 </div>
-                <Link
-                  to="/reports"
-                  className={`${ACTION_BAR} bg-[var(--color-mist)] text-[var(--color-ink)] hover:bg-[var(--color-deep)] hover:text-white`}
+                <div
+                  className={`${ACTION_BAR} bg-[var(--color-mist)] text-[var(--color-ink)] group-hover:bg-[var(--color-deep)] group-hover:text-white group-focus-visible:bg-[var(--color-deep)] group-focus-visible:text-white`}
                 >
                   Read the report <span aria-hidden>→</span>
-                </Link>
-              </article>
+                </div>
+              </Link>
             </Reveal>
           ))}
         </div>
