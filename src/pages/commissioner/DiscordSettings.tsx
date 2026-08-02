@@ -796,6 +796,156 @@ const readLinkReport = (body: Record<string, unknown>): LinkReport => {
   }
 }
 
+// ── Inactive members ─────────────────────────────────────────────────────────
+// discord-prune-pending removes people who joined the Discord and never came
+// back to finish onboarding. It reports the same rows it writes to
+// discord_prune_log, so each row names its own outcome. Read as loosely as
+// everything above, with one rule the other readers don't need: a row we can
+// only half-read still stays on the list. Dropping it would quietly shrink a
+// count of people about to be removed, and that is the one number on this page
+// that must never be too small.
+
+type PruneOutcome = 'kicked' | 'would_kick' | 'failed' | 'spared'
+
+interface PruneRow {
+  key: string
+  label: string
+  /** Raw instant; formatted at render. null when the function never said. */
+  joined: string | null
+  /** May arrive fractional — whole days are what a commissioner reads. */
+  days: number | null
+  outcome: PruneOutcome | null
+  detail: string
+}
+
+interface PruneReport {
+  /** What actually happened, not what we asked for — same rule as the rebuild. */
+  dryRun: boolean
+  candidates: PruneRow[]
+  kicked: PruneRow[]
+  spared: PruneRow[]
+  failed: PruneRow[]
+  /** How many are overdue. May arrive as a tally with no list behind it. */
+  dueCount: number | null
+  /** More people matched than prune_pending_max_per_run allows in one run. */
+  capped: boolean
+  overCap: number | null
+  warnings: string[]
+  note: string | null
+}
+
+/** Unlike `num`, a fractional day count keeps its fraction until render. */
+const dayCount = (v: unknown): number | null => {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  const s = text(v).trim()
+  if (!s) return null
+  const n = Number(s)
+  return Number.isFinite(n) ? n : null
+}
+
+/** "would_kick" contains "kick", so the rehearsal is tested for first. */
+const toPruneOutcome = (o: Record<string, unknown>): PruneOutcome | null => {
+  const s = (text(o.outcome) || text(o.result) || text(o.status) || text(o.action)).toLowerCase()
+  if (!s) return null
+  if (s.includes('would') || s.includes('due') || s.includes('pending')) return 'would_kick'
+  if (s.includes('fail') || s.includes('error') || s.includes('refus')) return 'failed'
+  if (s.includes('spare') || s.includes('skip') || s.includes('kept') || s.includes('keep')) return 'spared'
+  if (s.includes('kick') || s.includes('remov')) return 'kicked'
+  return null
+}
+
+const toPruneRow = (raw: unknown, i: number): PruneRow | null => {
+  if (typeof raw === 'string') {
+    const s = raw.trim()
+    return s ? { key: `member-${i}`, label: s, joined: null, days: null, outcome: null, detail: '' } : null
+  }
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const label = discordLabel(o)
+  const joined = (text(o.joined_at) || text(o.joinedAt) || text(o.joined)).trim()
+  const days = dayCount(o.days_pending ?? o.daysPending ?? o.days ?? o.pending_days)
+  // Nothing readable at all is noise. Anything readable is a person.
+  if (!label && !joined && days === null) return null
+  return {
+    key:
+      snowflake(o.discord_user_id) ??
+      snowflake(o.user_id) ??
+      snowflake(o.id) ??
+      `${label || 'member'}-${i}`,
+    label: label || 'Unnamed member',
+    joined: joined || null,
+    days,
+    outcome: toPruneOutcome(o),
+    detail: text(o.detail) || text(o.reason) || text(o.message) || text(o.error),
+  }
+}
+
+const toPruneRows = (raw: unknown): PruneRow[] =>
+  (Array.isArray(raw) ? raw : [])
+    .map((entry, i) => toPruneRow(entry, i))
+    .filter((r): r is PruneRow => r !== null)
+
+const readPruneReport = (body: Record<string, unknown>, asked: boolean): PruneReport => {
+  const counts = (body.counts && typeof body.counts === 'object' ? body.counts : body) as Record<string, unknown>
+
+  // Believe the function over the button, exactly as the rebuild does: if it
+  // says it only rehearsed then nobody left the server, whatever we asked for.
+  const said = body.dry_run ?? body.dryRun
+  const dryRun = typeof said === 'boolean' ? said : asked
+
+  // Rows may arrive sorted into buckets, or as one flat list where each row
+  // names its own outcome. Prefer the buckets and fall back to the flat list, so
+  // a function that sends both shapes never counts the same person twice.
+  const buckets: [unknown, PruneOutcome][] = [
+    [body.kicked ?? body.removed, 'kicked'],
+    [body.would_kick ?? body.wouldKick ?? body.candidates ?? body.pending, 'would_kick'],
+    [body.spared ?? body.skipped_members, 'spared'],
+    [body.failed ?? body.errors, 'failed'],
+  ]
+  const bucketed = buckets.flatMap(([raw, outcome]) =>
+    toPruneRows(raw).map((r) => ({ ...r, outcome: r.outcome ?? outcome })),
+  )
+  const rows =
+    bucketed.length > 0
+      ? bucketed
+      : toPruneRows([body.results, body.rows, body.members, body.log, body.entries].find((v) => Array.isArray(v)))
+
+  const of = (outcome: PruneOutcome): PruneRow[] => rows.filter((r) => r.outcome === outcome)
+  // A row that never said what happened to it. Which list it belongs on depends
+  // entirely on whether this run was real.
+  const unsaid = rows.filter((r) => r.outcome === null)
+
+  // A rehearsal removed nobody, so every row it lists is only a candidate — even
+  // one labelled "kicked". A real run reports the people it acted on, so a row
+  // that says nothing is counted as removed: naming someone who went is
+  // recoverable, losing them off the list is not.
+  const candidates = dryRun ? [...of('would_kick'), ...of('kicked'), ...unsaid] : of('would_kick')
+  const kicked = dryRun ? [] : [...of('kicked'), ...unsaid]
+
+  const overCap = num(
+    body.over_cap_count ?? body.overCapCount ?? counts.over_cap_count ?? counts.overCapCount ?? counts.over_cap,
+  )
+
+  return {
+    dryRun,
+    candidates,
+    kicked,
+    spared: of('spared'),
+    failed: of('failed'),
+    // A tally we were never given still shows if the list itself came through.
+    dueCount:
+      num(counts.would_kick ?? counts.wouldKick ?? counts.candidates ?? counts.due ?? counts.overdue) ??
+      (candidates.length > 0 ? candidates.length : null),
+    capped:
+      body.capped === true ||
+      counts.capped === true ||
+      body.hit_cap === true ||
+      (overCap !== null && overCap > 0),
+    overCap,
+    warnings: Array.from(new Set(toStrings(body.warnings))),
+    note: typeof body.skipped === 'string' ? body.skipped : text(body.message) || null,
+  }
+}
+
 /**
  * `functions.invoke` swallows the response body on a non-2xx and hands back a
  * bare "Edge Function returned a non-2xx status code" — useless to a
@@ -860,6 +1010,37 @@ const REBUILD_CONFIRM = [
   'Nothing is deleted. No messages are lost. The archived channels stay exactly as they are, out of sight of members, and you can delete them by hand later if you want to.',
 ].join('\n')
 
+/** Days pending may arrive fractional; a commissioner reads whole days. */
+const fmtDays = (n: number): string => {
+  const d = Math.max(0, Math.floor(n))
+  return `${d} day${d === 1 ? '' : 's'}`
+}
+
+/**
+ * Both prune numbers are bounded in the database. Clamp before sending and show
+ * the clamped value back, so the box on screen never disagrees with the rule the
+ * automation will actually follow.
+ */
+const clampInt = (raw: string, lo: number, hi: number, fallback: number): number => {
+  const n = raw.trim() === '' ? NaN : Math.trunc(Number(raw))
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(hi, Math.max(lo, n))
+}
+
+/**
+ * The last thing standing between a click and people losing their place in the
+ * server. It names the count, and it says the thing a commissioner most needs to
+ * hear before agreeing: this is a kick, and a kick is undoable by invitation.
+ */
+const pruneConfirm = (n: number): string =>
+  [
+    `Remove ${n} ${n === 1 ? 'person' : 'people'} from the Discord?`,
+    '',
+    'They joined the server and never finished onboarding. This kicks them out — it is not a ban. Nothing is deleted, and anyone removed can rejoin with a new invite.',
+    '',
+    'Only the people listed in the preview will be removed.',
+  ].join('\n')
+
 /** The roles the panel manages, so a gate reported as an ID can be named. */
 const NAMED_ROLE_FIELDS: { key: keyof Cfg; label: string }[] = [
   { key: 'role_site_admin', label: 'Admin' },
@@ -895,6 +1076,23 @@ export default function DiscordSettings() {
   const [linkErr, setLinkErr] = useState<string | null>(null)
   const [linkReport, setLinkReport] = useState<LinkReport | null>(null)
 
+  // Inactive members. Kept on its own state rather than folded into `form`: the
+  // two numbers are numbers, not snowflake strings, and the card saves on its own
+  // so a half-typed ID in the form below can never ride along with a rule about
+  // removing people. `pruneRunning` is likewise separate, so this card locks
+  // itself without changing when any other button on the page is available.
+  const [pruneEnabled, setPruneEnabled] = useState(false)
+  const [pruneDays, setPruneDays] = useState('7')
+  const [pruneMax, setPruneMax] = useState('10')
+  const [pruneSaving, setPruneSaving] = useState(false)
+  const [pruneSaved, setPruneSaved] = useState(false)
+  const [pruneCfgErr, setPruneCfgErr] = useState<string | null>(null)
+  const [pruneRunning, setPruneRunning] = useState<'preview' | 'remove' | null>(null)
+  const [pruneErr, setPruneErr] = useState<string | null>(null)
+  /** The rehearsal. Its presence is also what unlocks the real run. */
+  const [prunePreview, setPrunePreview] = useState<PruneReport | null>(null)
+  const [pruneDone, setPruneDone] = useState<PruneReport | null>(null)
+
   /**
    * `keepSwitches` is for the post-setup refresh: setup writes the ids but
    * deliberately never touches `enabled`, so an unsaved flick of either toggle
@@ -921,9 +1119,34 @@ export default function DiscordSettings() {
     setProvisionedAt(typeof row.provisioned_at === 'string' ? row.provisioned_at : null)
   }
 
+  /**
+   * The prune settings come off the same row, read separately so nothing about
+   * the shape of the form below has to change to hold them. A row that has never
+   * been touched leaves the defaults standing: off, seven days, ten at a time.
+   */
+  const loadPrune = async () => {
+    const { data, error } = await supabase
+      .from('discord_config')
+      .select('prune_pending_enabled, prune_pending_days, prune_pending_max_per_run')
+      .eq('id', 1)
+      .maybeSingle()
+    if (error) { setPruneCfgErr(error.message); return }
+    if (!data) return
+    const row = data as Record<string, unknown>
+    setPruneEnabled(row.prune_pending_enabled === true)
+    const days = num(row.prune_pending_days)
+    const max = num(row.prune_pending_max_per_run)
+    if (days !== null) setPruneDays(String(days))
+    if (max !== null) setPruneMax(String(max))
+  }
+
   // Read once on mount; provision() re-runs loadConfig by hand afterwards.
   useEffect(() => {
     loadConfig().finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    loadPrune()
   }, [])
 
   if (loading) return <Skeleton className="h-96 w-full" />
@@ -1015,6 +1238,62 @@ export default function DiscordSettings() {
     if (error) { setAuditErr(error); setRunning(null); return }
     setAuditReport(readAuditReport(body ?? {}))
     setRunning(null)
+  }
+
+  /**
+   * How many people the next real run would remove. The list the preview showed
+   * is the truthful number: a preview that hit the ceiling lists only as many as
+   * the ceiling allows, which is exactly how many would go. The tally is the
+   * fallback for a function that counted without naming anybody.
+   */
+  const pruneDue = prunePreview ? prunePreview.candidates.length || prunePreview.dueCount || 0 : 0
+
+  const savePrune = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPruneSaving(true); setPruneCfgErr(null)
+    const days = clampInt(pruneDays, 1, 90, 7)
+    const max = clampInt(pruneMax, 1, 100, 10)
+    // Put the clamped numbers back on screen before saving them, so the boxes
+    // show the rule that is about to be stored rather than the one typed over it.
+    setPruneDays(String(days)); setPruneMax(String(max))
+    const { error } = await supabase
+      .from('discord_config')
+      .update({
+        prune_pending_enabled: pruneEnabled,
+        prune_pending_days: days,
+        prune_pending_max_per_run: max,
+      })
+      .eq('id', 1)
+    setPruneSaving(false)
+    if (error) { setPruneCfgErr(error.message); return }
+    setPruneSaved(true); setTimeout(() => setPruneSaved(false), 1800)
+  }
+
+  // Rehearsal only: dryRun asks the function to work out who is overdue and
+  // remove nobody. Safe to run whenever, and the only way to unlock the button
+  // below it.
+  const previewPrune = async () => {
+    if (running !== null || pruneRunning !== null) return
+    setPruneRunning('preview'); setPruneErr(null); setPrunePreview(null); setPruneDone(null)
+    const { body, error } = await invokeFn('discord-prune-pending', { dryRun: true })
+    if (error) { setPruneErr(error); setPruneRunning(null); return }
+    setPrunePreview(readPruneReport(body ?? {}, true))
+    setPruneRunning(null)
+  }
+
+  const runPrune = async () => {
+    // The button is disabled without a preview naming somebody; this is the belt
+    // to that brace, and it is worth having twice for a button that removes people.
+    if (!prunePreview || pruneDue < 1 || running !== null || pruneRunning !== null) return
+    if (!window.confirm(pruneConfirm(pruneDue))) return
+    setPruneRunning('remove'); setPruneErr(null); setPruneDone(null)
+    const { body, error } = await invokeFn('discord-prune-pending', { dryRun: false })
+    if (error) { setPruneErr(error); setPruneRunning(null); return }
+    setPruneDone(readPruneReport(body ?? {}, false))
+    // The preview described a server that has just changed — drop it, which also
+    // re-locks the button until somebody looks at a fresh list.
+    setPrunePreview(null)
+    setPruneRunning(null)
   }
 
   const field = (key: keyof Cfg, label: string, hint?: string) => (
@@ -1350,6 +1629,147 @@ export default function DiscordSettings() {
           )}
 
           {linkReport && <LinkDriversView report={linkReport} />}
+        </div>
+      </section>
+
+      {/* ── Inactive members ────────────────────────────────────────────── */}
+      {/* Everything above this line builds things. This card takes people out of
+          the server, so it says so plainly and never in the panel's usual
+          cheerful voice. */}
+      <section className="mb-6 max-w-2xl rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
+        <h3 className="text-xl">Inactive members</h3>
+        <p className="mt-1 text-sm text-[var(--color-ink-2)]">
+          People who join the Discord and never finish onboarding can be removed automatically after
+          a set number of days. Removing someone is a kick, not a ban — nothing of theirs is deleted,
+          and they can rejoin at any time with a new invite.
+        </p>
+
+        <form onSubmit={savePrune} className="mt-4 border-t border-[var(--color-line)] pt-4">
+          <Switch
+            checked={pruneEnabled}
+            onChange={setPruneEnabled}
+            label="Remove inactive members automatically"
+            hint="Off by default. While this is off, nobody is removed unless you do it here yourself."
+          />
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block">
+                <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
+                  Days before removal
+                </span>
+                <input
+                  className="hcr-input tabular"
+                  type="number"
+                  min={1}
+                  max={90}
+                  step={1}
+                  inputMode="numeric"
+                  value={pruneDays}
+                  onChange={(e) => setPruneDays(e.target.value)}
+                  aria-describedby="prune-days-hint"
+                />
+              </label>
+              <p id="prune-days-hint" className="mt-1 text-xs text-[var(--color-faint)]">
+                How long someone can sit un-onboarded before they count as overdue. 1 to 90.
+              </p>
+            </div>
+
+            <div>
+              <label className="block">
+                <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
+                  Most removals per run
+                </span>
+                <input
+                  className="hcr-input tabular"
+                  type="number"
+                  min={1}
+                  max={100}
+                  step={1}
+                  inputMode="numeric"
+                  value={pruneMax}
+                  onChange={(e) => setPruneMax(e.target.value)}
+                  aria-describedby="prune-max-hint"
+                />
+              </label>
+              <p id="prune-max-hint" className="mt-1 text-xs text-[var(--color-faint)]">
+                A safety ceiling, 1 to 100. A run that reaches it stops there rather than carrying
+                on, so a mistake in these settings can only ever cost you this many people at once.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4">
+            <button type="submit" disabled={pruneSaving} className="hcr-btn hcr-btn-ghost">
+              {pruneSaving ? 'Saving…' : pruneSaved ? 'Saved ✓' : 'Save removal settings'}
+            </button>
+            <p className="mt-2 text-xs text-[var(--color-faint)]">
+              None of these three settings take effect until you save.
+            </p>
+          </div>
+
+          {pruneCfgErr && (
+            <p className="mt-3 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">
+              {pruneCfgErr}
+            </p>
+          )}
+        </form>
+
+        <div className="mt-5 border-t border-[var(--color-line)] pt-4">
+          <button
+            type="button"
+            onClick={previewPrune}
+            disabled={running !== null || pruneRunning !== null}
+            aria-busy={pruneRunning === 'preview'}
+            className="hcr-btn hcr-btn-ghost"
+          >
+            {pruneRunning === 'preview' ? 'Checking…' : 'Preview removals'}
+          </button>
+          <p className="mt-2 text-xs text-[var(--color-faint)]">
+            Previewing reads the member list and works out who is overdue. Nobody is removed by it.
+          </p>
+        </div>
+
+        <div aria-live="polite">
+          {pruneErr && (
+            <p className="mt-4 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">
+              {pruneErr}
+            </p>
+          )}
+
+          {prunePreview && <PruneView report={prunePreview} />}
+          {pruneDone && <PruneView report={pruneDone} />}
+        </div>
+
+        {/* The one control on the page that takes people out of the server, kept
+            apart from everything else and locked until a real list has been read. */}
+        <div className="mt-5 rounded-lg border border-[var(--color-red)]/40 bg-[var(--color-cloud)] p-4">
+          <span className="block font-mono text-[11px] font-bold uppercase tracking-wider text-[var(--color-red)]">
+            Remove them now
+          </span>
+          <p className="mt-1 text-sm text-[var(--color-ink-2)]">
+            Removes the people named in the preview above, and nobody else. They are kicked, not
+            banned: they keep their account, and a new invite brings any of them back.
+          </p>
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={runPrune}
+              disabled={running !== null || pruneRunning !== null || !prunePreview || pruneDue < 1}
+              aria-busy={pruneRunning === 'remove'}
+              aria-describedby="prune-gate"
+              className="hcr-btn border border-[var(--color-red)] bg-[var(--color-red)] text-white"
+            >
+              {pruneRunning === 'remove' ? 'Removing…' : 'Remove now'}
+            </button>
+          </div>
+          <p id="prune-gate" className="mt-2 text-xs text-[var(--color-faint)]">
+            {!prunePreview
+              ? 'Preview the removals first — this unlocks once you’ve read the list.'
+              : pruneDue < 1
+                ? 'Nobody is overdue, so there is nothing to remove.'
+                : `${pruneDue} ${pruneDue === 1 ? 'person' : 'people'} would be removed. You’ll be asked to confirm once more.`}
+          </p>
         </div>
       </section>
 
@@ -1900,6 +2320,196 @@ function LinkDriversView({ report }: { report: LinkReport }) {
           The run finished, but nothing came back to show.
         </p>
       )}
+    </div>
+  )
+}
+
+/**
+ * Who is overdue, or who went — the same block for the rehearsal and the real
+ * run. Deliberately plainer than the reports above it: no state chips and no
+ * tallies for their own sake, because a list of people about to lose their place
+ * in the server should read like a list of people, not like a build log.
+ */
+function PruneView({ report }: { report: PruneReport }) {
+  // The list is the truthful count; the tally only stands in when the function
+  // counted people without naming them.
+  const due = report.candidates.length || report.dueCount || 0
+
+  return (
+    <div className="mt-5 border-t border-[var(--color-line)] pt-4">
+      <span className="block font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+        {report.dryRun ? 'Preview — nobody has been removed' : 'Removals'}
+      </span>
+
+      {/* The ceiling held, which means the list below is not the whole story. */}
+      {report.capped && (
+        <Callout
+          title="More people matched than the ceiling allows"
+          lines={[
+            report.overCap !== null
+              ? `${report.overCap} more ${report.overCap === 1 ? 'person is' : 'people are'} overdue than one run will take.`
+              : 'More people are overdue than one run will take.',
+            'The run stops at the ceiling rather than carrying on. Raise “most removals per run” if that is what you want, or run this again once these are done.',
+          ]}
+        />
+      )}
+
+      {report.dryRun &&
+        (due < 1 ? (
+          <p className="mt-2 text-sm text-[var(--color-muted)]">Nobody is overdue.</p>
+        ) : (
+          <>
+            <p className="mt-2 text-sm text-[var(--color-ink-2)]">
+              {due} {due === 1 ? 'person is' : 'people are'} overdue.
+            </p>
+            {report.candidates.length > 0 ? (
+              <PruneRows rows={report.candidates} groupKey="due" />
+            ) : (
+              <p className="mt-2 text-sm text-[var(--color-muted)]">
+                The preview counted them but didn’t name them.
+              </p>
+            )}
+          </>
+        ))}
+
+      {!report.dryRun && (
+        <>
+          <dl className="mt-2 grid grid-cols-2 gap-3">
+            <Count label="Removed" value={report.kicked.length} />
+            <Count label="Left alone" value={report.spared.length} />
+          </dl>
+
+          {report.kicked.length > 0 && (
+            <div className="mt-4">
+              <span className="mb-1 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">
+                Removed
+              </span>
+              <PruneRows rows={report.kicked} groupKey="kicked" />
+            </div>
+          )}
+
+          {report.spared.length > 0 && (
+            <div className="mt-4">
+              <span className="mb-1 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">
+                Left alone
+              </span>
+              <p className="text-sm text-[var(--color-muted)]">
+                These came up in the check and were kept — they had onboarded after all, or the run
+                reached its ceiling before it got to them.
+              </p>
+              <PruneRows rows={report.spared} groupKey="spared" />
+            </div>
+          )}
+
+          {report.kicked.length === 0 && report.failed.length === 0 && !report.note && (
+            <p className="mt-2 text-sm text-[var(--color-muted)]">Nobody was removed.</p>
+          )}
+        </>
+      )}
+
+      {/* A refusal from Discord is the one thing here that is genuinely wrong,
+          and the likeliest cause is a permission the bot has never been given. */}
+      {report.failed.length > 0 && (
+        <div className="mt-4 rounded-lg border border-[var(--color-red)]/40 bg-[var(--color-red)]/10 px-4 py-3">
+          <span className="block font-mono text-[11px] font-bold uppercase tracking-wider text-[var(--color-red)]">
+            Could not be removed
+          </span>
+          <ul className="mt-1.5 space-y-1 text-sm text-[var(--color-ink-2)]">
+            {report.failed.map((f, i) => (
+              <li key={`failed-${f.key}-${i}`}>
+                <span className="font-semibold">{f.label}</span>
+                {f.detail && <span> — {f.detail}</span>}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-sm text-[var(--color-ink-2)]">
+            Usually the bot is missing the Kick Members permission, or its role sits below theirs in
+            the list. Both are fixed in Server Settings → Roles, and this can be run again after.
+          </p>
+        </div>
+      )}
+
+      {report.note && <p className="mt-3 text-sm text-[var(--color-muted)]">{report.note}</p>}
+
+      {report.warnings.length > 0 && <Callout title="Needs your attention" lines={report.warnings} />}
+    </div>
+  )
+}
+
+/** One person per row: who they are, when they joined, how long they've waited. */
+function PruneRows({ rows, groupKey }: { rows: PruneRow[]; groupKey: string }) {
+  if (rows.length === 0) return null
+  return (
+    <ul className="divide-y divide-[var(--color-line)]">
+      {rows.map((r, i) => (
+        <li
+          key={`${groupKey}-${r.key}-${i}`}
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2"
+        >
+          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{r.label}</span>
+          {r.joined && (
+            <span className="font-mono text-[11px] tabular text-[var(--color-faint)]">
+              joined {fmtStamp(r.joined)}
+            </span>
+          )}
+          {r.days !== null && (
+            <span className="font-mono text-[11px] tabular text-[var(--color-muted)]">
+              {fmtDays(r.days)} pending
+            </span>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/**
+ * Accessible switch — 44px hit target, brand yellow when on. The same control
+ * the automation panel uses, so a toggle behaves the same wherever a
+ * commissioner meets one.
+ */
+function Switch({
+  checked,
+  onChange,
+  label,
+  hint,
+}: {
+  checked: boolean
+  onChange: (next: boolean) => void
+  label: string
+  hint?: string
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1">
+      <div className="min-w-0">
+        <div className="text-sm font-semibold">{label}</div>
+        {hint && <div className="text-xs text-[var(--color-muted)]">{hint}</div>}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className="inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center"
+      >
+        <span
+          aria-hidden="true"
+          className={`relative inline-block h-7 w-12 rounded-full border transition-colors ${
+            checked
+              ? 'border-[var(--color-brand)] bg-[var(--color-brand)]'
+              : 'border-[var(--color-line-2)] bg-[var(--color-mist)]'
+          }`}
+        >
+          <span
+            className={`absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full transition-[left] ${
+              checked
+                ? 'left-[calc(100%-1.5rem)] bg-black'
+                : 'left-1 bg-white shadow-[inset_0_0_0_1px_var(--color-line-2)]'
+            }`}
+          />
+        </span>
+      </button>
     </div>
   )
 }
