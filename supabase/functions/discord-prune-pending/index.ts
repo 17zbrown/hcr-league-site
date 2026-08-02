@@ -20,11 +20,11 @@
 // anybody whose join date we could not read. Silence about somebody is treated as a
 // reason to leave them alone, never as permission.
 //
-// Callable two ways, mirroring public.assert_admin_or_cron: if you ARE authenticated
-// you must be an admin, while an unauthenticated call is let through (that's cron). A
-// JWT we can't read is the only 401. For the no-JWT path to reach this code the
-// function must be deployed with verify_jwt off; a cron job that sends the
-// service-role key works either way.
+// Callable two ways, mirroring public.assert_admin_or_cron: an admin, or cron. Cron
+// must present a service-role credential; there is deliberately no unauthenticated
+// path, because the Supabase gateway lets the PUBLIC publishable key through as
+// `apikey` with no Authorization header — which, for a function that removes people
+// from a server, would have been the worst possible thing to leave world-callable.
 //
 // Secrets (Supabase → Edge Functions):  DISCORD_BOT_TOKEN
 // Auto-provided:  SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
@@ -214,10 +214,6 @@ Deno.serve(async (req) => {
     } catch (_) { /* empty or non-JSON body — the safe default stands */ }
 
     // --- auth: an admin, or cron ---
-    // No bearer token at all means nobody is claiming to be anybody — that's the cron
-    // path. The service-role key is the same thing wearing a badge: whoever holds it
-    // already owns the database, so there is no user to look up. Anything else is a
-    // person, and a person has to be an admin.
     const authz = req.headers.get('Authorization') ?? ''
     const bearer = authz.replace(/^Bearer\s+/i, '').trim()
     // An ABSENT bearer token is not cron. The gateway accepts the project's
@@ -228,7 +224,8 @@ Deno.serve(async (req) => {
     //
     // What actually identifies the scheduler is a service-role credential: either an
     // exact match on the runtime's own key, or a legacy service_role JWT whose
-    // signature the gateway has already verified.
+    // signature the gateway has already verified. Anything else is a person, and a
+    // person has to be an admin.
     const viaCron = bearer.length > 0 && (bearer === service || isServiceRoleJwt(bearer))
 
     if (!viaCron) {
