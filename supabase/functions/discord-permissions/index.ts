@@ -49,6 +49,8 @@ const SNOWFLAKE = /^\d{5,25}$/
 const CHAN_CATEGORY = 4
 const CHAN_FORUM = 15
 const LEAGUE_CATEGORY = 'LEAGUE'
+// Named apart from the staff #race-control so the two are never confused.
+const RC_ANNOUNCE_NAME = 'race-control-announcements'
 const OVERWRITE_ROLE = 0
 
 // Discord permission bits. Named rather than inlined because a wrong bit here is a
@@ -73,6 +75,14 @@ const FORUM_MEMBER_ALLOW =
 /** …and what they should not: starting their own posts, by either route. */
 const FORUM_MEMBER_DENY = P.SEND_MESSAGES | P.CREATE_PUBLIC_THREADS
 
+/**
+ * Read-only for members: see it, read the history, react. Reactions are not
+ * messages, and an announcement channel where nobody can even acknowledge a
+ * promotion is needlessly cold.
+ */
+const READ_ONLY_ALLOW = P.VIEW_CHANNEL | P.READ_MESSAGE_HISTORY | P.ADD_REACTIONS | P.USE_EXTERNAL_EMOJIS
+const READ_ONLY_DENY = P.SEND_MESSAGES | P.SEND_MESSAGES_IN_THREADS | P.CREATE_PUBLIC_THREADS
+
 /** Staff and the bot keep the ability to open posts. */
 const FORUM_STAFF_ALLOW = P.VIEW_CHANNEL | P.READ_MESSAGE_HISTORY | P.SEND_MESSAGES |
   P.SEND_MESSAGES_IN_THREADS | P.CREATE_PUBLIC_THREADS | P.EMBED_LINKS | P.ATTACH_FILES
@@ -91,7 +101,7 @@ interface Role { id: string; managed?: boolean | null }
 type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; message: string }
 
 async function discord<T>(
-  path: string, method: 'GET' | 'PUT', token: string, body?: unknown, attempt = 0,
+  path: string, method: 'GET' | 'PUT' | 'POST', token: string, body?: unknown, attempt = 0,
 ): Promise<ApiResult<T>> {
   let res: Response
   try {
@@ -216,6 +226,7 @@ Deno.serve(async (req) => {
 
     const planned: { channel: string; target: string; add: string[]; remove: string[] }[] = []
     const applied: string[] = []
+    const created: string[] = []
 
     /**
      * Merge a set of allow/deny bits into whatever overwrite already exists.
@@ -281,9 +292,62 @@ Deno.serve(async (req) => {
       }
     }
 
+    // --- 4. #license-ups: visible to members, read-only ---
+    // It lives in the staff category, so members cannot see it at all by
+    // inheritance. A channel that exists to celebrate drivers is worth nothing if
+    // the drivers can't see it — but it is written by automation, so nobody except
+    // the bot should be posting into it.
+    const licenseUps = channels.find((c) => String(c.id) === String(cfg.channel_license_ups ?? '').trim())
+    if (!licenseUps) {
+      warnings.push('No #license-ups channel is configured, so licence promotions were not opened up to members.')
+    } else {
+      await setPerms(licenseUps, memberRole, 'League Member', READ_ONLY_ALLOW, READ_ONLY_DENY)
+      for (const [rid, label] of [[adminRole, 'Admin'], [rcRole, 'Race Control'], [botRole, 'HCR Bot']] as const) {
+        if (SNOWFLAKE.test(rid)) await setPerms(licenseUps, rid, label, FORUM_STAFF_ALLOW, 0n)
+      }
+    }
+
+    // --- 5. #race-control-announcements: where stewarding decisions are published ---
+    // Deliberately in LEAGUE, not RACE CONTROL. The staff channel is where a call is
+    // argued out; this is where the answer is published, and the people it concerns
+    // have to be able to read it.
+    let rcChannel = channels.find((c) => String(c.id) === String(cfg.channel_race_control ?? '').trim())
+      ?? children.find((c) => String(c.name ?? '') === RC_ANNOUNCE_NAME)
+    if (!rcChannel && !dryRun) {
+      const made = await discord<Channel>(`/guilds/${guildId}/channels`, 'POST', botToken, {
+        name: RC_ANNOUNCE_NAME,
+        type: 0,
+        parent_id: league.id,
+        topic: 'Stewarding decisions: protest outcomes and penalties. Published by race control — discussion goes in the protest thread.',
+      })
+      if (made.ok && made.data?.id) {
+        rcChannel = made.data
+        created.push(RC_ANNOUNCE_NAME)
+      } else if (!made.ok) {
+        warnings.push(`Could not create #${RC_ANNOUNCE_NAME} — ${made.message}`)
+      }
+    } else if (!rcChannel && dryRun) {
+      planned.push({ channel: RC_ANNOUNCE_NAME, target: '(channel)', add: ['CREATE in LEAGUE'], remove: [] })
+    }
+
+    if (rcChannel) {
+      await setPerms(rcChannel, memberRole, 'League Member', READ_ONLY_ALLOW, READ_ONLY_DENY)
+      for (const [rid, label] of [[adminRole, 'Admin'], [rcRole, 'Race Control'], [botRole, 'HCR Bot']] as const) {
+        if (SNOWFLAKE.test(rid)) await setPerms(rcChannel, rid, label, FORUM_STAFF_ALLOW, 0n)
+      }
+      if (!dryRun && String(cfg.channel_race_control ?? '') !== String(rcChannel.id)) {
+        const { error } = await db.from('discord_config')
+          .update({ channel_race_control: String(rcChannel.id), updated_at: new Date().toISOString() }).eq('id', 1)
+        if (error) warnings.push(`Created the channel but could not save its id — ${error.message}`)
+      }
+    }
+
     return json({
       ok: warnings.length === 0,
       dryRun,
+      created,
+      license_ups: licenseUps?.name ?? null,
+      race_control_announcements: rcChannel?.name ?? null,
       league_category: league.name,
       channels_in_league: children.map((c) => c.name),
       forum: forum?.name ?? null,
