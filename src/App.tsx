@@ -20,6 +20,7 @@ const Teams = lazy(() => import('./pages/Teams'))
 const Compare = lazy(() => import('./pages/Compare'))
 const TeamProfile = lazy(() => import('./pages/TeamProfile'))
 const Reports = lazy(() => import('./pages/Reports'))
+const Rulebook = lazy(() => import('./pages/Rulebook'))
 const SignUp = lazy(() => import('./pages/SignUp'))
 const Login = lazy(() => import('./pages/Login'))
 const Account = lazy(() => import('./pages/Account'))
@@ -67,6 +68,7 @@ export default function App() {
             <Route path="/teams" element={<Teams />} />
             <Route path="/teams/:id" element={<TeamProfile />} />
             <Route path="/reports" element={<Reports />} />
+            <Route path="/rulebook" element={<Rulebook />} />
           <Route path="/news" element={<Reports />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/login" element={<Login />} />
