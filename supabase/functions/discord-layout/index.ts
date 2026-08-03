@@ -66,7 +66,7 @@ const CHANNEL_ORDER: Record<string, string[]> = {
   LEAGUE: ['announcements', 'standings', 'race-results', 'season-signups', 'rulebook', 'general-chat', 'Race Channel'],
   PADDOCK: ['gravel-trap', 'promotions', 'Voice Chat'],
   ENDURANCE: ['announcements', 'general-chat', 'event-signups', 'stint-planning', 'Endurance Voice'],
-  'RACE CONTROL': ['race-control', 'incident-protests', 'license-ups', 'Steward Radio'],
+  'RACE CONTROL': ['race-control', 'incident-protests', 'license-ups', 'race-control-announcements', 'Steward Radio'],
   ADMIN: ['admin-chat', 'bot-log', 'safety-alerts', 'community-updates', 'iracing-names'],
 }
 

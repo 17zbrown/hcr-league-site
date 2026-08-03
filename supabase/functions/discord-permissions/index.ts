@@ -49,6 +49,7 @@ const SNOWFLAKE = /^\d{5,25}$/
 const CHAN_CATEGORY = 4
 const CHAN_FORUM = 15
 const LEAGUE_CATEGORY = 'LEAGUE'
+const RACE_CONTROL_CATEGORY = 'RACE CONTROL'
 // Named apart from the staff #race-control so the two are never confused.
 const RC_ANNOUNCE_NAME = 'race-control-announcements'
 const OVERWRITE_ROLE = 0
@@ -92,6 +93,7 @@ interface Channel {
   id: string
   name?: string | null
   type: number
+  position?: number | null
   parent_id?: string | null
   permission_overwrites?: Overwrite[] | null
 }
@@ -101,7 +103,7 @@ interface Role { id: string; managed?: boolean | null }
 type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; message: string }
 
 async function discord<T>(
-  path: string, method: 'GET' | 'PUT' | 'POST', token: string, body?: unknown, attempt = 0,
+  path: string, method: 'GET' | 'PUT' | 'POST' | 'PATCH', token: string, body?: unknown, attempt = 0,
 ): Promise<ApiResult<T>> {
   let res: Response
   try {
@@ -308,26 +310,56 @@ Deno.serve(async (req) => {
     }
 
     // --- 5. #race-control-announcements: where stewarding decisions are published ---
-    // Deliberately in LEAGUE, not RACE CONTROL. The staff channel is where a call is
-    // argued out; this is where the answer is published, and the people it concerns
-    // have to be able to read it.
+    // Lives in RACE CONTROL, alongside #license-ups. That category is private, so
+    // the channel is only visible to members because of the explicit League Member
+    // overwrite applied below — a channel-level allow beats a category-level deny.
+    // Remove that overwrite and the channel silently disappears for everyone it was
+    // meant for, which is exactly how #license-ups came to be invisible.
+    const raceControlCat = channels.find(
+      (c) => c.type === CHAN_CATEGORY && String(c.name ?? '') === RACE_CONTROL_CATEGORY,
+    )
+    if (!raceControlCat) warnings.push(`No ${RACE_CONTROL_CATEGORY} category exists, so the announcements channel could not be placed next to #license-ups.`)
+
+    // Found by id, else by name anywhere in the server — it may be sitting in the
+    // wrong category, which is the case this block exists to correct.
     let rcChannel = channels.find((c) => String(c.id) === String(cfg.channel_race_control ?? '').trim())
-      ?? children.find((c) => String(c.name ?? '') === RC_ANNOUNCE_NAME)
-    if (!rcChannel && !dryRun) {
+      ?? channels.find((c) => String(c.name ?? '') === RC_ANNOUNCE_NAME && c.type !== CHAN_CATEGORY)
+
+    if (!rcChannel && !dryRun && raceControlCat) {
       const made = await discord<Channel>(`/guilds/${guildId}/channels`, 'POST', botToken, {
         name: RC_ANNOUNCE_NAME,
         type: 0,
-        parent_id: league.id,
+        parent_id: raceControlCat.id,
         topic: 'Stewarding decisions: protest outcomes and penalties. Published by race control — discussion goes in the protest thread.',
       })
-      if (made.ok && made.data?.id) {
-        rcChannel = made.data
-        created.push(RC_ANNOUNCE_NAME)
-      } else if (!made.ok) {
-        warnings.push(`Could not create #${RC_ANNOUNCE_NAME} — ${made.message}`)
-      }
+      if (made.ok && made.data?.id) { rcChannel = made.data; created.push(RC_ANNOUNCE_NAME) }
+      else if (!made.ok) warnings.push(`Could not create #${RC_ANNOUNCE_NAME} — ${made.message}`)
     } else if (!rcChannel && dryRun) {
-      planned.push({ channel: RC_ANNOUNCE_NAME, target: '(channel)', add: ['CREATE in LEAGUE'], remove: [] })
+      planned.push({ channel: RC_ANNOUNCE_NAME, target: '(channel)', add: [`CREATE in ${RACE_CONTROL_CATEGORY}`], remove: [] })
+    }
+
+    // Already exists but in the wrong category: move it, and sit it directly after
+    // #license-ups.
+    //
+    // lock_permissions is deliberately NOT sent. Setting it true would resync the
+    // channel's overwrites to the new category, wiping the League Member allow and
+    // making the channel vanish for the very people it is published for. Omitting it
+    // keeps the overwrites exactly as they are, which is the whole point of the move
+    // being safe.
+    if (rcChannel && raceControlCat && String(rcChannel.parent_id ?? '') !== String(raceControlCat.id)) {
+      const licencePos = licenseUps?.position
+      const body: Record<string, unknown> = { parent_id: raceControlCat.id }
+      if (typeof licencePos === 'number') body.position = licencePos + 1
+      planned.push({
+        channel: RC_ANNOUNCE_NAME, target: '(category)',
+        add: [`MOVE to ${RACE_CONTROL_CATEGORY}${typeof licencePos === 'number' ? ' after #license-ups' : ''}`],
+        remove: [],
+      })
+      if (!dryRun) {
+        const moved = await discord(`/channels/${rcChannel.id}`, 'PATCH', botToken, body)
+        if (moved.ok) applied.push(`${RC_ANNOUNCE_NAME} · moved to ${RACE_CONTROL_CATEGORY}`)
+        else warnings.push(`Could not move #${RC_ANNOUNCE_NAME} — ${moved.message}`)
+      }
     }
 
     if (rcChannel) {
