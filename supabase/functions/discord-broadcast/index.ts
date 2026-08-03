@@ -41,6 +41,10 @@ const json = (body: unknown, status = 200) =>
 
 const SITE = 'https://hcrleague.com'
 const HCR_YELLOW = 0xf2e114
+// A decision's colour is the fastest thing to read in a busy channel, so a penalty
+// and a no-action finding must never look alike at a glance.
+const PENALTY_RED = 0xc62430
+const CLEARED_GREEN = 0x12805c
 const SNOWFLAKE = /^\d{5,25}$/
 
 const DEFAULT_LIMIT = 10
@@ -216,6 +220,7 @@ Deno.serve(async (req) => {
       standings: String(cfg.channel_standings ?? '').trim(),
       announcements: String(cfg.channel_announcements ?? '').trim(),
       license_ups: String(cfg.channel_license_ups ?? '').trim(),
+      race_control: String(cfg.channel_race_control ?? '').trim(),
     }
 
     let q = db.from('discord_outbox')
@@ -467,6 +472,65 @@ Deno.serve(async (req) => {
         embed = {
           title, url: `${SITE}/standings`, color: HCR_YELLOW, fields,
           footer: { text: 'HCR League · top five per class · full table on the site' },
+        }
+      // ------------------------------------------------------------ ruling ----
+      } else if (row.kind === 'ruling') {
+        const protestId = String(row.payload?.protest_id ?? '')
+        const { data: pr } = await db.from('protests')
+          .select('id, status, verdict, penalty, category, summary, incident_lap, against_driver_id, against_text, event_id')
+          .eq('id', protestId).maybeSingle()
+        if (!pr) {
+          skipped.push({ key: row.dedupe_key, reason: 'The protest no longer exists.' })
+          if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'protest deleted' }).eq('id', row.id)
+          continue
+        }
+        // Reopened between queueing and sending. The queue is not the authority on
+        // whether a decision still stands, so publishing it now would be wrong.
+        if (pr.status !== 'resolved' && pr.status !== 'dismissed') {
+          skipped.push({ key: row.dedupe_key, reason: `The protest went back to "${pr.status}" before this ran, so no decision was published.` })
+          if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: `reopened as ${pr.status}` }).eq('id', row.id)
+          continue
+        }
+
+        // Prefer the linked driver's real name; against_text is the free-text
+        // fallback for somebody who has no driver profile yet.
+        let against = String(pr.against_text ?? '').trim()
+        if (pr.against_driver_id) {
+          const { data: d } = await db.from('drivers').select('name').eq('id', pr.against_driver_id).maybeSingle()
+          if (d?.name) against = String(d.name)
+        }
+        const { data: ev } = pr.event_id
+          ? await db.from('events').select('round, name').eq('id', pr.event_id).maybeSingle()
+          : { data: null }
+
+        const dismissed = pr.status === 'dismissed'
+        const penalty = String(pr.penalty ?? '').trim()
+        const round = ev?.round != null ? `Round ${ev.round}` : null
+        title = clip(['Stewards\u2019 decision', round, ev?.name].filter(Boolean).join(' \u2014 '), MAX_TITLE)
+
+        const fields: Record<string, unknown>[] = []
+        if (against) fields.push({ name: 'Driver', value: clip(against, MAX_FIELD), inline: true })
+        if (pr.incident_lap) fields.push({ name: 'Lap', value: clip(String(pr.incident_lap), MAX_FIELD), inline: true })
+        if (pr.category) fields.push({ name: 'Category', value: clip(String(pr.category), MAX_FIELD), inline: true })
+        if (pr.summary) fields.push({ name: 'Incident', value: clip(String(pr.summary), MAX_FIELD), inline: false })
+        if (pr.verdict) fields.push({ name: 'Finding', value: clip(String(pr.verdict), MAX_FIELD), inline: false })
+        fields.push({
+          name: 'Outcome',
+          value: dismissed
+            ? 'Dismissed \u2014 no further action.'
+            : (penalty ? clip(penalty, MAX_FIELD) : 'Upheld \u2014 no penalty applied.'),
+          inline: false,
+        })
+
+        embed = {
+          title,
+          url: `${SITE}/portal`,
+          // Green for a driver cleared, red only where a penalty was actually
+          // applied. An upheld protest with no penalty is neither, so it stays brand
+          // yellow rather than being coloured like a punishment.
+          color: dismissed ? CLEARED_GREEN : (penalty ? PENALTY_RED : HCR_YELLOW),
+          fields,
+          footer: { text: 'HCR League \u00b7 race control \u00b7 decisions are final once published' },
         }
       } else {
         skipped.push({ key: row.dedupe_key, reason: `Unknown announcement kind "${row.kind}".` })
