@@ -6,7 +6,7 @@ import { computeStandings } from '../lib/standings'
 import { CLASS_ORDER, classColor, eventEnded, fmtDateLong } from '../lib/format'
 import Countdown from './Countdown'
 import { ClassChip } from './ui'
-import HeroVideo from './HeroVideo'
+import HeroVideo, { type VideoStatus } from './HeroVideo'
 import SmokeCanvas from './SmokeCanvas'
 import { DriverName } from './links'
 
@@ -155,7 +155,14 @@ export default function HeroCarousel() {
   const [idx, setIdx] = useState(0)
   const [paused, setPaused] = useState(false)
   const [userPaused, setUserPaused] = useState(false)
-  const [videoActive, setVideoActive] = useState(false)
+  // Three states, because "still loading" and "will never play" want different
+  // heroes. Treating them as one boolean is what made the smoke fallback flash up
+  // for a second on every visit before the video took over.
+  const [videoStatus, setVideoStatus] = useState<VideoStatus>('loading')
+  const videoActive = videoStatus === 'playing'
+  // Only a video that is definitively not coming falls back to the smoke hero.
+  // While it is merely loading, the plain dark curtain covers everything.
+  const showSmokeHero = videoStatus === 'unavailable'
   const count = slides.length
   const active = Math.min(idx, count - 1)
 
@@ -180,12 +187,14 @@ export default function HeroCarousel() {
       {/* League race footage (falls back to the tire-smoke hero if the video
           can't autoplay / load). */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden bg-[var(--color-deep)]">
-        <HeroVideo onActive={setVideoActive} />
+        <HeroVideo onStatus={setVideoStatus} />
       </div>
 
       {/* Opaque curtain over the video until it is genuinely playing, so a
-          blocked-autoplay / loading / error frame never shows; the smoke hero
-          runs underneath it in the meantime. */}
+          blocked-autoplay / loading / error frame never shows. While the video is
+          still loading this is ALL that shows — a flat dark panel in the site's
+          own base colour, which reads as the hero settling rather than as a
+          different hero being replaced. */}
       <div
         className={`pointer-events-none absolute inset-0 bg-[var(--color-deep)] transition-opacity duration-700 ${
           videoActive ? 'opacity-0' : 'opacity-100'
@@ -205,9 +214,12 @@ export default function HeroCarousel() {
         />
       )}
 
-      {/* Telemetry grid, then tire smoke launching out of the box. */}
-      {!videoActive && <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden="true" />}
-      {!videoActive && <SmokeCanvas className="pointer-events-none absolute inset-0 h-full w-full" />}
+      {/* Telemetry grid, then tire smoke launching out of the box. This is the
+          fallback hero for phones, Save-Data, reduced motion and any failure to
+          play — never a loading state, which is why it keys off `unavailable`
+          rather than "not yet playing". */}
+      {showSmokeHero && <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden="true" />}
+      {showSmokeHero && <SmokeCanvas className="pointer-events-none absolute inset-0 h-full w-full" />}
 
       {/* Neutral legibility scrim only — no colored glow (a warm radial in the
           corner reads as a rising sun, not exhaust). The smoke carries the mood. */}
