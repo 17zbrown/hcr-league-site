@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { useClasses, useCurrentSeason, useSeasonResultsFull, useTeams } from '../lib/queries'
+import { useClasses, useCurrentSeason, useEntries, useSeasonResultsFull, useTeams } from '../lib/queries'
 import { CLASS_ORDER, classColor } from '../lib/format'
 import { ClassChip, LoadError, Section, Skeleton } from '../components/ui'
 import { Reveal } from '../components/motion'
@@ -10,12 +10,26 @@ export default function Teams() {
   const { data: classes } = useClasses()
   const { data: season } = useCurrentSeason()
   const { data: seasonRows } = useSeasonResultsFull(season?.id)
+  const { data: entries } = useEntries(season?.id)
+
+  /**
+   * Every car a team fields, not just one. teams.number/teams.car can only hold a single
+   * value, so a two-car team had its second entry silently invisible here — 2Slo Racing
+   * runs both the #34 Acura and the #04 Cadillac in GTP.
+   */
+  const entriesByTeam = useMemo(() => {
+    const m: Record<string, NonNullable<typeof entries>> = {}
+    for (const e of entries ?? []) if (e.team_id) (m[e.team_id] ??= []).push(e)
+    return m
+  }, [entries])
 
   const byClass = useMemo(() => {
     const g: Record<string, typeof teams> = {}
-    for (const t of teams ?? []) (g[t.class_id] ??= []).push(t)
+    // Class comes from the entry where there is one: two drivers switched class after
+    // signing up, and the team record still names the class they left.
+    for (const t of teams ?? []) (g[entriesByTeam[t.id]?.[0]?.class_id ?? t.class_id] ??= []).push(t)
     return g
-  }, [teams])
+  }, [teams, entriesByTeam])
 
   /** Season points teaser per team: race + quali + adjust, summed over its result rows. */
   const ptsByTeam = useMemo(() => {
@@ -54,6 +68,7 @@ export default function Teams() {
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {list.map((t, i) => {
                     const pts = ptsByTeam[t.id] ?? 0
+                    const cars = entriesByTeam[t.id] ?? []
                     return (
                       <Reveal key={t.id} delay={Math.min(i * 0.03, 0.25)} className="h-full">
                         <Link
@@ -61,15 +76,21 @@ export default function Teams() {
                           className="group flex h-full flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] transition hover:-translate-y-0.5 hover:shadow-card"
                         >
                           <div className="flex items-center justify-between gap-3 px-5 pt-5">
-                            <span className="font-mono text-[11px] text-[var(--color-muted)]">#{t.number}</span>
-                            <ClassChip classId={t.class_id} />
+                            <span className="font-mono text-[11px] text-[var(--color-muted)]">
+                              {cars.length ? cars.map((e) => `#${e.number}`).join(' · ') : t.number ? `#${t.number}` : '—'}
+                            </span>
+                            <ClassChip classId={cars[0]?.class_id ?? t.class_id} />
                           </div>
 
                           <div className="px-5 pt-3">
                             <div className="truncate font-display text-2xl leading-tight">{t.name}</div>
-                            <div className="mt-2 truncate font-mono text-[11px] text-[var(--color-muted)]">
-                              {t.car ?? cls}
-                            </div>
+                            {/* One line per car. A car with no confirmed model shows the
+                                class rather than inventing one. */}
+                            {(cars.length ? cars.map((e) => e.car ?? cls) : [t.car ?? cls]).map((car, ci) => (
+                              <div key={ci} className="mt-2 truncate font-mono text-[11px] text-[var(--color-muted)]">
+                                {car}
+                              </div>
+                            ))}
                           </div>
 
                           {/* Season points — the card's "price" row */}

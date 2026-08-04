@@ -38,7 +38,8 @@ export default function TeamsAdmin() {
 
 function TeamRow({ team, onChange }: { team: Team; onChange: () => void }) {
   const [name, setName] = useState(team.name)
-  const [number, setNumber] = useState(team.number)
+  // Null when the team fields no car this season; the input still needs a string.
+  const [number, setNumber] = useState(team.number ?? '')
   const [car, setCar] = useState(team.car ?? '')
   const [classId, setClassId] = useState(team.class_id)
   const [busy, setBusy] = useState(false)

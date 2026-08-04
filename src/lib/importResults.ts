@@ -216,12 +216,24 @@ const numOrNull = (v?: string) => {
   return Number.isNaN(n) ? null : n
 }
 
-/** Convert a review row into a `results` insert payload. */
-export function toResultInsert(r: ImportedRow, eventId: string, teamByNumber: Map<string, string>) {
+/** Key for `teamByClassNumber`: numbers repeat across classes, so class is part of it. */
+export function teamKey(classId: string | null | undefined, number: string | null | undefined) {
+  return `${(classId ?? '').toUpperCase()}|${(number ?? '').trim()}`
+}
+
+/**
+ * Convert a review row into a `results` insert payload.
+ *
+ * `teamByClassNumber` is keyed by class AND number because car numbers are only unique
+ * within a class. Keying on the number alone silently misattributed team points the
+ * moment two classes shared one: GTD #87 is ALDI Racing, LMP2 #87 is Bad Penny Racing.
+ */
+export function toResultInsert(r: ImportedRow, eventId: string, teamByClassNumber: Map<string, string>) {
   const number = (r.number ?? '').trim()
+  const classId = (r.class_id ?? '').toUpperCase() || null
   return {
     event_id: eventId,
-    class_id: (r.class_id ?? '').toUpperCase() || null,
+    class_id: classId,
     number,
     drivers_text: r.drivers_text ?? null,
     car: r.car ?? null,
@@ -239,7 +251,7 @@ export function toResultInsert(r: ImportedRow, eventId: string, teamByNumber: Ma
     points: numOrNull(r.points),
     quali_pos: numOrNull(r.quali_pos),
     quali_points: numOrNull(r.quali_points),
-    team_id: number && teamByNumber.get(number) ? teamByNumber.get(number) : null,
+    team_id: (number && teamByClassNumber.get(teamKey(classId, number))) || null,
     fill_in: isFillIn(r.fill_in),
   }
 }

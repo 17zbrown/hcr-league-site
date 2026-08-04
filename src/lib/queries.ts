@@ -5,6 +5,7 @@ import type {
   AppNotification,
   Champion,
   Driver,
+  Entry,
   LeagueClass,
   LeagueSettings,
   Protest,
@@ -297,6 +298,30 @@ export function useTeams() {
       const { data, error } = await supabase.from('teams').select('*').order('class_id').order('number')
       if (error) throw error
       return (data ?? []) as Team[]
+    },
+  })
+}
+
+/**
+ * The season's grid: every car, its number, class, model and crew.
+ *
+ * Read this rather than teams.number/teams.car when you need to know what somebody
+ * runs. A team record can only describe a driver who has a team, and a good number of
+ * the grid — guests, fill-ins and anyone who declined to name one — do not.
+ */
+export function useEntries(seasonId?: string) {
+  return useQuery({
+    enabled: !!seasonId,
+    queryKey: ['entries', seasonId],
+    queryFn: async (): Promise<Entry[]> => {
+      const { data, error } = await supabase
+        .from('entries')
+        .select('*, team:teams(*), drivers:entry_drivers(driver:drivers(*))')
+        .eq('season_id', seasonId!)
+        .order('class_id')
+        .order('number')
+      if (error) throw error
+      return (data ?? []) as Entry[]
     },
   })
 }

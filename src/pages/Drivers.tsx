@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useCurrentSeason, useDrivers, useLicenseResults, useSeasonResultsFull, useClasses } from '../lib/queries'
+import { useCurrentSeason, useDrivers, useEntries, useLicenseResults, useSeasonResultsFull, useClasses } from '../lib/queries'
 import { buildPaceIndex, computeLicense, resultsForDriver, type LicenseInfo } from '../lib/license'
 import { CLASS_ORDER, classColor } from '../lib/format'
 import type { ClassId } from '../lib/types'
@@ -16,7 +16,26 @@ export default function Drivers() {
   const { data: licenseResults } = useLicenseResults()
   const { data: season } = useCurrentSeason()
   const { data: seasonRows } = useSeasonResultsFull(season?.id)
+  const { data: entries } = useEntries(season?.id)
   const { data: classes } = useClasses()
+
+  /**
+   * The car each driver runs this season, keyed by driver id.
+   *
+   * This used to be read off the driver's team, which meant anyone without a team —
+   * guests, fill-ins, and the several drivers who answered the sign-up form's team
+   * question with "none" — showed as a numberless "Free agent" despite being on the
+   * grid every round.
+   */
+  const entryByDriver = useMemo(() => {
+    const map: Record<string, { number: string; class_id: ClassId; car: string | null }> = {}
+    for (const e of entries ?? []) {
+      for (const link of e.drivers ?? []) {
+        if (link.driver?.id) map[link.driver.id] = { number: e.number, class_id: e.class_id, car: e.car }
+      }
+    }
+    return map
+  }, [entries])
   const [sort, setSort] = useState<SortKey>('name')
   const [classFilter, setClassFilter] = useState<ClassFilter>('All')
 
@@ -46,11 +65,16 @@ export default function Drivers() {
     return map
   }, [drivers, seasonRows])
 
-  /** Classes a driver belongs to: their team's class plus any class they raced this season. */
+  /** Classes a driver belongs to: their entry, their team, and anything they raced. */
   const classesByDriver = useMemo(() => {
     const map: Record<string, Set<string>> = {}
     for (const d of drivers ?? []) {
       const set = new Set<string>()
+      // The entry comes first: it is the only source that survives a mid-season class
+      // switch. Two drivers moved classes after signing up, and their team record still
+      // names the class they left.
+      const entryClass = entryByDriver[d.id]?.class_id
+      if (entryClass) set.add(entryClass)
       if (d.team?.class_id) set.add(d.team.class_id)
       for (const r of resultsForDriver(seasonRows ?? [], d.name)) {
         if (r.class_id) set.add(r.class_id)
@@ -58,7 +82,7 @@ export default function Drivers() {
       map[d.id] = set
     }
     return map
-  }, [drivers, seasonRows])
+  }, [drivers, seasonRows, entryByDriver])
 
   const sorted = useMemo(() => {
     const list = [...(drivers ?? [])]
@@ -152,11 +176,18 @@ export default function Drivers() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((d, i) => {
             const teaser = teaserByDriver[d.id]
-            const dotColor = d.team?.class_id ? classColor(d.team.class_id, classes) : null
+            const entry = entryByDriver[d.id]
+            // Prefer the entry over the team on every field it covers. A team can only
+            // speak for a driver who has one, and the entry survives a class switch.
+            const shownClass = entry?.class_id ?? d.team?.class_id ?? null
+            const dotColor = shownClass ? classColor(shownClass, classes) : null
             const meta = [
-              d.team?.name ?? 'Free agent',
-              d.team?.class_id ?? null, // class in text, not color alone
-              d.team?.number ? `#${d.team.number}` : null,
+              // "Free agent" only when they genuinely have no team — not merely because
+              // their car happens to be entered without one.
+              d.team?.name ?? (entry ? null : 'Free agent'),
+              shownClass, // class in text, not color alone
+              entry?.number ? `#${entry.number}` : d.team?.number ? `#${d.team.number}` : null,
+              entry?.car ?? null,
               d.irating ? `${d.irating} iR` : null,
             ]
               .filter(Boolean)

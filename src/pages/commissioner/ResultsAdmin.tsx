@@ -10,6 +10,7 @@ import {
   parseCsv,
   parseText,
   pdfToText,
+  teamKey,
   toResultInsert,
   type Field,
   type ImportedRow,
@@ -100,8 +101,13 @@ export default function ResultsAdmin() {
     setBusy(true)
     setError(null)
     setNote(null)
-    const teamByNumber = new Map((teams ?? []).map((t) => [t.number, t.id]))
-    const inserts = clean.map((r) => toResultInsert(r, eventId, teamByNumber))
+    // Keyed by class + number: #87 exists in both GTD and LMP2, for different teams.
+    // Teams fielding no car this season have a null number and are skipped, so a result
+    // row with no number cannot fall through and match one of them.
+    const teamByClassNumber = new Map(
+      (teams ?? []).filter((t) => t.number).map((t) => [teamKey(t.class_id, t.number), t.id]),
+    )
+    const inserts = clean.map((r) => toResultInsert(r, eventId, teamByClassNumber))
 
     // Atomic replace: delete + insert + mark complete run in one transaction,
     // so a failed insert can never leave the round with no results.

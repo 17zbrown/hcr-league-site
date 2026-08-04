@@ -79,11 +79,33 @@ export interface RaceSession {
 export interface Team {
   id: string
   name: string
-  number: string
+  /**
+   * Derived from the team's season entry, not authored. Null when the team fields
+   * no car this season — previously these were hand-maintained and drifted badly
+   * enough that team pages advertised cars their drivers had never raced.
+   */
+  number: string | null
   car: string | null
   class_id: ClassId
   sort: number
   points_adjust: number
+}
+
+/**
+ * A car on the grid: one number, in one class, for one season. This — not the team
+ * record — is what says who runs what. Numbers are unique per class, not league-wide,
+ * so GTD #5 and LMP2 #5 are two different cars.
+ */
+export interface Entry {
+  id: string
+  season_id: string
+  number: string
+  class_id: ClassId
+  car: string | null
+  team_id: string | null
+  // joined
+  team?: Team
+  drivers?: { driver: Driver }[]
 }
 
 export interface Driver {
