@@ -17,9 +17,9 @@
 // talk, RACE CONTROL is stewarding, ADMIN is staff. Four categories, each answering a
 // different question, none of them describing an audience split that no longer exists.
 //
-// It also creates #incident-protests. The published rulebook tells drivers to file
-// protests "via the incident-protests page in the HCR official Discord" and that
-// channel does not exist — the rules currently instruct people to go nowhere.
+// It also maintains #incident-protests — the DISCUSSION forum. Protests themselves
+// are filed on the website, never in Discord, and every topic or copy written here
+// says so.
 //
 // TWO SAFETY PROPERTIES, both deliberate:
 //
@@ -67,6 +67,7 @@ interface Channel {
   type: number
   position?: number | null
   parent_id?: string | null
+  topic?: string | null
   permission_overwrites?: Overwrite[] | null
 }
 
@@ -193,21 +194,19 @@ Deno.serve(async (req) => {
       }
     }
 
-    // --- The protests forum the rulebook already points at --------------------------
+    // --- The protests discussion forum -----------------------------------------------
+    // PROTESTS ARE FILED ON THE WEBSITE, never in Discord — that is the league's rule,
+    // and every piece of copy this function writes must say so. The forum exists to
+    // DISCUSS incidents and published decisions. (An earlier topic told drivers to
+    // file here, contradicting the site being the only reviewed intake.)
+    //
     // It lives in RACE CONTROL, whose category rule DENIES @everyone view — right for
-    // #race-control and #Steward Radio, fatal for a channel whose entire purpose is
-    // drivers walking in to file. So the forum carries its own @everyone overwrite:
-    // view, read, create posts, reply. Without it the rulebook sends drivers to a
-    // door only stewards can see.
+    // #race-control and #Steward Radio, fatal for a discussion room. So the forum
+    // carries its own @everyone overwrite: view, read, create posts, reply.
+    const PROTESTS_TOPIC =
+      'Protests are filed on the website — hcrleague.com/portal. A protest posted here does not get reviewed. This forum is for discussing incidents and published decisions.'
     const VIEW = 1n << 10n, SEND = 1n << 11n, HISTORY = 1n << 16n, REACT = 1n << 6n, THREADS = 1n << 38n
     const protestsAllow = String(VIEW | SEND | HISTORY | REACT | THREADS) // SEND on a forum = create posts
-    const ensureProtestsAccess = async (id: string) => {
-      const res = await discord(`/channels/${id}/permissions/${guildId}`, 'PUT', botToken, {
-        type: 0, allow: protestsAllow, deny: '0',
-      })
-      if (res.ok) applied.push(`#${PROTESTS}: drivers can see and post`)
-      else warnings.push(`Could not open #${PROTESTS} to drivers — ${res.message}`)
-    }
 
     const existingProtests = channels.find((c) => c.type !== CHAN_CATEGORY && (c.name ?? '') === PROTESTS)
     if (!existingProtests) {
@@ -215,14 +214,14 @@ Deno.serve(async (req) => {
       else {
         plan.push({
           step: 'create',
-          detail: `#${PROTESTS} (forum) in ${RACE_CONTROL}, open to drivers — the rulebook tells them to file protests here`,
+          detail: `#${PROTESTS} (forum) in ${RACE_CONTROL}, open to drivers — discussion only; filing happens on the site`,
         })
         if (!dryRun) {
           const res = await discord(`/guilds/${guildId}/channels`, 'POST', botToken, {
             name: PROTESTS,
             type: CHAN_FORUM,
             parent_id: raceControl.id,
-            topic: 'File a post-race protest here. One post per incident — include the round, the lap and the cars involved.',
+            topic: PROTESTS_TOPIC,
             permission_overwrites: [{ id: guildId, type: 0, allow: protestsAllow, deny: '0' }],
           })
           if (res.ok) applied.push(`created #${PROTESTS}`)
@@ -230,12 +229,28 @@ Deno.serve(async (req) => {
         }
       }
     } else {
-      // Exists already: make sure drivers can actually use it. The category deny wins
-      // for any channel that has no rule of its own.
+      // Exists already: make sure drivers can actually use it (the category deny wins
+      // for any channel with no rule of its own), and that its topic sends filers to
+      // the website rather than inviting them to file here.
       const ow = (existingProtests.permission_overwrites ?? []).find((o) => String(o.id) === guildId)
       if (!ow || BigInt(ow.allow ?? '0') !== BigInt(protestsAllow)) {
         plan.push({ step: 'permissions', detail: `#${PROTESTS}: set @everyone allow so drivers can see and post` })
-        if (!dryRun) await ensureProtestsAccess(existingProtests.id)
+        if (!dryRun) {
+          const res = await discord(`/channels/${existingProtests.id}/permissions/${guildId}`, 'PUT', botToken, {
+            type: 0, allow: protestsAllow, deny: '0',
+          })
+          if (res.ok) applied.push(`#${PROTESTS}: drivers can see and post`)
+          else warnings.push(`Could not open #${PROTESTS} to drivers — ${res.message}`)
+        }
+      }
+      const currentTopic = String(existingProtests.topic ?? '')
+      if (currentTopic !== PROTESTS_TOPIC) {
+        plan.push({ step: 'topic', detail: `#${PROTESTS}: topic points filing at the website, not this forum` })
+        if (!dryRun) {
+          const res = await discord(`/channels/${existingProtests.id}`, 'PATCH', botToken, { topic: PROTESTS_TOPIC })
+          if (res.ok) applied.push(`#${PROTESTS}: topic corrected — file on the website`)
+          else warnings.push(`Could not update #${PROTESTS}'s topic — ${res.message}`)
+        }
       }
     }
 

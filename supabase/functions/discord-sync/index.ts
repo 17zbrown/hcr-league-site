@@ -49,6 +49,24 @@ async function discord(path: string, method: string, token: string, body?: unkno
   return res
 }
 
+/**
+ * Is this a legacy service-role JWT? Only consulted for a token the gateway has
+ * already signature-checked (verify_jwt is on), so reading the claim is sound. Needed
+ * because the runtime's SUPABASE_SERVICE_ROLE_KEY is an sb_secret_ string while the
+ * scheduler sends the dashboard's legacy JWT — both are the scheduler.
+ */
+function isServiceRoleJwt(token: string): boolean {
+  const parts = token.split('.')
+  if (parts.length !== 3) return false
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const payload = JSON.parse(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)))
+    return (payload as { role?: unknown })?.role === 'service_role'
+  } catch {
+    return false
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
@@ -58,14 +76,23 @@ Deno.serve(async (req) => {
   const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
   const botToken = Deno.env.get('DISCORD_BOT_TOKEN')
 
-  // --- auth: caller must be a signed-in admin ---
+  // --- auth: a signed-in admin, or the scheduler ---
+  // This function had no cron path at all: every scheduled run presented the
+  // service-role credential, fell into the user branch, failed getUser(), and logged
+  // "Not authenticated" — every five minutes, forever. The cron check requires a
+  // NON-EMPTY service-role bearer; an absent token is never the scheduler (that
+  // shortcut was an auth bypass in sibling functions once already).
   const authz = req.headers.get('Authorization') ?? ''
-  const userClient = createClient(url, anon, { global: { headers: { Authorization: authz } } })
-  const { data: userData } = await userClient.auth.getUser()
-  const user = userData?.user
-  if (!user) return json({ error: 'Not authenticated' }, 401)
-  const { data: prof } = await userClient.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
-  if (!prof?.is_admin) return json({ error: 'Admins only' }, 403)
+  const bearer = authz.replace(/^Bearer\s+/i, '').trim()
+  const viaCron = bearer.length > 0 && (bearer === service || isServiceRoleJwt(bearer))
+  if (!viaCron) {
+    const userClient = createClient(url, anon, { global: { headers: { Authorization: authz } } })
+    const { data: userData } = await userClient.auth.getUser()
+    const user = userData?.user
+    if (!user) return json({ error: 'Not authenticated' }, 401)
+    const { data: prof } = await userClient.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
+    if (!prof?.is_admin) return json({ error: 'Admins only' }, 403)
+  }
 
   // --- data (service role bypasses RLS) ---
   const db = createClient(url, service)

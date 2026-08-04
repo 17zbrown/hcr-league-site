@@ -601,8 +601,8 @@ Balance of Performance, also known as BoP, may be used to keep classes and cars 
 
 ### 21.2 BoP Suggestions
 
-Drivers are encouraged to voice their feedback or concerns regarding BoP via the league protest located on the
-HCR Official Discord. BoP discussion or input outside of this forum will not be considered.
+Drivers are encouraged to voice their feedback or concerns regarding BoP through the protest form on the
+league website (hcrleague.com/portal). BoP discussion or input outside of this channel will not be considered.
 All BoP decisions are final.
 
 ## 22. Cautions, Safety Cars, and Full Course Yellows
@@ -669,7 +669,7 @@ League Chat Room available to all participating drivers. During official session
 
 ### 25.3 Race Control Communication
 
-Drivers should not argue with race control during the race. If a driver has an issue, they should submit a protest after the race via the “incident-protests” page in the HCR official Discord.
+Drivers should not argue with race control during the race. If a driver has an issue, they should submit a protest after the race through the protest form on the league website (hcrleague.com/portal).
 
 ## 26. Driver Conduct
 

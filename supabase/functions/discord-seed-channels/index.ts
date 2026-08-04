@@ -73,7 +73,7 @@ function notes(L: Links): Record<string, Note> {
           '**1.** Race respectfully — on track and in here.\n' +
           '**2.** Criticise the driving, never the driver.\n' +
           '**3.** No slurs, harassment or bigotry. This one is immediate removal, no warning.\n' +
-          '**4.** No arguing an incident in chat. That is what the protest channel is for.\n' +
+          '**4.** No arguing an incident in chat. Protests are filed on the website.\n' +
           '**5.** Stewards’ decisions are final once published.' },
         { name: 'Housekeeping', value:
           '**6.** Keep channels roughly on topic.\n' +
@@ -99,7 +99,7 @@ function notes(L: Links): Record<string, Note> {
 
     'PADDOCK/general-chat': {
       title: 'League chat',
-      body: 'Anything about the championship — setups, strategy, who owes who an apology from Sunday. Incidents belong in the protest channel, not here.',
+      body: 'Anything about the championship — setups, strategy, who owes who an apology from Sunday. Incidents get filed on the website, not argued here.',
     },
 
     'LEAGUE/season-signups': {
@@ -153,11 +153,19 @@ function notes(L: Links): Record<string, Note> {
 
     'RACE CONTROL/incident-protests': {
       title: 'Incident protests',
-      body: 'File it here, not in chat. A protest posted anywhere else does not get reviewed.',
+      body: `**Protests are filed on the website, not in Discord** — ${SITE}/portal. A protest posted in chat does not get reviewed. This forum is for discussing incidents and published decisions.`,
       fields: [
-        { name: 'What to include', value: '**Race and lap** · which round and roughly which lap\n**Cars involved** · numbers, not just names\n**What happened** · one or two sentences, no editorialising\n**Evidence** · a clip or a replay timestamp' },
-        { name: 'Deadlines', value: 'Protests close **48 hours** after the results are posted. After that the result stands.' },
-        { name: 'How it goes', value: `Stewards review, both drivers may be asked for their side, and the decision is published with a reason. You can also file from the site at ${SITE}/portal.` },
+        { name: 'What a protest needs', value: '**Race and lap** · which round and roughly which lap\n**Cars involved** · numbers, not just names\n**What happened** · one or two sentences, no editorialising\n**Evidence** · a clip or a replay timestamp' },
+        { name: 'Deadlines', value: 'Protests close **24 hours** after the race unless otherwise stated (rulebook §27.1). After that the result stands.' },
+        { name: 'How it goes', value: 'Stewards review on the site, both drivers may be asked for their side, and the decision is published to #race-control-announcements with a reason.' },
+      ],
+    },
+
+    'RACE CONTROL/race-control-announcements': {
+      title: 'Race control announcements',
+      body: 'Stewards’ decisions are published here as they are made: protest verdicts, penalties, and post-race rulings. Read-only — the decisions themselves come from race control on the site.',
+      fields: [
+        { name: 'Disagree with a decision?', value: `Decisions are final once published (rulebook §27). If you were involved and have new evidence, file on the website: ${SITE}/portal.` },
       ],
     },
 

@@ -1,5 +1,5 @@
 // discord-link-drivers — works out which Discord account belongs to which driver on
-// the roster, then gives everyone who has actually raced the League Member role.
+// the roster, then keeps the Spectator role tracking the season entry list.
 //
 // The roster comes from results PDFs, which only ever carry a name, so the two sides
 // of the league have never known about each other: drivers.discord_user_id is null
@@ -9,27 +9,33 @@
 // wrong one. A wrong link would hand one person's licence and race history to
 // another, and nothing in here can tell that it happened.
 //
-// It only ever ADDS. There is no DELETE anywhere in this file — not against a role,
-// a channel, a message or a member — and the League Member role is never taken away
-// from anyone, because somebody may well have been given it by hand for a reason
-// this function knows nothing about. The only Discord write it can make is a single
-// PUT that adds one role; the method parameter is typed to make that structural
-// rather than a promise.
+// ROLE MODEL (class-first, since the endurance side closed): the class roles
+// (GTP/LMP2/GTD) are owned by discord-driver-roles and are not touched here. This
+// function owns exactly one role — Spectator, "in the server but not entered this
+// season" — and it derives that from the ENTRY LIST (entries + entry_drivers for the
+// current season), which is the single source of truth for who runs what. It used to
+// grant a League Member role to everyone who had raced; that role is deleted and the
+// concept is gone.
+//
+// WRITE DISCIPLINE. Linking only ever ADDS: a null discord_user_id can be filled,
+// never changed. Roles are two writes and no more: PUT Spectator onto a member with
+// no entry, DELETE Spectator from a member who has one. That DELETE is the single
+// removal this function may make — it is the correction of its own earlier write,
+// scoped to one role id it resolved itself. It never touches any other role, channel,
+// message or member.
+//
+// Members whose name plausibly matches a not-yet-linked entered driver are left
+// entirely alone: labelling somebody a Spectator seconds before linking proves they
+// are on the grid would be wrong in the way that gets screenshotted.
 //
 // Safe to run as often as you like: every write is conditional on the thing not
 // already being true, so a second run in a row does nothing at all.
 //
-// Callable two ways, mirroring public.assert_admin_or_cron: if you ARE authenticated
-// you must be an admin, while an unauthenticated call is let through (that's cron). A
-// JWT we can't read is the only 401. For the no-JWT path to reach this code the
-// function must be deployed with verify_jwt off; a cron job that sends the
-// service-role key works either way.
-//
 // Secrets (Supabase → Edge Functions):  DISCORD_BOT_TOKEN
 // Auto-provided:  SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
 //
-// The bot needs **Manage Roles**, and its own role must sit ABOVE League Member in
-// Server Settings → Roles or Discord will refuse the grant with a 403.
+// The bot needs **Manage Roles**, and its own role must sit ABOVE Spectator in
+// Server Settings → Roles or Discord will refuse with a 403.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const DISCORD = 'https://discord.com/api/v10'
@@ -48,16 +54,15 @@ const MAX_MEMBER_PAGES = 5
 // Matching ceilings on the database side.
 const MAX_DRIVERS = 5000
 const MAX_PROFILES = 5000
-const MAX_RESULTS = 20000
-const RESULT_PAGE = 1000
 // The log gets one row per driver considered, so a full roster goes in a few inserts.
 const LOG_CHUNK = 500
 // Log details are for a human reading a table, not an essay.
 const MAX_DETAIL = 500
 
-// The role that says "this person races here". Setup and rebuild both match it by
-// name rather than create it, so these are the same aliases they look for.
-const LEAGUE_MEMBER_ALIASES = ['hcr league member', 'league member']
+// The role that says "in the server, not entered this season". The restructure
+// created it and saved its id to discord_config.role_spectator; the name is only a
+// fallback for a config wiped by hand.
+const SPECTATOR_NAME = 'spectator'
 
 // A Discord snowflake is digits and nothing else. Everything we interpolate into a
 // request path is checked against this first — drivers.discord_user_id is a plain
@@ -72,7 +77,7 @@ interface Role {
 interface Member {
   nick?: string | null
   roles?: string[] | null
-  user?: { id?: string | null; username?: string | null; global_name?: string | null } | null
+  user?: { id?: string | null; username?: string | null; global_name?: string | null; bot?: boolean | null } | null
 }
 interface DriverRow {
   id: string
@@ -85,22 +90,25 @@ interface ProfileRow {
   driver_id: string | null
 }
 // Everything we need to know about one guild member: who they are, every name they
-// might be known by, and what they already hold.
+// might be known by, what they already hold, and whether they are software.
 interface ScannedMember {
   id: string
   labels: string[]
   roles: Set<string>
+  isBot: boolean
 }
 
 type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; message: string }
 
-// Every Discord call goes through here, and the method is typed down to the two verbs
-// this function is allowed: read the server, add one role. There is deliberately no
-// way to express a DELETE. It never throws, it retries a rate limit (bounded, never
-// forever), and it hands back Discord's own explanation of a refusal.
+// Every Discord call goes through here, and the method is typed down to the three
+// verbs this function is allowed: read the server, add one role, remove that same
+// role. DELETE exists solely so Spectator can come off a member who has entered the
+// season — the correction of this function's own earlier write — and the one call
+// site is the contract for that. It never throws, it retries a rate limit (bounded,
+// never forever), and it hands back Discord's own explanation of a refusal.
 async function discord<T>(
   path: string,
-  method: 'GET' | 'PUT',
+  method: 'GET' | 'PUT' | 'DELETE',
   token: string,
   attempt = 0,
 ): Promise<ApiResult<T>> {
@@ -152,43 +160,9 @@ function normalizeName(s: string): string {
     .trim()
 }
 
-/** Split a `drivers_text` crew field into its individual driver names. */
-function splitCrew(driversText?: string | null): string[] {
-  if (!driversText) return []
-  return driversText
-    .split(/\s*(?:\/|,|;|&|\+|\band\b)\s*/i)
-    .map((s) => s.trim())
-    .filter(Boolean)
-}
-
-/** Normalized set of driver names listed on a result. */
-function crewNames(driversText?: string | null): string[] {
-  return splitCrew(driversText).map(normalizeName).filter(Boolean)
-}
-
 // The canon throws away single characters before comparing tokens: "J" in "J. Smith"
 // is an initial, not a name, and matching on it would make every Smith the same person.
 const nameTokens = (normalized: string) => normalized.split(' ').filter((t) => t.length > 1)
-
-/**
- * resultListsDriver from attribution.ts, hoisted over every crew segment in the
- * results table at once. Both of the canon's branches judge a single segment on its
- * own, so "some row lists this driver" is exactly "some segment matches this driver" —
- * the same answer, worked out once instead of once per row.
- */
-function hasRaced(segments: string[], segmentSet: Set<string>, driverName: string): boolean {
-  const target = normalizeName(driverName)
-  if (!target) return false
-  if (segmentSet.has(target)) return true
-  // exact-token-set fallback: segment tokens must equal the driver-name tokens
-  // exactly (abbreviated forms intentionally not matched)
-  const targetTokens = nameTokens(target)
-  if (targetTokens.length < 2) return false // too weak to match on a single token
-  return segments.some((seg) => {
-    const segTokens = nameTokens(seg)
-    return segTokens.length === targetTokens.length && targetTokens.every((t) => segTokens.includes(t))
-  })
-}
 
 /**
  * The token half of a confident match: the same words in any order. Sorted rather
@@ -282,11 +256,11 @@ Deno.serve(async (req) => {
     const guildId = String(cfg.guild_id).trim()
     const warnings: string[] = []
 
-    // --- 1b. which role means "League Member"? ---
+    // --- 1b. which role means "Spectator"? ---
     // A saved id is the admin's explicit choice and wins outright. With the field
     // blank we look the role up by name and write the id back, so the next run — and
     // every other function that reads the column — stops having to guess.
-    let roleId = String(cfg.role_league_member ?? '').trim()
+    let roleId = String(cfg.role_spectator ?? '').trim()
 
     if (!roleId) {
       const rolesRes = await discord<Role[]>(`/guilds/${guildId}/roles`, 'GET', botToken)
@@ -294,15 +268,15 @@ Deno.serve(async (req) => {
         if (rolesRes.status === 401) return json({ error: badToken }, 400)
         warnings.push(
           rolesRes.status === 403
-            ? "Discord refused to list the server's roles (403) — the bot needs the Manage Roles permission. Drivers were still linked, but nobody could be given the League Member role."
-            : `Could not read the server's roles — ${rolesRes.message}. Drivers were still linked, but nobody could be given the League Member role.`,
+            ? "Discord refused to list the server's roles (403) — the bot needs the Manage Roles permission. Drivers were still linked, but the Spectator role was not synced."
+            : `Could not read the server's roles — ${rolesRes.message}. Drivers were still linked, but the Spectator role was not synced.`,
         )
       } else {
         // @everyone and bot-managed roles are skipped: neither can be handed to a driver.
         const found =
           (rolesRes.data ?? [])
             .filter((r) => r?.id && r.name !== '@everyone' && !r.managed)
-            .find((r) => LEAGUE_MEMBER_ALIASES.includes((r.name ?? '').trim().toLowerCase())) ?? null
+            .find((r) => (r.name ?? '').trim().toLowerCase() === SPECTATOR_NAME) ?? null
 
         if (found) {
           roleId = found.id
@@ -311,16 +285,16 @@ Deno.serve(async (req) => {
           // config row if something is odd.
           const { error: saveErr } = await db
             .from('discord_config')
-            .update({ role_league_member: found.id, updated_at: new Date().toISOString() })
+            .update({ role_spectator: found.id, updated_at: new Date().toISOString() })
             .eq('id', 1)
           if (saveErr) {
             warnings.push(
-              `Found the "${found.name}" role in Discord but could not save its id — ${saveErr.message}. Roles were still granted; the lookup will just happen again next run.`,
+              `Found the "${found.name}" role in Discord but could not save its id — ${saveErr.message}. The sync still ran; the lookup will just happen again next run.`,
             )
           }
         } else {
           warnings.push(
-            `No League Member role exists in the server (looked for: ${LEAGUE_MEMBER_ALIASES.join(', ')}). Drivers were still linked, but nobody could be given the role — make the role in Discord, or paste its id into Admin → Discord.`,
+            'No Spectator role exists in the server. Drivers were still linked, but nobody could be marked a spectator — make the role in Discord, or re-run the restructure that creates it.',
           )
         }
       }
@@ -328,7 +302,7 @@ Deno.serve(async (req) => {
 
     if (roleId && !SNOWFLAKE.test(roleId)) {
       warnings.push(
-        `The saved League Member role id (${clip(roleId)}) is not a Discord id, so no role was granted. Fix it in Admin → Discord, or clear the field and re-run to have it found by name.`,
+        `The saved Spectator role id (${clip(roleId)}) is not a Discord id, so the role was not synced. Fix it in Admin → Discord, or clear the field and re-run to have it found by name.`,
       )
       roleId = ''
     }
@@ -385,6 +359,7 @@ Deno.serve(async (req) => {
           id: uid,
           labels,
           roles: new Set(Array.isArray(m.roles) ? m.roles.filter((r): r is string => typeof r === 'string' && !!r) : []),
+          isBot: m?.user?.bot === true,
         })
       }
       if (batch.length < MEMBER_PAGE) {
@@ -693,119 +668,117 @@ Deno.serve(async (req) => {
       profilesLinked++
     }
 
-    // --- 6. who has actually raced? ---
-    // Membership is earned on track, not by joining the Discord. Every crew field in
-    // the results table is split and normalised once, then de-duplicated: a segment
-    // that appears in fifty rows is one string to compare against.
-    //
-    // Read in pages against the row count rather than in one go with a big limit:
-    // PostgREST caps how many rows a single request may return, and that cap is a
-    // server setting the client cannot talk it out of. A short page is the cap doing
-    // its job, not the end of the table — and quietly stopping there would make a
-    // driver look like they had never raced.
-    const segmentSet = new Set<string>()
-    let resErr: { message: string } | null = null
-    let resultsRead = 0
-    let resultsTotal: number | null = null
-
-    while (resultsRead < MAX_RESULTS) {
-      const to = Math.min(resultsRead + RESULT_PAGE, MAX_RESULTS) - 1
-      const { data, error, count } = await db
-        .from('results')
-        .select('drivers_text', { count: 'exact' })
-        .range(resultsRead, to)
-      if (error) {
-        // Asking for a page past the end is "nothing more to read", not a failure.
-        if ((error as { code?: string }).code === 'PGRST103') break
-        resErr = error
-        break
+    // --- 6. who is entered this season? ---
+    // The entry list, not the results, decides who is on the grid: entries +
+    // entry_drivers for the current season is the single source of truth for who runs
+    // what, and it covers a driver who has entered but not yet raced — exactly the
+    // person the old "has raced" test wrongly left out.
+    const enteredDriverIds = new Set<string>()
+    let entryErr: { message: string } | null = null
+    {
+      const { data: season, error: seasonErr } = await db
+        .from('seasons')
+        .select('id')
+        .eq('is_current', true)
+        .limit(1)
+        .maybeSingle()
+      if (seasonErr || !season?.id) {
+        entryErr = seasonErr ?? { message: 'no season is marked current' }
+      } else {
+        const { data: entryRows, error: edErr } = await db
+          .from('entry_drivers')
+          .select('driver_id, entries!inner(season_id)')
+          .eq('entries.season_id', season.id)
+        if (edErr) entryErr = edErr
+        else for (const r of (entryRows ?? []) as { driver_id?: string | null }[]) {
+          const id = String(r?.driver_id ?? '').trim()
+          if (id) enteredDriverIds.add(id)
+        }
       }
-      if (typeof count === 'number') resultsTotal = count
-      const batch = data ?? []
-      resultsRead += batch.length
-      for (const r of batch) {
-        for (const seg of crewNames((r as { drivers_text?: string | null })?.drivers_text)) segmentSet.add(seg)
-      }
-      if (!batch.length) break
-      if (resultsTotal !== null && resultsRead >= resultsTotal) break
     }
-
-    if (resErr) {
+    if (entryErr) {
       warnings.push(
-        `Could not read the results — ${resErr.message}. Nobody was given the League Member role this run; linking was unaffected.`,
-      )
-    } else if (resultsTotal !== null && resultsRead < resultsTotal) {
-      warnings.push(
-        `Only ${resultsRead} of ${resultsTotal} results rows were read, so a driver who appears nowhere in those may not have been recognised as having raced. Nobody loses a role over it — this function only ever adds, and the next run picks up where this one stopped.`,
+        `Could not read the entry list — ${entryErr.message}. The Spectator role was not touched this run; linking was unaffected.`,
       )
     }
-    const segments = [...segmentSet]
 
-    // --- 7. grant the role ---
-    // Additive and nothing else: if somebody already holds it we leave them be, and
-    // there is no branch anywhere that takes it away.
-    const granted: string[] = []
-    let alreadyHadRole = 0
-    let notInGuild = 0
+    // Discord accounts that belong to an entered driver.
+    const enteredUids = new Set<string>()
+    for (const b of bound) if (enteredDriverIds.has(b.driver.id)) enteredUids.add(b.uid)
+
+    // Members whose name matches an entered driver who is not linked yet. Nothing is
+    // decided about them this run: marking somebody a Spectator moments before a link
+    // proves they are on the grid would be wrong in the most visible way possible.
+    const possiblyEntered = new Set<string>()
+    for (const [uid, driverIds] of claimedBy) {
+      if (driverIds.some((id) => enteredDriverIds.has(id))) possiblyEntered.add(uid)
+    }
+
+    // --- 7. sync the Spectator role against the entry list ---
+    // Two writes exist: Spectator ON for a member with no entry, Spectator OFF for a
+    // member with one. The removal is scoped to this one role id and nothing else —
+    // it is this function correcting its own earlier write once somebody enters.
+    const grantedSpectator: string[] = []
+    const removedSpectator: string[] = []
+    let alreadyCorrect = 0
+    let leftAlonePossible = 0
     let hierarchyBlocked = false
     let staleRoleWarned = false
 
-    if (roleId && !resErr) {
-      for (const b of bound) {
-        const driverName = b.driver.name ?? ''
-        if (!hasRaced(segments, segmentSet, driverName)) continue
+    if (roleId && !entryErr) {
+      for (const m of membersById.values()) {
+        if (m.isBot) continue // software does not spectate
+        const label = m.labels[0] ?? m.id
+        const entered = enteredUids.has(m.id)
+        const hasRole = m.roles.has(roleId)
 
-        const m = membersById.get(b.uid)
-        if (!m) {
-          // Either they have left, or they are on a page this run never fetched.
-          // Neither is something to act on, and neither is something to undo.
-          notInGuild++
+        if (!entered && possiblyEntered.has(m.id)) {
+          // Might be an entered driver we have not linked yet — leave them be.
+          if (!hasRole) leftAlonePossible++
+          else alreadyCorrect++ // they hold it; resolving the link decides its fate
           continue
         }
-        if (m.roles.has(roleId)) {
-          alreadyHadRole++
-          continue
-        }
-        if (!SNOWFLAKE.test(b.uid)) {
-          warnings.push(`${quote(driverName)} has a Discord id that isn't a Discord id (${clip(b.uid)}), so no role was granted.`)
+        if (entered === !hasRole) {
+          alreadyCorrect++
           continue
         }
         if (hierarchyBlocked) continue
 
-        const put = await discord(`/guilds/${guildId}/members/${b.uid}/roles/${roleId}`, 'PUT', botToken)
-        if (put.ok) {
-          granted.push(driverName)
+        const method = entered ? 'DELETE' : 'PUT'
+        const res = await discord(`/guilds/${guildId}/members/${m.id}/roles/${roleId}`, method, botToken)
+        if (res.ok) {
+          ;(entered ? removedSpectator : grantedSpectator).push(label)
           continue
         }
-        if (put.status === 403) {
+        if (res.status === 403) {
           // Hierarchy, not permission: the bot may hold Manage Roles and still be
-          // unable to give out a role that sits above its own. It would fail
+          // unable to manage a role that sits above its own. It would fail
           // identically for everybody left, so stop asking and say what to fix.
           hierarchyBlocked = true
           warnings.push(
-            "Discord refused to grant the League Member role (403) — drag the bot's role ABOVE League Member in Server Settings → Roles, then run this again. Everything else in this run still happened.",
+            "Discord refused to change the Spectator role (403) — drag the bot's role ABOVE Spectator in Server Settings → Roles, then run this again. Everything else in this run still happened.",
           )
           continue
         }
-        if (put.status === 404) {
+        if (res.status === 404) {
           // We saw this member moments ago, so "unknown" is far more likely to be the
           // role than the person: an id saved in the config and since deleted in
           // Discord. Said once — it will be the same story for everybody after them.
           if (!staleRoleWarned) {
             staleRoleWarned = true
             warnings.push(
-              `Discord does not recognise the League Member role id ${roleId} — check the role still exists, or clear the field in Admin → Discord and re-run to have it found by name again. (A member who left mid-run would also read like this.)`,
+              `Discord does not recognise the Spectator role id ${roleId} — check the role still exists, or clear the field in Admin → Discord and re-run to have it found by name again. (A member who left mid-run would also read like this.)`,
             )
           }
           continue
         }
-        warnings.push(`Could not give ${quote(driverName)} the League Member role — ${put.message}`)
+        warnings.push(`Could not ${entered ? 'remove the Spectator role from' : 'give the Spectator role to'} ${quote(label)} — ${res.message}`)
       }
     }
 
-    if (notInGuild) {
+    if (leftAlonePossible) {
       warnings.push(
-        `${notInGuild} linked driver${notInGuild === 1 ? ' is' : 's are'} not in the pages of the server this run read, so ${notInGuild === 1 ? 'their role was' : 'their roles were'} left for a later run.`,
+        `${leftAlonePossible} member${leftAlonePossible === 1 ? '' : 's'} answer to the name of an entered driver who is not linked yet, so their Spectator status was deliberately left alone until the link resolves.`,
       )
     }
 
@@ -828,9 +801,11 @@ Deno.serve(async (req) => {
       ambiguous,
       no_match: noMatch,
       already_linked: alreadyLinked.length,
-      granted,
-      already_had_role: alreadyHadRole,
-      role_league_member_resolved: !!roleId,
+      entered_drivers: enteredDriverIds.size,
+      granted_spectator: grantedSpectator,
+      removed_spectator: removedSpectator,
+      spectator_already_correct: alreadyCorrect,
+      role_spectator_resolved: !!roleId,
       members_scanned: membersScanned,
       scan_capped: scanCapped,
       profiles_linked: profilesLinked,
