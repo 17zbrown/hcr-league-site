@@ -253,6 +253,7 @@ export interface SeasonRegistration {
   iracing_custid: string | null
   fia_category: string | null
   preferred_class: string | null
+  preferred_car: string | null
   notes: string | null
   status: string
   created_at: string

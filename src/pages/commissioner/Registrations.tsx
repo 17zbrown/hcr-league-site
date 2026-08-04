@@ -46,6 +46,7 @@ export default function Registrations() {
                 <th className="px-4 py-3">Cust ID#</th>
                 <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3">Class</th>
+                <th className="px-4 py-3">Car</th>
                 <th className="px-4 py-3">On team?</th>
                 <th className="px-4 py-3">Status</th>
               </tr>
@@ -65,6 +66,7 @@ export default function Registrations() {
                       </span>
                     ) : '—'}
                   </td>
+                  <td className="px-4 py-3">{r.preferred_car ?? '—'}</td>
                   <td className="px-4 py-3 text-[var(--color-muted)]">{r.driver?.team_id ? 'Yes' : 'Free agent'}</td>
                   <td className="px-4 py-3">
                     <select

@@ -6,6 +6,21 @@ import { useCurrentSeason } from '../lib/queries'
 import type { SeasonRegistration } from '../lib/types'
 import { Section } from '../components/ui'
 
+/**
+ * Typeahead hints per class, drawn from what the grid actually runs. Deliberately a
+ * <datalist> and not a <select>: iRacing releases cars mid-season, and a fixed list
+ * would turn a legal entry into an impossible one.
+ */
+const CAR_SUGGESTIONS: Record<string, string[]> = {
+  GTP: ['Acura ARX-06', 'Cadillac V-Series.R', 'Porsche 963', 'BMW M Hybrid V8', 'Ferrari 499P'],
+  LMP2: ['Dallara P217'],
+  GTD: [
+    'Ferrari 296 GT3', 'Porsche 911 GT3 R (992)', 'Chevrolet Corvette Z06 GT3.R',
+    'Lamborghini Huracan GT3 EVO', 'McLaren 720S GT3 EVO', 'Mercedes-AMG GT3 2020',
+    'Audi R8 LMS GT3', 'BMW M4 GT3', 'Aston Martin Vantage GT3 EVO', 'Ford Mustang GT3',
+  ],
+}
+
 const CLASSES = ['GTP', 'LMP2', 'GTD']
 
 export default function Account() {
@@ -19,6 +34,7 @@ export default function Account() {
   const [iracingCustid, setIracingCustid] = useState('')
   const [category, setCategory] = useState('Bronze')
   const [preferredClass, setPreferredClass] = useState('GTD')
+  const [preferredCar, setPreferredCar] = useState('')
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -45,6 +61,7 @@ export default function Account() {
           setIracingCustid(data.iracing_custid ?? '')
           setCategory(data.fia_category ?? 'Bronze')
           setPreferredClass(data.preferred_class ?? 'GTD')
+          setPreferredCar(data.preferred_car ?? '')
           setNotes(data.notes ?? '')
         }
         setLoading(false)
@@ -65,6 +82,7 @@ export default function Account() {
       p_display_name: displayName,
       p_fia_category: category,
       p_preferred_class: preferredClass,
+      p_preferred_car: preferredCar.trim(),
       p_notes: notes,
       p_iracing_name: iracingName.trim(),
       p_iracing_custid: iracingCustid.trim(),
@@ -174,6 +192,26 @@ export default function Account() {
               <select className="hcr-select" value={preferredClass} onChange={(e) => setPreferredClass(e.target.value)}>
                 {CLASSES.map((c) => <option key={c}>{c}</option>)}
               </select>
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Preferred car</span>
+              <input
+                className="hcr-input"
+                value={preferredCar}
+                onChange={(e) => setPreferredCar(e.target.value)}
+                placeholder="e.g. Ferrari 296 GT3"
+                list="hcr-car-suggestions"
+                maxLength={80}
+              />
+              {/* Suggestions, not a fixed list. iRacing adds cars mid-season, and a
+                  hardcoded dropdown would silently block a perfectly legal entry. */}
+              <datalist id="hcr-car-suggestions">
+                {CAR_SUGGESTIONS[preferredClass]?.map((c) => <option key={c} value={c} />)}
+              </datalist>
+              <span className="mt-1 block text-xs text-[var(--color-faint)]">
+                The car you'll run all season, named as it appears in iRacing. Locked once the
+                season starts unless staff agree otherwise.
+              </span>
             </label>
             <label className="block">
               <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Notes (optional)</span>
