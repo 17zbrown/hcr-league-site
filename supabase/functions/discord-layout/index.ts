@@ -49,23 +49,23 @@ const CHAN_VOICE = 2
 const CHAN_STAGE = 13
 
 // Sidebar order, top to bottom. The reasoning, since a future reader will want it:
-// a newcomer lands on START HERE; a league member lives in LEAGUE; PADDOCK is the
-// public social room and the only place the two halves of the server meet;
-// ENDURANCE is the separate team; the two staff categories sit below the rooms they
-// police; ARCHIVE is dead weight and goes last, always. Anything not listed here
-// sorts between ADMIN and ARCHIVE, so an unknown category is visible but out of the
-// way rather than silently jumping the queue.
-const CATEGORY_ORDER = ['START HERE', 'LEAGUE', 'PADDOCK', 'ENDURANCE', 'RACE CONTROL', 'ADMIN']
+// this is a single-league server since the endurance side closed, and each category
+// answers one question — LEAGUE is what the league publishes, PADDOCK is where
+// members talk, RACE CONTROL is stewarding, ADMIN is staff. The two staff categories
+// sit below the rooms they police; ARCHIVE is dead weight and goes last, always.
+// Anything not listed here sorts between ADMIN and ARCHIVE, so an unknown category
+// is visible but out of the way rather than silently jumping the queue.
+// (START HERE and ENDURANCE are gone — discord-reorg folded them away.)
+const CATEGORY_ORDER = ['LEAGUE', 'PADDOCK', 'RACE CONTROL', 'ADMIN']
 const ARCHIVE_NAME = 'ARCHIVE'
 
-// Channel order within each category. Read-only reference material first, then the
-// rooms people type in, then voice. Discord sorts voice into its own block below the
-// text channels regardless, so the voice entries here only order voice against voice.
+// Channel order within each category. The newcomer's path first (welcome, rules),
+// then read-only reference material, then the rooms people type in, then voice.
+// Discord sorts voice into its own block below the text channels regardless, so the
+// voice entries here only order voice against voice.
 const CHANNEL_ORDER: Record<string, string[]> = {
-  'START HERE': ['welcome', 'rules'],
-  LEAGUE: ['announcements', 'standings', 'race-results', 'season-signups', 'rulebook', 'general-chat', 'Race Channel'],
-  PADDOCK: ['gravel-trap', 'promotions', 'Voice Chat'],
-  ENDURANCE: ['announcements', 'general-chat', 'event-signups', 'stint-planning', 'Endurance Voice'],
+  LEAGUE: ['welcome', 'rules', 'announcements', 'standings', 'race-results', 'season-signups', 'rulebook'],
+  PADDOCK: ['general-chat', 'gravel-trap', 'promotions', 'Race Channel', 'Voice Chat'],
   'RACE CONTROL': ['race-control', 'incident-protests', 'license-ups', 'race-control-announcements', 'Steward Radio'],
   ADMIN: ['admin-chat', 'bot-log', 'safety-alerts', 'community-updates', 'iracing-names'],
 }

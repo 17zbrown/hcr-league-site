@@ -55,17 +55,17 @@ interface Note { title: string; body: string; fields?: { name: string; value: st
  */
 function notes(L: Links): Record<string, Note> {
   return {
-    'START HERE/welcome': {
+    'LEAGUE/welcome': {
       title: 'Welcome to HCR League',
       body: 'Three classes, one grid. **GTP**, **LMP2** and **GTD** race together and score three separate championships — so you are racing the whole field for position and your own class for the title.',
       fields: [
-        { name: 'Start here', value: `**1.** Read the rules in this category\n**2.** Enter a season at ${SITE}/signup\n**3.** Read the rulebook before your first race\n**4.** Say hello in <#PADDOCK/gravel-trap>` },
+        { name: 'Start here', value: `**1.** Read <#LEAGUE/rules>\n**2.** Enter a season at ${SITE}/signup\n**3.** Read the rulebook before your first race\n**4.** Say hello in <#PADDOCK/gravel-trap>` },
         { name: 'Where things live', value: `Standings · ${SITE}/standings\nSchedule · ${SITE}/schedule\nResults · ${SITE}/results\nDrivers · ${SITE}/drivers` },
         { name: 'Watch', value: L.twitch || 'Broadcast details to follow.' },
       ],
     },
 
-    'START HERE/rules': {
+    'LEAGUE/rules': {
       title: 'Server rules',
       body: 'Short list, seriously meant. Breaking these can cost you a race, a role, or your place in the server.',
       fields: [
@@ -97,7 +97,7 @@ function notes(L: Links): Record<string, Note> {
       fields: [{ name: 'Full tables', value: `Championship · ${SITE}/standings\nFill-In Cup · ${SITE}/standings/fill-in` }],
     },
 
-    'LEAGUE/general-chat': {
+    'PADDOCK/general-chat': {
       title: 'League chat',
       body: 'Anything about the championship — setups, strategy, who owes who an apology from Sunday. Incidents belong in the protest channel, not here.',
     },
@@ -141,26 +141,9 @@ function notes(L: Links): Record<string, Note> {
       ],
     },
 
-    'ENDURANCE/announcements': {
-      title: 'Endurance team announcements',
-      body: 'Official notices for the endurance roster — event entries, driver line-ups and team news. Separate from the league championship.',
-    },
 
-    'ENDURANCE/general-chat': {
-      title: 'Endurance chat',
-      body: 'Day-to-day talk for the endurance roster: practice, pace, car choices, who is available for what.',
-    },
 
-    'ENDURANCE/event-signups': {
-      title: 'Endurance event sign-ups',
-      body: 'Put your name down for upcoming endurance events here. Say which event, roughly how many hours you can commit, and your time zone — that is what the line-ups get built from.',
-    },
 
-    'ENDURANCE/stint-planning': {
-      title: 'Stint planning',
-      body: 'Driver rotations, fuel and tyre plans, and driver-change timing for each event.',
-      fields: [{ name: 'Useful to post', value: 'Your realistic stint length, the hours you can actually cover on race day, and your time zone. Plans fall apart on availability far more often than on pace.' }],
-    },
 
     'RACE CONTROL/race-control': {
       title: 'Race control',
