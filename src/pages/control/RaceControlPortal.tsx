@@ -7,6 +7,7 @@ import { Section, Skeleton } from '../../components/ui'
 import { StatBand } from '../../components/editorial'
 import { StatusPill } from '../../components/ProtestThread'
 import { ChangeRequestQueue } from '../../components/ChangeRequestQueue'
+import { PenaltyPanel } from '../../components/Penalties'
 import type { ProtestStatus } from '../../lib/types'
 
 const FILTERS: { id: ProtestStatus | 'all' | 'queue'; label: string }[] = [
@@ -41,6 +42,14 @@ export default function RaceControlPortal() {
       <div className="mb-6 flex flex-wrap gap-2">
         <Link to="/portal" className="hcr-btn hcr-btn-ghost !text-xs">My Portal →</Link>
         {isAdmin && <Link to="/admin" className="hcr-btn hcr-btn-ghost !text-xs">Admin Portal →</Link>}
+      </div>
+
+      {/* Sanctions issued directly, not only as the tail of a protest — a steward
+          reviewing the broadcast needs somewhere to record a decision nobody
+          protested. */}
+      <div className="mb-10">
+        <h2 className="mb-3 text-2xl">Penalties &amp; suspensions</h2>
+        <PenaltyPanel />
       </div>
 
       {/* Number / car / class changes and additional-car applications. Above the

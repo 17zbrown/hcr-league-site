@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
-import { useDrivers, useLicenseResults, useTeams } from '../../lib/queries'
+import { useCurrentSeason, useDrivers, useEntries, useLicenseResults, useTeams } from '../../lib/queries'
 import { buildPaceIndex, computeLicense, resultsForDriver } from '../../lib/license'
 import type { Driver, Team } from '../../lib/types'
 import { Skeleton } from '../../components/ui'
@@ -14,6 +14,20 @@ export default function DriversAdmin() {
   const { data: drivers, isLoading } = useDrivers()
   const { data: licenseResults } = useLicenseResults()
   const { data: teams } = useTeams()
+  const { data: season } = useCurrentSeason()
+  const { data: entries } = useEntries(season?.id)
+  // A driver's number lives on their car. For a free agent that car is theirs alone,
+  // which is what makes it editable here; a team driver's number belongs to the team
+  // and is changed by their manager, so this page shows it read-only.
+  const entryByDriver = useMemo(() => {
+    const m: Record<string, { id: string; number: string; teamed: boolean }> = {}
+    for (const e of entries ?? []) {
+      for (const l of e.drivers ?? []) {
+        if (l.driver?.id) m[l.driver.id] = { id: e.id, number: e.number, teamed: !!e.team_id }
+      }
+    }
+    return m
+  }, [entries])
   const paceIndex = buildPaceIndex(licenseResults ?? [])
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['drivers'] })
@@ -42,6 +56,7 @@ export default function DriversAdmin() {
           <DriverRow
             key={d.id}
             driver={d}
+            entry={entryByDriver[d.id]}
             teams={teams ?? []}
             computed={computeLicense(resultsForDriver(licenseResults ?? [], d.name), paceIndex, null).computed}
             onChange={invalidate}
@@ -52,7 +67,13 @@ export default function DriversAdmin() {
   )
 }
 
-function DriverRow({ driver, teams, computed, onChange }: { driver: Driver; teams: Team[]; computed: import('../../lib/license').License; onChange: () => void }) {
+function DriverRow({ driver, entry, teams, computed, onChange }: {
+  driver: Driver
+  entry?: { id: string; number: string; teamed: boolean }
+  teams: Team[]
+  computed: import('../../lib/license').License
+  onChange: () => void
+}) {
   const [name, setName] = useState(driver.name)
   const [country, setCountry] = useState(driver.country ?? '')
   // Customer ID, not iRating: the league doesn't use iRating for anything, while the
@@ -61,7 +82,9 @@ function DriverRow({ driver, teams, computed, onChange }: { driver: Driver; team
   const [custid, setCustid] = useState(driver.iracing_custid ?? '')
   const [teamId, setTeamId] = useState(driver.team_id ?? '')
   const [cat, setCat] = useState(driver.license_override ?? '')
+  const [number, setNumber] = useState(entry?.number ?? '')
   const [busy, setBusy] = useState(false)
+  const [numBusy, setNumBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
@@ -96,6 +119,22 @@ function DriverRow({ driver, teams, computed, onChange }: { driver: Driver; team
     setTimeout(() => setSaved(false), 1500)
     onChange()
   }
+
+  /**
+   * The number goes through set_entry_number, not a table update: it lives on the
+   * driver's car, and the league-wide uniqueness check belongs on the server where
+   * a second admin in another tab cannot race past it.
+   */
+  const saveNumber = async () => {
+    if (!entry) return
+    setNumBusy(true)
+    setErr(null)
+    const { error } = await supabase.rpc('set_entry_number', { p_entry: entry.id, p_number: number.trim() })
+    setNumBusy(false)
+    if (error) { setErr(error.message.replace(/^.*?:\s*/, '')); setNumber(entry.number); return }
+    onChange()
+  }
+
   const del = async () => {
     if (!confirm(`Delete driver "${driver.name}"?`)) return
     const { error } = await supabase.from('drivers').delete().eq('id', driver.id)
@@ -105,9 +144,33 @@ function DriverRow({ driver, teams, computed, onChange }: { driver: Driver; team
 
   return (
     <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-3">
-    <div className="grid items-center gap-2 md:grid-cols-[1.4fr_60px_110px_1.4fr_150px_88px_auto_auto]">
+    <div className="grid items-center gap-2 md:grid-cols-[1.4fr_60px_76px_110px_1.4fr_150px_88px_auto_auto]">
       <input className="hcr-input !py-2" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" />
       <input className="hcr-input !py-2 text-center" value={country} onChange={(e) => setCountry(e.target.value)} placeholder="🏳️" aria-label="Country" />
+      {/* Free agents own their number outright, so it is editable here. A driver on
+          a team runs the team's car and their manager owns that number — showing it
+          editable would promise something this page cannot deliver. */}
+      {entry && !entry.teamed ? (
+        <input
+          className="hcr-input tabular !py-2 text-center"
+          value={number}
+          onChange={(e) => setNumber(e.target.value)}
+          onBlur={() => { if (number.trim() && number.trim() !== entry.number) saveNumber() }}
+          disabled={numBusy}
+          maxLength={4}
+          inputMode="numeric"
+          placeholder="No."
+          title="Free agent's own number — saves on blur"
+          aria-label="Car number"
+        />
+      ) : (
+        <div
+          className="tabular text-center text-sm text-[var(--color-muted)]"
+          title={entry ? "Team's number — the manager changes it" : 'Not on this season\'s grid'}
+        >
+          {entry ? `#${entry.number}` : '—'}
+        </div>
+      )}
       <input className="hcr-input !py-2 tabular" value={custid} onChange={(e) => setCustid(e.target.value)} placeholder="Cust ID#" aria-label="iRacing customer ID" />
       <select className="hcr-select !py-2" value={teamId} onChange={(e) => setTeamId(e.target.value)} aria-label="Team">
         <option value="">— Free agent —</option>

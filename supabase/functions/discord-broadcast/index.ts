@@ -490,6 +490,62 @@ Deno.serve(async (req) => {
           title, url: `${SITE}/standings`, color: HCR_YELLOW, fields,
           footer: { text: 'HCR League · top five per class · full table on the site' },
         }
+      // ----------------------------------------------------------- penalty ----
+      } else if (row.kind === 'penalty') {
+        const penaltyId = String(row.payload?.penalty_id ?? '')
+        const { data: pen } = await db.from('penalties')
+          .select('id, kind, value, reason, status, rescind_reason, issued_at, driver_id, event_id')
+          .eq('id', penaltyId).maybeSingle()
+        if (!pen) {
+          skipped.push({ key: row.dedupe_key, reason: 'The penalty no longer exists.' })
+          if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'penalty deleted' }).eq('id', row.id)
+          continue
+        }
+        const { data: pd } = await db.from('drivers').select('name').eq('id', pen.driver_id).maybeSingle()
+        const { data: pev } = pen.event_id
+          ? await db.from('events').select('round, name').eq('id', pen.event_id).maybeSingle()
+          : { data: null }
+
+        // Wording follows rulebook §27.3 so the channel and the rules match.
+        const PEN_LABEL: Record<string, string> = {
+          warning: 'Warning', time: 'Time penalty', position: 'Position penalty',
+          points: 'Points penalty', grid: 'Grid penalty', race_dsq: 'Race disqualification',
+          suspension: 'Suspension', season_dsq: 'Season disqualification',
+        }
+        const PEN_UNIT: Record<string, string> = {
+          time: 'second', position: 'position', points: 'point', grid: 'grid place', suspension: 'round',
+        }
+        const n = Number(pen.value ?? 0)
+        const unit = PEN_UNIT[String(pen.kind)]
+        const amount = unit && n ? ` — ${n} ${unit}${n === 1 ? '' : 's'}` : ''
+        const rescinded = pen.status === 'rescinded'
+
+        title = clip(
+          [rescinded ? 'Penalty rescinded' : 'Penalty issued',
+           pev?.round != null ? `Round ${pev.round}` : null,
+           pev?.name].filter(Boolean).join(' — '),
+          MAX_TITLE,
+        )
+
+        const fields: Record<string, unknown>[] = [
+          { name: 'Driver', value: clip(String(pd?.name ?? 'Unknown'), MAX_FIELD), inline: true },
+          { name: 'Penalty', value: clip(`${PEN_LABEL[String(pen.kind)] ?? String(pen.kind)}${amount}`, MAX_FIELD), inline: true },
+        ]
+        if (pen.reason) fields.push({ name: 'Reason', value: clip(String(pen.reason), MAX_FIELD), inline: false })
+        if (rescinded && pen.rescind_reason) {
+          fields.push({ name: 'Why it was rescinded', value: clip(String(pen.rescind_reason), MAX_FIELD), inline: false })
+        }
+
+        embed = {
+          title,
+          url: `${SITE}/drivers`,
+          // Green for a reversal, red for a live sanction, brand yellow for a warning
+          // — a warning is on the record but costs nothing, and colouring it like a
+          // punishment would overstate it.
+          color: rescinded ? CLEARED_GREEN : pen.kind === 'warning' ? HCR_YELLOW : PENALTY_RED,
+          fields,
+          footer: { text: 'HCR League · race control · decisions are final once published' },
+        }
       // ------------------------------------------------------------ ruling ----
       } else if (row.kind === 'ruling') {
         const protestId = String(row.payload?.protest_id ?? '')

@@ -366,6 +366,36 @@ export function usePendingChangeRequests() {
   })
 }
 
+/** Penalties and suspensions for a season. Public — sanctions are on the record. */
+export function usePenalties(seasonId?: string) {
+  return useQuery({
+    enabled: !!seasonId,
+    queryKey: ['penalties', seasonId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('penalties')
+        .select('*, driver:drivers(id, name), event:events(round, name)')
+        .eq('season_id', seasonId!)
+        .order('issued_at', { ascending: false })
+      if (error) throw error
+      return (data ?? []) as PenaltyRow[]
+    },
+  })
+}
+
+export interface PenaltyRow {
+  id: string
+  kind: string
+  value: number | null
+  reason: string
+  notes: string | null
+  status: 'active' | 'served' | 'rescinded'
+  issued_at: string
+  rescind_reason: string | null
+  driver?: { id: string; name: string } | null
+  event?: { round: number; name: string | null } | null
+}
+
 export function useDrivers() {
   return useQuery({
     queryKey: ['drivers'],

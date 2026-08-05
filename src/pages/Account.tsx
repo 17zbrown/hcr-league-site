@@ -35,6 +35,7 @@ export default function Account() {
   const [category, setCategory] = useState('Bronze')
   const [preferredClass, setPreferredClass] = useState('GTD')
   const [preferredCar, setPreferredCar] = useState('')
+  const [nationality, setNationality] = useState('')
   // Two choices, because numbers are league-wide and first come, first served — a
   // single choice leaves whoever asks second with nothing to fall back on.
   const [prefNumber, setPrefNumber] = useState('')
@@ -66,6 +67,7 @@ export default function Account() {
           setCategory(data.fia_category ?? 'Bronze')
           setPreferredClass(data.preferred_class ?? 'GTD')
           setPreferredCar(data.preferred_car ?? '')
+          setNationality(data.nationality ?? '')
           setPrefNumber(data.preferred_number ?? '')
           setPrefNumberAlt(data.preferred_number_alt ?? '')
           setNotes(data.notes ?? '')
@@ -89,6 +91,7 @@ export default function Account() {
       p_fia_category: category,
       p_preferred_class: preferredClass,
       p_preferred_car: preferredCar.trim(),
+      p_nationality: nationality.trim(),
       p_preferred_number: prefNumber.trim(),
       p_preferred_number_alt: prefNumberAlt.trim(),
       p_notes: notes,
@@ -201,6 +204,21 @@ export default function Account() {
                 {CLASSES.map((c) => <option key={c}>{c}</option>)}
               </select>
             </label>
+            <label className="block">
+              <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Nationality</span>
+              <input
+                className="hcr-input"
+                value={nationality}
+                onChange={(e) => setNationality(e.target.value)}
+                placeholder="e.g. United States, or 🇺🇸"
+                maxLength={60}
+              />
+              <span className="mt-1 block text-xs text-[var(--color-faint)]">
+                Shown as your flag on the roster and in results. A country name or the flag
+                emoji both work.
+              </span>
+            </label>
+
             <label className="block">
               <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Preferred car</span>
               <input
