@@ -10,6 +10,7 @@ import { LoadError, Section, Skeleton } from '../components/ui'
 import { CountUp } from '../components/motion'
 import { DriverName, TeamLink } from '../components/links'
 import { ProgressionChart } from '../components/ProgressionChart'
+import { ColumnFilterRow, ColumnFilterToggle, useColumnFilters } from '../components/SearchBox'
 
 type Tab = ClassId | 'TEAMS'
 
@@ -126,13 +127,36 @@ function StandingsTable({
   const { profile } = useAuth()
   const meName = profile?.display_name ?? null
   const data = teamRows ?? rows
+  const leaderPts = data[0]?.points ?? 0
+
+  // Position and gap are settled before any filtering, so a filtered table still
+  // says where someone stands in the championship rather than renumbering them 1st.
+  const ranked = data.map((r, i) => ({ r, pos: i + 1, gap: i === 0 ? '—' : `−${leaderPts - r.points}` }))
+
+  const cf = useColumnFilters<(typeof ranked)[number]>({
+    pos: (x) => x.pos,
+    name: (x) => x.r.name,
+    class: (x) => x.r.classId,
+    starts: (x) => x.r.starts,
+    wins: (x) => x.r.wins,
+    pod: (x) => x.r.podiums,
+    pts: (x) => x.r.points,
+    gap: (x) => x.gap,
+  })
+  const shown = cf.apply(ranked)
+
   if (!data.length) {
     return <p className="text-[var(--color-muted)]">No results scored yet this season.</p>
   }
-  const leaderPts = data[0]?.points ?? 0
 
   return (
     <div className="shadow-card relative overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--color-line)] px-5 py-2.5">
+        <span className="tabular font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+          {cf.active > 0 ? `${shown.length} of ${ranked.length}` : `${ranked.length} ${teamRows ? 'teams' : 'drivers'}`}
+        </span>
+        <ColumnFilterToggle ctl={cf} className="!py-1 !text-[11px]" />
+      </div>
       <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[var(--color-paper)] sm:hidden" aria-hidden />
       <div className="overflow-x-auto">
       <table className="w-full min-w-[640px] border-collapse">
@@ -147,9 +171,31 @@ function StandingsTable({
             <th className="px-5 py-3.5 text-right">Pts</th>
             <th className="hidden px-5 py-3.5 text-right sm:table-cell">Gap</th>
           </tr>
+          <ColumnFilterRow
+            ctl={cf}
+            className="px-5 pb-3 pt-0"
+            cells={[
+              { key: 'pos', label: 'Pos' },
+              { key: 'name', label: teamRows ? 'Team' : 'Driver' },
+              ...(teamRows ? [{ key: 'class', label: 'Class' }] : []),
+              { key: 'starts', label: 'Starts' },
+              { key: 'wins', label: 'Wins' },
+              { key: 'pod', label: 'Podiums' },
+              { key: 'pts', label: 'Points' },
+              { key: 'gap', label: 'Gap' },
+            ]}
+          />
         </thead>
         <tbody>
-          {data.map((r, i) => {
+          {shown.length === 0 && (
+            <tr>
+              <td colSpan={teamRows ? 8 : 7} className="px-5 py-8 text-center text-sm text-[var(--color-muted)]">
+                No {teamRows ? 'teams' : 'drivers'} match these column filters.
+              </td>
+            </tr>
+          )}
+          {shown.map(({ r, pos, gap }) => {
+            const i = pos - 1
             const rowColor = color ?? classColor(r.classId, classes)
             const isMe = !teamRows && !!meName && resultListsDriver(r.name, meName)
             return (
@@ -187,7 +233,7 @@ function StandingsTable({
                   <CountUp value={r.points} />
                 </td>
                 <td className="tabular hidden px-5 py-3.5 text-right text-[var(--color-faint)] sm:table-cell">
-                  {i === 0 ? '—' : `−${leaderPts - r.points}`}
+                  {gap}
                 </td>
               </tr>
             )

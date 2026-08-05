@@ -8,6 +8,7 @@ import { resultListsDriver } from '../lib/attribution'
 import { LoadError, Section, Skeleton } from '../components/ui'
 import { CountUp } from '../components/motion'
 import { DriverName } from '../components/links'
+import { ColumnFilterRow, ColumnFilterToggle, useColumnFilters } from '../components/SearchBox'
 
 /**
  * The Fill-In Cup — a side championship, completely separate from the main
@@ -26,6 +27,20 @@ export default function FillInStandings() {
   // table — the headline stat counts PEOPLE, so dedupe on the crew part
   const cupDrivers = useMemo(() => new Set(rows.map((r) => r.key.split('::')[0])).size, [rows])
   const driveCount = useMemo(() => fillInRows(results ?? []).length, [results])
+
+  // Cup position is fixed before filtering, so narrowing the table never implies
+  // someone is leading a cup they are fourth in.
+  const ranked = useMemo(() => rows.map((r, i) => ({ r, pos: i + 1 })), [rows])
+  const cf = useColumnFilters<(typeof ranked)[number]>({
+    pos: (x) => x.pos,
+    name: (x) => x.r.name,
+    class: (x) => x.r.classId,
+    starts: (x) => x.r.starts,
+    wins: (x) => x.r.wins,
+    pod: (x) => x.r.podiums,
+    pts: (x) => x.r.points,
+  })
+  const shown = cf.apply(ranked)
 
   return (
     <Section eyebrow={`${season?.name ?? 'Season'} · Side championship`} title="Fill-In Cup" titleTag="h1">
@@ -74,6 +89,12 @@ export default function FillInStandings() {
         </div>
       ) : (
         <div className="shadow-card relative overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--color-line)] px-5 py-2.5">
+            <span className="tabular font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
+              {cf.active > 0 ? `${shown.length} of ${ranked.length}` : `${ranked.length} drivers`}
+            </span>
+            <ColumnFilterToggle ctl={cf} className="!py-1 !text-[11px]" />
+          </div>
           <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[var(--color-paper)] sm:hidden" aria-hidden />
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] border-collapse">
@@ -87,9 +108,30 @@ export default function FillInStandings() {
                   <th className="px-5 py-3.5 text-center">Pod</th>
                   <th className="px-5 py-3.5 text-right">Pts</th>
                 </tr>
+                <ColumnFilterRow
+                  ctl={cf}
+                  className="px-5 pb-3 pt-0"
+                  cells={[
+                    { key: 'pos', label: 'Pos' },
+                    { key: 'name', label: 'Driver' },
+                    { key: 'class', label: 'Raced in' },
+                    { key: 'starts', label: 'Drives' },
+                    { key: 'wins', label: 'Wins' },
+                    { key: 'pod', label: 'Podiums' },
+                    { key: 'pts', label: 'Points' },
+                  ]}
+                />
               </thead>
               <tbody>
-                {rows.map((r, i) => {
+                {shown.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-5 py-8 text-center text-sm text-[var(--color-muted)]">
+                      No drivers match these column filters.
+                    </td>
+                  </tr>
+                )}
+                {shown.map(({ r, pos }) => {
+                  const i = pos - 1
                   const rowColor = classColor(r.classId, classes)
                   const isMe = !!meName && resultListsDriver(r.name, meName)
                   return (

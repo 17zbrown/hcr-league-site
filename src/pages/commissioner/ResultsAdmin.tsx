@@ -16,6 +16,7 @@ import {
   type ImportedRow,
 } from '../../lib/importResults'
 import { Skeleton } from '../../components/ui'
+import { ColumnFilterRow, ColumnFilterToggle, useColumnFilters } from '../../components/SearchBox'
 
 export default function ResultsAdmin() {
   const qc = useQueryClient()
@@ -89,6 +90,21 @@ export default function ResultsAdmin() {
   const addRow = () => setRows((rs) => [...rs, {}])
   const removeRow = (i: number) => setRows((rs) => rs.filter((_, idx) => idx !== i))
   const autofill = () => setRows((rs) => autofillPoints(rs, season))
+
+  /**
+   * Column filters over the staging grid — useful for finding the rows the parser
+   * left blank in a 40-car import.
+   *
+   * Every visible row carries its index in the FULL list, because setCell and
+   * removeRow address rows by position. Editing a filtered row must change that
+   * row, not whichever row happens to sit at the same offset in the filtered view.
+   * Saving is unaffected: it writes `rows`, so a filter can never silently drop
+   * results from an import.
+   */
+  const cf = useColumnFilters<{ row: ImportedRow; i: number }>(
+    Object.fromEntries(GRID_FIELDS.map((f) => [f, (x: { row: ImportedRow }) => x.row[f]])),
+  )
+  const shownRows = cf.apply(rows.map((row, i) => ({ row, i })))
 
   const save = async () => {
     if (!eventId) return
@@ -200,6 +216,7 @@ export default function ResultsAdmin() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h3 className="text-xl">Review · {rows.length} rows</h3>
             <div className="flex gap-2">
+              <ColumnFilterToggle ctl={cf} className="!py-2 !text-xs" />
               <button onClick={autofill} className="hcr-btn hcr-btn-ghost !py-2 !text-xs">Auto-fill points</button>
               <button onClick={() => setRows([])} className="hcr-btn hcr-btn-ghost !py-2 !text-xs">Clear</button>
               <button onClick={save} disabled={busy} className="hcr-btn hcr-btn-primary !py-2 !text-xs">
@@ -216,9 +233,21 @@ export default function ResultsAdmin() {
                     <th key={f} className="whitespace-nowrap px-2 py-2">{FIELD_LABELS[f]}</th>
                   ))}
                 </tr>
+                <ColumnFilterRow
+                  ctl={cf}
+                  className="px-1 pb-2 pt-0"
+                  cells={[null, ...GRID_FIELDS.map((f) => ({ key: f, label: FIELD_LABELS[f] }))]}
+                />
               </thead>
               <tbody>
-                {rows.map((row, i) => (
+                {shownRows.length === 0 && (
+                  <tr>
+                    <td colSpan={GRID_FIELDS.length + 1} className="px-2 py-6 text-center text-[var(--color-muted)]">
+                      No rows match these column filters. Saving still writes all {rows.length}.
+                    </td>
+                  </tr>
+                )}
+                {shownRows.map(({ row, i }) => (
                   <tr key={i} className="border-b border-[var(--color-line)] last:border-0">
                     <td className="px-2 py-1">
                       <button onClick={() => removeRow(i)} className="-m-2 inline-flex min-h-11 min-w-11 items-center justify-center text-[var(--color-faint)] hover:text-[var(--color-red)]" aria-label="Remove row">✕</button>

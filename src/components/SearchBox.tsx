@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { filterBy } from '../lib/search'
+import { filterBy, matches, norm } from '../lib/search'
 
 /**
  * The site's one search input. A component rather than a bare <input> so every
@@ -91,5 +91,113 @@ export function ColumnFilter({
       aria-label={`Filter by ${label}`}
       type="search"
     />
+  )
+}
+
+/** The parts of a column-filter controller the header UI needs. */
+export interface ColumnFilterUi {
+  filters: Record<string, string>
+  set: (key: string, value: string) => void
+  clear: () => void
+  open: boolean
+  setOpen: (open: boolean) => void
+  /** How many columns are actually narrowing right now. */
+  active: number
+}
+
+export interface ColumnFilters<T> extends ColumnFilterUi {
+  apply: (rows: T[]) => T[]
+}
+
+/**
+ * Per-column filtering for a table.
+ *
+ * `columns` maps a column key to the value that column *displays*, so a filter asks
+ * the same question the eye does — filtering the Driver column on "collins" cannot
+ * accidentally match a lap time.
+ *
+ * The inputs are hidden behind a toggle rather than always on. A permanent row of
+ * text boxes under every heading turns a results table into a form, and the timing
+ * tower is the one thing on this site that has to look like broadcast rather than
+ * admin.
+ */
+export function useColumnFilters<T>(columns: Record<string, (row: T) => unknown>): ColumnFilters<T> {
+  const [filters, setFilters] = useState<Record<string, string>>({})
+  const [open, setOpen] = useState(false)
+
+  const live = Object.entries(filters).filter(([, v]) => norm(v))
+
+  return {
+    filters,
+    open,
+    setOpen,
+    active: live.length,
+    set: (key, value) => setFilters((f) => ({ ...f, [key]: value })),
+    clear: () => setFilters({}),
+    apply: (rows) => {
+      if (!live.length) return rows
+      return rows.filter((row) =>
+        live.every(([key, q]) => {
+          const read = columns[key]
+          // An unknown key filters nothing rather than everything: a typo in a column
+          // map should not empty the table.
+          return read ? matches(q, read(row)) : true
+        }),
+      )
+    },
+  }
+}
+
+/**
+ * The button that reveals the filter row. Closing also clears, so a filter can never
+ * keep hiding rows after its input has gone off screen.
+ */
+export function ColumnFilterToggle({ ctl, className = '' }: { ctl: ColumnFilterUi; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (ctl.open) ctl.clear()
+        ctl.setOpen(!ctl.open)
+      }}
+      aria-pressed={ctl.open}
+      className={`hcr-chip ${ctl.open ? 'hcr-chip-active' : ''} ${className}`}
+    >
+      {ctl.active > 0 ? `Columns · ${ctl.active}` : 'Filter columns'}
+    </button>
+  )
+}
+
+/**
+ * The filter row itself, rendered inside <thead> under the labels.
+ *
+ * `cells` is the table's columns in order, with `null` for any column there is
+ * nothing sensible to filter on (a button column, a spacer). Passing the full run of
+ * columns is what keeps the inputs lined up with the headings above them.
+ */
+export function ColumnFilterRow({
+  ctl,
+  cells,
+  className = 'px-4 pb-3 pt-0',
+}: {
+  ctl: ColumnFilterUi
+  cells: ({ key: string; label: string } | null)[]
+  className?: string
+}) {
+  if (!ctl.open) return null
+  return (
+    <tr className="border-b border-[var(--color-line)] bg-[var(--color-paper)]">
+      {cells.map((c, i) => (
+        <th key={c?.key ?? `spacer-${i}`} scope="col" className={`${className} align-top`}>
+          {c && (
+            <ColumnFilter
+              value={ctl.filters[c.key] ?? ''}
+              onChange={(v) => ctl.set(c.key, v)}
+              label={c.label}
+            />
+          )}
+        </th>
+      ))}
+    </tr>
   )
 }

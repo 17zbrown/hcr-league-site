@@ -17,6 +17,7 @@ import { AchievementGallery } from '../components/AchievementGallery'
 import { LicenseBadge, LicenseProgress } from '../components/LicenseBadge'
 import { TeamLink } from '../components/links'
 import { Reveal } from '../components/motion'
+import { ColumnFilterRow, ColumnFilterToggle, useColumnFilters } from '../components/SearchBox'
 import type { LeagueClass, RaceResult } from '../lib/types'
 
 export default function DriverProfile() {
@@ -331,10 +332,25 @@ type Row = RaceResult & {
 export function ResultsTable({
   rows, classes, emptyLabel,
 }: { rows: Row[]; classes?: LeagueClass[]; emptyLabel: string }) {
+  const cf = useColumnFilters<Row>({
+    round: (r) => r.event?.round,
+    race: (r) => r.event?.name ?? r.event?.track?.name,
+    class: (r) => r.class_id,
+    finish: (r) => r.cls_pos,
+    grid: (r) => r.grid,
+    best: (r) => r.best_lap,
+    status: (r) => r.status,
+    pts: (r) => (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0),
+  })
+  const shown = cf.apply(rows)
+
   if (!rows.length) return <p className="text-[var(--color-muted)]">{emptyLabel}</p>
   return (
     <section>
-      <h2 className="mb-5 text-3xl">Round by round</h2>
+      <div className="mb-5 flex flex-wrap items-baseline justify-between gap-3">
+        <h2 className="text-3xl">Round by round</h2>
+        <ColumnFilterToggle ctl={cf} className="!py-1 !text-[11px]" />
+      </div>
       <div className="relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
         <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[var(--color-paper)] sm:hidden" aria-hidden />
         <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Round by round results">
@@ -350,9 +366,29 @@ export function ResultsTable({
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Pts</th>
               </tr>
+              <ColumnFilterRow
+                ctl={cf}
+                cells={[
+                  { key: 'round', label: 'Round' },
+                  { key: 'race', label: 'Race' },
+                  { key: 'class', label: 'Class' },
+                  { key: 'finish', label: 'Finish' },
+                  { key: 'grid', label: 'Grid' },
+                  { key: 'best', label: 'Best lap' },
+                  { key: 'status', label: 'Status' },
+                  { key: 'pts', label: 'Points' },
+                ]}
+              />
             </thead>
             <tbody>
-              {rows.map((r) => {
+              {shown.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center text-[var(--color-muted)]">
+                    No rounds match these column filters.
+                  </td>
+                </tr>
+              )}
+              {shown.map((r) => {
                 const color = classColor(r.class_id, classes)
                 return (
                   <tr key={r.id} className="border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-cloud)]">

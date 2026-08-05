@@ -6,7 +6,7 @@ import { resultsForDriver } from '../../lib/license'
 import { classColor } from '../../lib/format'
 import type { Driver, IracingLeagueState } from '../../lib/types'
 import { Skeleton } from '../../components/ui'
-import { SearchBox, useSearch } from '../../components/SearchBox'
+import { ColumnFilterRow, ColumnFilterToggle, SearchBox, useColumnFilters, useSearch } from '../../components/SearchBox'
 
 /**
  * iRacing league queue — who on this season's grid still needs adding to the league
@@ -111,6 +111,15 @@ export default function IracingLeague() {
   const { query, setQuery, filtered, count, total } = useSearch(
     rows, (r) => [r.driver.name, r.driver.iracing_custid, r.number, r.classId, r.state],
   )
+  // The status column filters on the label a controller can actually read, not the
+  // internal key — "to add" is what the badge says, so it is what must match.
+  const cf = useColumnFilters<Row>({
+    driver: (r) => r.driver.name,
+    entry: (r) => `#${r.number} ${r.classId}`,
+    custid: (r) => r.driver.iracing_custid,
+    state: (r) => STATE_META[r.state].label,
+  })
+  const shown = cf.apply(filtered)
   const pending = rows.filter((r) => r.state === 'pending')
   const missingId = rows.filter((r) => r.state === 'no-custid')
 
@@ -189,11 +198,14 @@ export default function IracingLeague() {
         </p>
       )}
 
-      <SearchBox
-        value={query} onChange={setQuery} count={count} total={total}
-        placeholder="Search by driver, customer ID, number, class or status…"
-        className="mb-4 max-w-xl"
-      />
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <SearchBox
+          value={query} onChange={setQuery} count={count} total={total}
+          placeholder="Search by driver, customer ID, number, class or status…"
+          className="max-w-xl flex-1"
+        />
+        <ColumnFilterToggle ctl={cf} />
+      </div>
       <div className="overflow-x-auto rounded-2xl border border-[var(--color-line)]">
         <table className="w-full min-w-[760px] border-collapse bg-[var(--color-paper)] text-sm">
           <thead>
@@ -204,9 +216,26 @@ export default function IracingLeague() {
               <th className="px-4 py-3">In the league?</th>
               <th className="px-4 py-3" />
             </tr>
+            <ColumnFilterRow
+              ctl={cf}
+              cells={[
+                { key: 'driver', label: 'Driver' },
+                { key: 'entry', label: 'Entry' },
+                { key: 'custid', label: 'Customer ID' },
+                { key: 'state', label: 'League status' },
+                null,
+              ]}
+            />
           </thead>
           <tbody>
-            {filtered.map((r) => {
+            {shown.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-[var(--color-muted)]">
+                  No drivers match the current filters.
+                </td>
+              </tr>
+            )}
+            {shown.map((r) => {
               const meta = STATE_META[r.state]
               const custid = String(r.driver.iracing_custid ?? '').trim()
               return (

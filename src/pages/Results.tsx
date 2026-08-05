@@ -6,6 +6,8 @@ import { useAuth } from '../lib/auth'
 import { resultListsDriver } from '../lib/attribution'
 import { LoadError, Section, Skeleton } from '../components/ui'
 import { DriverName } from '../components/links'
+import { ColumnFilterRow, ColumnFilterToggle, useColumnFilters } from '../components/SearchBox'
+import type { ClassId, RaceResult } from '../lib/types'
 
 /** The editorial micro-label: tiny, letterspaced, muted. */
 const MICRO = 'font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]'
@@ -77,21 +79,70 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
 
   return (
     <div className="space-y-10">
-      {CLASS_ORDER.map((cls) => {
-        const color = classColor(cls, classes)
-        const rows = (results ?? [])
-          .filter((r) => r.class_id === cls)
-          .sort((a, b) => (a.cls_pos ?? 99) - (b.cls_pos ?? 99))
-        if (!rows.length) return null
-        // fastest lap in class (F1-style highlight)
-        let flId: string | null = null
-        let flSec = Infinity
-        for (const r of rows) {
-          const s = lapToSeconds(r.best_lap)
-          if (s != null && s < flSec) { flSec = s; flId = r.id }
-        }
-        return (
-          <div key={cls} className="shadow-card overflow-hidden rounded-xl border border-[var(--color-line)]">
+      {CLASS_ORDER.map((cls) => (
+        <ClassTable
+          key={cls}
+          cls={cls}
+          color={classColor(cls, classes)}
+          rows={(results ?? [])
+            .filter((r) => r.class_id === cls)
+            .sort((a, b) => (a.cls_pos ?? 99) - (b.cls_pos ?? 99))}
+          meName={meName}
+        />
+      ))}
+
+      {report && (
+        <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-6 md:p-8">
+          <div className={`${MICRO} mb-3`}>Race Report</div>
+          <div className="font-body max-w-prose whitespace-pre-line leading-relaxed text-[var(--color-ink-2)]">{report}</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * One class's classification. Its own component so each table can hold its own
+ * column filters — three tables share this page, and a hook cannot live in a map.
+ */
+function ClassTable({
+  cls,
+  color,
+  rows,
+  meName,
+}: {
+  cls: ClassId
+  color: string
+  rows: RaceResult[]
+  meName: string | null
+}) {
+  const cf = useColumnFilters<RaceResult>({
+    pos: (r) => r.cls_pos,
+    number: (r) => r.number,
+    driver: (r) => r.drivers_text,
+    grid: (r) => r.grid,
+    laps: (r) => r.laps,
+    best: (r) => r.best_lap,
+    inc: (r) => r.inc,
+    status: (r) => r.status,
+    pts: (r) => (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0),
+  })
+
+  if (!rows.length) return null
+
+  // Fastest lap in class (F1-style highlight) — found across the whole class, so
+  // filtering the table never moves the FL badge onto a slower car.
+  let flId: string | null = null
+  let flSec = Infinity
+  for (const r of rows) {
+    const s = lapToSeconds(r.best_lap)
+    if (s != null && s < flSec) { flSec = s; flId = r.id }
+  }
+
+  const shown = cf.apply(rows)
+
+  return (
+          <div className="shadow-card overflow-hidden rounded-xl border border-[var(--color-line)]">
             {/* Class header — black bar, inverted via on-navy tokens */}
             <div className="on-navy flex items-center gap-3 bg-[var(--color-deep)] px-4 py-3 sm:px-5">
               <span
@@ -101,8 +152,11 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
               />
               <h3 className="text-xl leading-none">{cls}</h3>
               <span className="ml-auto font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
-                {rows.length} {rows.length === 1 ? 'car' : 'cars'}
+                {cf.active > 0
+                  ? `${shown.length} of ${rows.length} cars`
+                  : `${rows.length} ${rows.length === 1 ? 'car' : 'cars'}`}
               </span>
+              <ColumnFilterToggle ctl={cf} className="!py-1 !text-[10px]" />
             </div>
             <div className="relative bg-[var(--color-paper)]">
               <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[var(--color-paper)] sm:hidden" aria-hidden />
@@ -120,9 +174,30 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3 text-right">Pts</th>
                   </tr>
+                  <ColumnFilterRow
+                    ctl={cf}
+                    cells={[
+                      { key: 'pos', label: 'Position' },
+                      { key: 'number', label: 'Car number' },
+                      { key: 'driver', label: 'Driver' },
+                      { key: 'grid', label: 'Grid' },
+                      { key: 'laps', label: 'Laps' },
+                      { key: 'best', label: 'Best lap' },
+                      { key: 'inc', label: 'Incidents' },
+                      { key: 'status', label: 'Status' },
+                      { key: 'pts', label: 'Points' },
+                    ]}
+                  />
                 </thead>
                 <tbody>
-                  {rows.map((r) => {
+                  {shown.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-8 text-center text-[var(--color-muted)]">
+                        No cars in {cls} match these column filters.
+                      </td>
+                    </tr>
+                  )}
+                  {shown.map((r) => {
                     const isMe = !!meName && resultListsDriver(r.drivers_text, meName)
                     const delta = r.grid != null && r.pos != null ? r.grid - r.pos : null
                     const podium = r.cls_pos != null && r.cls_pos <= 3
@@ -194,15 +269,5 @@ function ResultsTable({ eventId, report }: { eventId: string; report: string | n
               </div>
             </div>
           </div>
-        )
-      })}
-
-      {report && (
-        <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-6 md:p-8">
-          <div className={`${MICRO} mb-3`}>Race Report</div>
-          <div className="font-body max-w-prose whitespace-pre-line leading-relaxed text-[var(--color-ink-2)]">{report}</div>
-        </div>
-      )}
-    </div>
   )
 }
