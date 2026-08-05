@@ -3,8 +3,14 @@
 //
 // Reads the current season's upcoming rounds and creates one EXTERNAL scheduled
 // event per round. Matches by exact name, so running it twice never duplicates —
-// an existing event is only PATCHed when its start, blurb or location drifted.
+// an existing event is only PATCHed when its start, end, blurb or location drifted.
 // Admin-only. Safe to run repeatedly.
+//
+// THE EVENT SPANS THE WHOLE EVENING, not just the race: start = the first session
+// (practice), end = the last session's finish (race start + its duration). Members
+// who hit Interested get their reminder when practice opens, not 75 minutes into
+// an evening that is already under way. Rounds with no session rows fall back to
+// the race date + duration.
 //
 // Secrets (Supabase → Edge Functions):  DISCORD_BOT_TOKEN
 // Auto-provided:  SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
@@ -52,9 +58,34 @@ interface GuildEvent {
   name: string
   description: string | null
   scheduled_start_time: string
+  scheduled_end_time: string | null
   status: number
   entity_type: number
   entity_metadata: { location?: string | null } | null
+}
+
+interface SessionRow {
+  event_id: string
+  start: string | null
+  dur_min: number | null
+}
+
+/**
+ * The evening's full window from its session rows: first session start to last
+ * session finish. Null when no session carries a usable time — the caller falls
+ * back to the race date + duration.
+ */
+function sessionSpan(sessions: SessionRow[]): { startMs: number; endMs: number } | null {
+  let startMs = Number.POSITIVE_INFINITY
+  let endMs = Number.NEGATIVE_INFINITY
+  for (const s of sessions) {
+    const t = Date.parse(s.start ?? '')
+    if (!Number.isFinite(t)) continue
+    startMs = Math.min(startMs, t)
+    endMs = Math.max(endMs, t + Math.max(0, Number(s.dur_min ?? 0)) * 60_000)
+  }
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return null
+  return { startMs, endMs }
 }
 
 const trackOf = (e: EventRow): TrackRow | null => (Array.isArray(e.track) ? e.track[0] ?? null : e.track)
@@ -173,6 +204,18 @@ Deno.serve(async (req) => {
     return json({ ok: true, created, updated, skipped, unchanged, total_upcoming: 0 })
   }
 
+  // Session rows for every upcoming round, one read — these define the event window.
+  const { data: sessRows } = await db
+    .from('sessions')
+    .select('event_id, start, dur_min')
+    .in('event_id', upcoming.map((e) => e.id))
+  const sessionsByEvent = new Map<string, SessionRow[]>()
+  for (const s of (sessRows ?? []) as SessionRow[]) {
+    const list = sessionsByEvent.get(s.event_id) ?? []
+    list.push(s)
+    sessionsByEvent.set(s.event_id, list)
+  }
+
   // --- what already lives in the Events tab? ---
   const existingByName = new Map<string, GuildEvent>()
   try {
@@ -196,7 +239,11 @@ Deno.serve(async (req) => {
     // Names double as the idempotency key, so build (and truncate) it once.
     const name = clamp(row.round != null ? `R${row.round} · ${label}` : label, 100)
 
-    const startMs = Date.parse(row.date ?? '')
+    // Practice opens the evening and the race closes it — that whole window is the
+    // event. Only a round with no session times falls back to race date + duration.
+    const span = sessionSpan(sessionsByEvent.get(row.id) ?? [])
+    const raceMs = Date.parse(row.date ?? '')
+    const startMs = span?.startMs ?? raceMs
     if (!Number.isFinite(startMs)) {
       skipped.push({ name, reason: 'The round has no usable date.' })
       continue
@@ -207,8 +254,9 @@ Deno.serve(async (req) => {
     }
 
     const mins = row.duration_min && row.duration_min > 0 ? row.duration_min : DEFAULT_DURATION_MIN
+    const endMs = span?.endMs ?? startMs + mins * 60_000
     const start = new Date(startMs).toISOString()
-    const end = new Date(startMs + mins * 60_000).toISOString()
+    const end = new Date(endMs).toISOString()
 
     const place = [track?.name?.trim(), track?.location?.trim()].filter(Boolean).join(' · ')
     const description = clamp([place, `HCR League — ${seasonName}`].filter(Boolean).join('\n'), 1000)
@@ -246,10 +294,10 @@ Deno.serve(async (req) => {
       }
 
       const patch: Record<string, unknown> = {}
-      if (Date.parse(existing.scheduled_start_time) !== startMs) {
-        patch.scheduled_start_time = start
-        patch.scheduled_end_time = end // end is derived from start, so they move together
-      }
+      if (Date.parse(existing.scheduled_start_time) !== startMs) patch.scheduled_start_time = start
+      // Compared separately from the start: a race lengthened on the site moves the
+      // end while the practice time — the start — stays put.
+      if (Date.parse(existing.scheduled_end_time ?? '') !== endMs) patch.scheduled_end_time = end
       if ((existing.description ?? '') !== description) patch.description = description
       if ((existing.entity_metadata?.location ?? '') !== location) patch.entity_metadata = { location }
 
