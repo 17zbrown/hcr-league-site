@@ -3,17 +3,18 @@ import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
-import { useCurrentSeason, useDrivers, useEvents, useLicenseResults, useProtests } from '../../lib/queries'
+import { useCurrentSeason, useDrivers, useEntries, useEvents, useLicenseResults, useMyChangeRequests, useProtests } from '../../lib/queries'
 import { buildPaceIndex, computeLicense, resultsForDriver } from '../../lib/license'
-import { fmtDateLong } from '../../lib/format'
+import { classColor, fmtDateLong } from '../../lib/format'
 import { Section, Skeleton } from '../../components/ui'
+import { ChangeRequestForm, ChangeRequestList } from '../../components/ChangeRequest'
 import { LicenseBadge } from '../../components/LicenseBadge'
 import { EvidenceBox, type PendingEvidence } from '../../components/EvidenceBox'
 import { StatusPill } from '../../components/ProtestThread'
 
 const CATEGORIES = ['Contact', 'Unsafe rejoin', 'Track limits', 'Blocking', 'Unsporting conduct', 'Other']
 
-type Tab = 'overview' | 'file' | 'mine'
+type Tab = 'overview' | 'car' | 'file' | 'mine'
 
 export default function MemberPortal() {
   const { profile, session, isRaceControl, isAdmin, signOut } = useAuth()
@@ -28,6 +29,7 @@ export default function MemberPortal() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'My profile' },
+    { id: 'car', label: 'My car' },
     { id: 'file', label: 'File a protest' },
     { id: 'mine', label: `My protests${protests?.length ? ` (${protests.length})` : ''}` },
   ]
@@ -59,6 +61,7 @@ export default function MemberPortal() {
       </div>
 
       {tab === 'overview' && <Overview onSignOut={signOut} />}
+      {tab === 'car' && <MyCar />}
       {tab === 'file' && <FileProtest onFiled={() => { setFiledNote(true); setTab('mine') }} />}
       {tab === 'mine' && (
         <>
@@ -78,6 +81,96 @@ export default function MemberPortal() {
         </>
       )}
     </Section>
+  )
+}
+
+/* ---------------- my car ---------------- */
+/**
+ * A driver's own entry, and how to change it.
+ *
+ * Nothing here is directly editable. A number, a car model or a class is what the
+ * published grid and every scored result are keyed to, so each is a request Race
+ * Control decides — and approving one applies it, rather than leaving somebody to
+ * remember. A driver on a team sees their number as the TEAM's, because the team
+ * owns it and their manager is the one who can change it.
+ */
+function MyCar() {
+  const { profile } = useAuth()
+  const { data: season } = useCurrentSeason()
+  const { data: entries, isLoading } = useEntries(season?.id)
+  const { data: requests } = useMyChangeRequests()
+
+  const mine = useMemo(
+    () => (entries ?? []).find((e) => (e.drivers ?? []).some((l) => l.driver?.id === profile?.driver_id)),
+    [entries, profile?.driver_id],
+  )
+
+  if (isLoading) return <Skeleton className="h-64 w-full" />
+
+  if (!profile?.driver_id) {
+    return (
+      <p className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 text-sm text-[var(--color-muted)]">
+        Your account isn't linked to a driver on the roster yet, so there's no car to show.
+        Race control links these as results come in — ask them if it's been a while.
+      </p>
+    )
+  }
+  if (!mine) {
+    return (
+      <p className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 text-sm text-[var(--color-muted)]">
+        You're not on this season's grid yet. Enter the season from your account page and race
+        control will assign your car.
+      </p>
+    )
+  }
+
+  const onTeam = !!mine.team_id
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="h-5 w-5 shrink-0 rounded-sm" style={{ background: classColor(mine.class_id) }} />
+          <div className="font-display text-5xl leading-none tabular">#{mine.number}</div>
+          <div>
+            <div className="font-semibold">{mine.class_id}</div>
+            <div className="text-sm text-[var(--color-muted)]">{mine.car ?? 'Car not set'}</div>
+          </div>
+          <div className="ml-auto text-right text-sm">
+            {onTeam ? (
+              <>
+                <div className="font-semibold">{mine.team?.name}</div>
+                <div className="text-xs text-[var(--color-muted)]">Your number comes from the team</div>
+              </>
+            ) : (
+              <div className="text-xs text-[var(--color-muted)]">Free agent — this number is yours</div>
+            )}
+          </div>
+        </div>
+        {onTeam && (
+          <p className="mt-4 text-xs text-[var(--color-faint)]">
+            Everyone racing this car runs No. {mine.number}. Your team manager changes it from
+            their portal; a class or car change still goes to race control.
+          </p>
+        )}
+      </div>
+
+      {(requests ?? []).length > 0 && (
+        <div>
+          <div className="font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
+            My requests
+          </div>
+          <ChangeRequestList rows={requests ?? []} />
+        </div>
+      )}
+
+      <ChangeRequestForm
+        kinds={onTeam ? ['car', 'class'] : ['number', 'car', 'class']}
+        entryId={mine.id}
+        driverId={profile.driver_id}
+        current={{ number: mine.number, car: mine.car, class: mine.class_id }}
+      />
+    </div>
   )
 }
 

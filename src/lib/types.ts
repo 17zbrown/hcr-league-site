@@ -305,6 +305,9 @@ export interface SeasonRegistration {
   fia_category: string | null
   preferred_class: string | null
   preferred_car: string | null
+  /** First and fallback number choices — league-wide pool, first come first served. */
+  preferred_number: string | null
+  preferred_number_alt: string | null
   notes: string | null
   status: string
   created_at: string

@@ -6,6 +6,7 @@ import { fmtDateLong } from '../../lib/format'
 import { Section, Skeleton } from '../../components/ui'
 import { StatBand } from '../../components/editorial'
 import { StatusPill } from '../../components/ProtestThread'
+import { ChangeRequestQueue } from '../../components/ChangeRequestQueue'
 import type { ProtestStatus } from '../../lib/types'
 
 const FILTERS: { id: ProtestStatus | 'all' | 'queue'; label: string }[] = [
@@ -40,6 +41,14 @@ export default function RaceControlPortal() {
       <div className="mb-6 flex flex-wrap gap-2">
         <Link to="/portal" className="hcr-btn hcr-btn-ghost !text-xs">My Portal →</Link>
         {isAdmin && <Link to="/admin" className="hcr-btn hcr-btn-ghost !text-xs">Admin Portal →</Link>}
+      </div>
+
+      {/* Number / car / class changes and additional-car applications. Above the
+          protest queue because these block a driver from racing correctly, while a
+          protest concerns a race already run. */}
+      <div className="mb-10">
+        <h2 className="mb-3 text-2xl">Change requests</h2>
+        <ChangeRequestQueue />
       </div>
 
       {/* queue summary — real counts, not decoration */}

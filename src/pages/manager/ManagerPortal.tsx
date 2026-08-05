@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
-import { useCurrentSeason, useDrivers, useRegistrations, useTeams } from '../../lib/queries'
+import { useCurrentSeason, useDrivers, useEntries, useMyChangeRequests, useRegistrations, useTeams } from '../../lib/queries'
 import { classColor } from '../../lib/format'
 import { Section, Skeleton } from '../../components/ui'
+import { ChangeRequestForm, ChangeRequestList } from '../../components/ChangeRequest'
+import { TeamCars } from '../../components/TeamCars'
 
 export default function ManagerPortal() {
   const { profile, isAdmin } = useAuth()
@@ -13,6 +15,8 @@ export default function ManagerPortal() {
   const { data: teams } = useTeams()
   const { data: drivers, isLoading: driversLoading } = useDrivers()
   const { data: registrations, isLoading: regLoading } = useRegistrations(season?.id)
+  const { data: entries } = useEntries(season?.id)
+  const { data: myRequests } = useMyChangeRequests()
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -37,6 +41,8 @@ export default function ManagerPortal() {
     qc.invalidateQueries({ queryKey: ['free-agents'] })
     qc.invalidateQueries({ queryKey: ['registrations'] })
     qc.invalidateQueries({ queryKey: ['teams'] })
+    qc.invalidateQueries({ queryKey: ['entries'] })
+    qc.invalidateQueries({ queryKey: ['change-requests'] })
   }
 
   const sign = async (driverId: string) => {
@@ -74,6 +80,37 @@ export default function ManagerPortal() {
         </p>
       )}
       {error && <p role="alert" className="mb-6 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">{error}</p>}
+
+      {myTeam && (
+        <div className="mb-8">
+          <div className="mb-4 flex items-center gap-2.5">
+            <h3 className="text-2xl">Our Cars</h3>
+            <span className="tabular text-sm text-[var(--color-muted)]">
+              {(entries ?? []).filter((e) => e.team_id === myTeam.id).length}
+            </span>
+          </div>
+          <TeamCars
+            teamId={myTeam.id}
+            entries={(entries ?? []).filter((e) => e.team_id === myTeam.id)}
+            onChange={refresh}
+          />
+          {(myRequests ?? []).length > 0 && (
+            <div className="mt-4">
+              <div className="font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
+                Requests to race control
+              </div>
+              <ChangeRequestList rows={myRequests ?? []} />
+            </div>
+          )}
+          <div className="mt-4">
+            <ChangeRequestForm
+              kinds={['extra_car', 'car', 'class']}
+              teamId={myTeam.id}
+              onDone={refresh}
+            />
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-8 lg:grid-cols-2">
         {/* Roster */}

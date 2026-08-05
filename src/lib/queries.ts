@@ -331,6 +331,41 @@ export function useEntries(seasonId?: string) {
   })
 }
 
+/**
+ * The signed-in member's own change requests (RLS returns only theirs, or everything
+ * for race control). Drives the "waiting on race control" list in both portals.
+ */
+export function useMyChangeRequests() {
+  return useQuery({
+    queryKey: ['change-requests', 'mine'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('change_requests')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(25)
+      if (error) throw error
+      return data ?? []
+    },
+  })
+}
+
+/** Every open request, for the race control queue. */
+export function usePendingChangeRequests() {
+  return useQuery({
+    queryKey: ['change-requests', 'pending'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('change_requests')
+        .select('*, driver:drivers(name), team:teams(name), entry:entries(number, class_id, car)')
+        .eq('status', 'pending')
+        .order('created_at')
+      if (error) throw error
+      return data ?? []
+    },
+  })
+}
+
 export function useDrivers() {
   return useQuery({
     queryKey: ['drivers'],

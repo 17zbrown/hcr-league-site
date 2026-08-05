@@ -47,6 +47,7 @@ export default function Registrations() {
                 <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3">Class</th>
                 <th className="px-4 py-3">Car</th>
+                <th className="px-4 py-3">No. wanted</th>
                 <th className="px-4 py-3">On team?</th>
                 <th className="px-4 py-3">Status</th>
               </tr>
@@ -67,6 +68,13 @@ export default function Registrations() {
                     ) : '—'}
                   </td>
                   <td className="px-4 py-3">{r.preferred_car ?? '—'}</td>
+                  {/* Both choices, because the first is often gone by the time an
+                      entry is processed and the fallback is the actual decision. */}
+                  <td className="tabular px-4 py-3">
+                    {r.preferred_number
+                      ? `#${r.preferred_number}${r.preferred_number_alt ? ` / #${r.preferred_number_alt}` : ''}`
+                      : '—'}
+                  </td>
                   <td className="px-4 py-3 text-[var(--color-muted)]">{r.driver?.team_id ? 'Yes' : 'Free agent'}</td>
                   <td className="px-4 py-3">
                     <select

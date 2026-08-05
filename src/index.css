@@ -229,6 +229,36 @@
     resize: vertical;
   }
 
+  /* Every dropdown, identically.
+     Without appearance:none a <select> keeps its OS chrome, so the same control
+     looked different on macOS, Windows and mobile, and sat visibly unlike the
+     text input beside it. The chevron is an inline SVG in ink so it matches the
+     type rather than the platform, and the extra right padding stops a long
+     option colliding with it. */
+  .hcr-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%230a0a0a' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.85rem center;
+    background-size: 12px 8px;
+  }
+  /* The dark theme needs a light chevron — a near-black arrow on a near-black
+     field is invisible, which is exactly what a themed SVG data URI cannot
+     inherit on its own. */
+  @media (prefers-color-scheme: dark) {
+    .hcr-select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23f5f5f2' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    }
+  }
+  /* A select with a class-colour left border (schedule, teams admin) keeps it —
+     the chevron rule must not fight the inline borderLeft those set. */
+  .hcr-select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
   .hcr-btn {
     font-family: var(--font-alt);
     display: inline-flex;

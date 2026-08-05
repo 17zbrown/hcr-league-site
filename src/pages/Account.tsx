@@ -35,6 +35,10 @@ export default function Account() {
   const [category, setCategory] = useState('Bronze')
   const [preferredClass, setPreferredClass] = useState('GTD')
   const [preferredCar, setPreferredCar] = useState('')
+  // Two choices, because numbers are league-wide and first come, first served — a
+  // single choice leaves whoever asks second with nothing to fall back on.
+  const [prefNumber, setPrefNumber] = useState('')
+  const [prefNumberAlt, setPrefNumberAlt] = useState('')
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -62,6 +66,8 @@ export default function Account() {
           setCategory(data.fia_category ?? 'Bronze')
           setPreferredClass(data.preferred_class ?? 'GTD')
           setPreferredCar(data.preferred_car ?? '')
+          setPrefNumber(data.preferred_number ?? '')
+          setPrefNumberAlt(data.preferred_number_alt ?? '')
           setNotes(data.notes ?? '')
         }
         setLoading(false)
@@ -83,6 +89,8 @@ export default function Account() {
       p_fia_category: category,
       p_preferred_class: preferredClass,
       p_preferred_car: preferredCar.trim(),
+      p_preferred_number: prefNumber.trim(),
+      p_preferred_number_alt: prefNumberAlt.trim(),
       p_notes: notes,
       p_iracing_name: iracingName.trim(),
       p_iracing_custid: iracingCustid.trim(),
@@ -211,6 +219,35 @@ export default function Account() {
               <span className="mt-1 block text-xs text-[var(--color-faint)]">
                 The car you'll run all season, named as it appears in iRacing. Locked once the
                 season starts unless staff agree otherwise.
+              </span>
+            </label>
+
+            <label className="block">
+              <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
+                Preferred car number
+              </span>
+              <div className="flex gap-2">
+                <input
+                  className="hcr-input tabular text-center"
+                  value={prefNumber}
+                  onChange={(e) => setPrefNumber(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+                  inputMode="numeric"
+                  placeholder="1st choice"
+                  aria-label="First choice car number"
+                />
+                <input
+                  className="hcr-input tabular text-center"
+                  value={prefNumberAlt}
+                  onChange={(e) => setPrefNumberAlt(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+                  inputMode="numeric"
+                  placeholder="2nd choice"
+                  aria-label="Second choice car number"
+                />
+              </div>
+              <span className="mt-1 block text-xs text-[var(--color-faint)]">
+                Numbers are league-wide — one car per number across every class, first come
+                first served. If your first choice is gone you get your second, so pick one you'd
+                actually be happy with.
               </span>
             </label>
             <label className="block">
