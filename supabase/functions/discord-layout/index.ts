@@ -64,7 +64,7 @@ const ARCHIVE_NAME = 'ARCHIVE'
 // Discord sorts voice into its own block below the text channels regardless, so the
 // voice entries here only order voice against voice.
 const CHANNEL_ORDER: Record<string, string[]> = {
-  LEAGUE: ['welcome', 'rules', 'announcements', 'standings', 'race-results', 'season-signups', 'rulebook'],
+  LEAGUE: ['welcome', 'rules', 'announcements', 'news', 'standings', 'race-results', 'season-signups', 'rulebook'],
   PADDOCK: ['general-chat', 'gravel-trap', 'promotions', 'Race Channel', 'Voice Chat'],
   'RACE CONTROL': ['race-control', 'incident-protests', 'license-ups', 'race-control-announcements', 'Steward Radio'],
   ADMIN: ['admin-chat', 'bot-log', 'safety-alerts', 'community-updates', 'iracing-names'],

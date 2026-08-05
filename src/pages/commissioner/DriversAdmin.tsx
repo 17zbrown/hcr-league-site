@@ -55,7 +55,10 @@ export default function DriversAdmin() {
 function DriverRow({ driver, teams, computed, onChange }: { driver: Driver; teams: Team[]; computed: import('../../lib/license').License; onChange: () => void }) {
   const [name, setName] = useState(driver.name)
   const [country, setCountry] = useState(driver.country ?? '')
-  const [irating, setIrating] = useState(driver.irating?.toString() ?? '')
+  // Customer ID, not iRating: the league doesn't use iRating for anything, while the
+  // custid is what every iRacing-facing workflow (session invites, result matching)
+  // keys on — it's the one identity field worth editing here.
+  const [custid, setCustid] = useState(driver.iracing_custid ?? '')
   const [teamId, setTeamId] = useState(driver.team_id ?? '')
   const [cat, setCat] = useState(driver.license_override ?? '')
   const [busy, setBusy] = useState(false)
@@ -65,7 +68,7 @@ function DriverRow({ driver, teams, computed, onChange }: { driver: Driver; team
   const dirty =
     name !== driver.name ||
     country !== (driver.country ?? '') ||
-    irating !== (driver.irating?.toString() ?? '') ||
+    custid.trim() !== (driver.iracing_custid ?? '') ||
     (teamId || null) !== (driver.team_id ?? null) ||
     (cat || null) !== (driver.license_override ?? null)
 
@@ -77,7 +80,9 @@ function DriverRow({ driver, teams, computed, onChange }: { driver: Driver; team
       .update({
         name,
         country,
-        irating: irating ? parseInt(irating, 10) : null,
+        // Trimmed, and empty means "unknown" — a unique index guards against the
+        // same iRacing account landing on two drivers.
+        iracing_custid: custid.trim() || null,
         team_id: teamId || null,
         license_override: cat || null,
       })
@@ -100,10 +105,10 @@ function DriverRow({ driver, teams, computed, onChange }: { driver: Driver; team
 
   return (
     <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-3">
-    <div className="grid items-center gap-2 md:grid-cols-[1.4fr_60px_90px_1.4fr_150px_88px_auto_auto]">
+    <div className="grid items-center gap-2 md:grid-cols-[1.4fr_60px_110px_1.4fr_150px_88px_auto_auto]">
       <input className="hcr-input !py-2" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" />
       <input className="hcr-input !py-2 text-center" value={country} onChange={(e) => setCountry(e.target.value)} placeholder="🏳️" aria-label="Country" />
-      <input className="hcr-input !py-2 tabular" value={irating} onChange={(e) => setIrating(e.target.value)} placeholder="iR" aria-label="iRating" />
+      <input className="hcr-input !py-2 tabular" value={custid} onChange={(e) => setCustid(e.target.value)} placeholder="Cust ID#" aria-label="iRacing customer ID" />
       <select className="hcr-select !py-2" value={teamId} onChange={(e) => setTeamId(e.target.value)} aria-label="Team">
         <option value="">— Free agent —</option>
         {teams.map((t) => <option key={t.id} value={t.id}>#{t.number} {t.name}</option>)}

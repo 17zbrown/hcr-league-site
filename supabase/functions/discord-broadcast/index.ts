@@ -219,6 +219,9 @@ Deno.serve(async (req) => {
       results: String(cfg.channel_results ?? '').trim(),
       standings: String(cfg.channel_standings ?? '').trim(),
       announcements: String(cfg.channel_announcements ?? '').trim(),
+      // News has its own channel; until the reorg has created it and saved the id,
+      // fall back to announcements so a published story is never stranded unsent.
+      news: String(cfg.channel_news ?? '').trim() || String(cfg.channel_announcements ?? '').trim(),
       license_ups: String(cfg.channel_license_ups ?? '').trim(),
       race_control: String(cfg.channel_race_control ?? '').trim(),
     }

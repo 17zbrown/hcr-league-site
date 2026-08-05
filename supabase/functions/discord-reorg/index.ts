@@ -289,8 +289,46 @@ Deno.serve(async (req) => {
     // #announcements.
     const RO_ALLOW = String((1n << 10n) | (1n << 16n) | (1n << 6n)) // view, history, react
     const RO_DENY = String((1n << 11n) | (1n << 35n) | (1n << 36n) | (1n << 38n)) // send, threads
+
+    // --- #news: automated news posts get their own room --------------------------------
+    // News stories used to land in #announcements alongside race reports and standings,
+    // which buried the operational posts under editorial ones. #news is read-only like
+    // the other bot channels, and its id lives in discord_config.channel_news — the
+    // broadcast worker falls back to announcements until this has run once.
+    if (league) {
+      const newsId = String(cfg.channel_news ?? '').trim()
+      let newsCh = newsId ? channels.find((c) => String(c.id) === newsId) : undefined
+      // A configured id that no longer exists is stale, not authoritative.
+      newsCh ??= channels.find((c) => c.type !== CHAN_CATEGORY && (c.name ?? '') === 'news')
+      if (!newsCh) {
+        plan.push({ step: 'create', detail: '#news (read-only) in LEAGUE — automated news posts move out of #announcements' })
+        if (!dryRun) {
+          const res = await discord(`/guilds/${guildId}/channels`, 'POST', botToken, {
+            name: 'news',
+            type: 0,
+            parent_id: league.id,
+            topic: 'League news, posted automatically from hcrleague.com/news.',
+            permission_overwrites: [{ id: guildId, type: 0, allow: RO_ALLOW, deny: RO_DENY }],
+          })
+          if (res.ok && (res.data as Channel | null)?.id) {
+            newsCh = res.data as Channel
+            applied.push('created #news in LEAGUE (read-only)')
+          } else warnings.push(`Could not create #news — ${res.message}`)
+        }
+      }
+      if (newsCh && String(cfg.channel_news ?? '') !== String(newsCh.id)) {
+        plan.push({ step: 'config', detail: `save #news id to discord_config.channel_news` })
+        if (!dryRun) {
+          const { error } = await db.from('discord_config')
+            .update({ channel_news: String(newsCh.id), updated_at: new Date().toISOString() }).eq('id', 1)
+          if (error) warnings.push(`#news exists but its id could not be saved — ${error.message}`)
+          else applied.push('news posts now route to #news')
+        }
+      }
+    }
     const TARGETS: { col: string; cat: Channel | undefined; catName: string; readonly?: boolean }[] = [
       { col: 'channel_announcements', cat: league, catName: LEAGUE, readonly: true },
+      { col: 'channel_news', cat: league, catName: LEAGUE, readonly: true },
       { col: 'channel_standings', cat: league, catName: LEAGUE, readonly: true },
       { col: 'channel_results', cat: league, catName: LEAGUE },
       { col: 'channel_signups', cat: league, catName: LEAGUE },

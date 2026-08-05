@@ -87,8 +87,13 @@ function notes(L: Links): Record<string, Note> {
 
     'LEAGUE/announcements': {
       title: 'League announcements',
-      body: 'Everything official lands here: race results, schedule changes, rule updates and penalties. Posted automatically as it happens, so it is worth leaving notifications on.',
-      fields: [{ name: 'Also on the site', value: `News · ${SITE}/news\nSchedule · ${SITE}/schedule` }],
+      body: 'Operational league business lands here: schedule changes, rule updates, penalties, and the race-week event each Wednesday — hit **Interested** on it if you are planning to race. News stories have their own room in <#LEAGUE/news>.',
+      fields: [{ name: 'Also on the site', value: `Schedule · ${SITE}/schedule` }],
+    },
+
+    'LEAGUE/news': {
+      title: 'League news',
+      body: `Stories from the league, posted automatically the moment they publish on the site. The full archive lives at ${SITE}/news.`,
     },
 
     'LEAGUE/standings': {
