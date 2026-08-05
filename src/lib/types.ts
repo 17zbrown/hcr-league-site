@@ -118,9 +118,19 @@ export interface Driver {
   license_override: string | null
   points_adjust: number
   iracing_custid: string | null
+  /** Self-reported: an admin said they added this driver to the iRacing league. */
+  iracing_league_marked_at?: string | null
+  /**
+   * Verified by a league-roster sync. Stays null until iRacing API access exists —
+   * nothing a human clicks can set it, which is what keeps it meaningful.
+   */
+  iracing_league_confirmed_at?: string | null
   // joined
   team?: Team
 }
+
+/** How sure we are that a driver is actually in the iRacing league. */
+export type IracingLeagueState = 'confirmed' | 'raced' | 'marked' | 'pending' | 'no-custid'
 
 export interface RaceResult {
   id: string
