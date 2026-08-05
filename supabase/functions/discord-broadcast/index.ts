@@ -408,13 +408,27 @@ Deno.serve(async (req) => {
           continue
         }
         title = clip(String(article.title ?? 'League news'), MAX_TITLE)
+
+        // A story's own photo, so the Discord post looks like the article rather than
+        // a bare link. cover_url wins if one was set by hand; otherwise the first
+        // attached image leads. Video is deliberately not embedded — Discord will not
+        // play a 50MB file inline, and a second link under the embed reads as clutter,
+        // so the "read it on the site" link stays the way to the video.
+        const { data: shots } = await db
+          .from('news_media')
+          .select('kind, url, sort')
+          .eq('news_id', newsId)
+          .eq('kind', 'image')
+          .order('sort')
+          .limit(1)
+        const lead = String(article.cover_url ?? '').trim() || String((shots ?? [])[0]?.url ?? '').trim()
+
         embed = {
           title,
           url: `${SITE}/news`,
           description: clip(String(article.dek ?? ''), MAX_DESC),
           color: HCR_YELLOW,
-          ...(article.cover_url && /^https?:\/\//i.test(String(article.cover_url))
-            ? { image: { url: String(article.cover_url) } } : {}),
+          ...(lead && /^https?:\/\//i.test(lead) ? { image: { url: lead } } : {}),
           footer: { text: article.author ? `HCR League · ${article.author}` : 'HCR League' },
         }
       // --------------------------------------------------------- standings ----

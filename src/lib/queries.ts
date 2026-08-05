@@ -247,13 +247,18 @@ export function useNews(limit = 50) {
     queryFn: async (): Promise<NewsArticle[]> => {
       const { data, error } = await supabase
         .from('news')
-        .select('*')
+        .select('*, media:news_media(*)')
         .eq('is_published', true)
         .order('pinned', { ascending: false })
         .order('published_at', { ascending: false })
         .limit(limit)
       if (error) throw error
-      return (data ?? []) as NewsArticle[]
+      // PostgREST won't order an embedded relation independently of the parent, so
+      // the gallery order is applied here rather than being left to insert order.
+      return (data ?? []).map((a) => ({
+        ...a,
+        media: [...((a as NewsArticle).media ?? [])].sort((x, y) => x.sort - y.sort),
+      })) as NewsArticle[]
     },
   })
 }

@@ -257,6 +257,23 @@ export interface AppNotification {
   created_at: string
 }
 
+/**
+ * One attachment on a news article.
+ *
+ * `image` and `video` are files in the news-media bucket and carry a storage_path so
+ * they can be deleted; `embed` is somebody else's player (YouTube, Twitch,
+ * Streamable, Medal) and hosts nothing, so its storage_path is null.
+ */
+export interface NewsMedia {
+  id: string
+  news_id: string
+  kind: 'image' | 'video' | 'embed'
+  url: string
+  storage_path: string | null
+  caption: string | null
+  sort: number
+}
+
 export interface NewsArticle {
   id: string
   slug: string
@@ -268,6 +285,8 @@ export interface NewsArticle {
   category: string
   event_id: string | null
   cover_url: string | null
+  /** Photos, uploaded video and embedded clips, in display order. */
+  media?: NewsMedia[]
   author: string
   is_published: boolean
   pinned: boolean

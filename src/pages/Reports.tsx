@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useNews } from '../lib/queries'
-import type { NewsArticle } from '../lib/types'
+import { parseClipUrl } from '../lib/evidence'
+import type { NewsArticle, NewsMedia } from '../lib/types'
 import { fmtDateLong } from '../lib/format'
 import { LoadError, Section, Skeleton } from '../components/ui'
 import { Reveal } from '../components/motion'
@@ -11,6 +12,58 @@ function paragraphs(body: string): string[] {
     .split(/\n{2,}/)
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
+}
+
+/**
+ * Attachments on a story.
+ *
+ * Video is `preload="metadata"` and never autoplays: a news feed can hold several
+ * stories, and pulling 50MB per clip on page load to play none of them is the kind
+ * of thing that makes a site feel broken on a phone. The browser fetches a poster
+ * frame, and the bytes only follow a deliberate press of play.
+ */
+function MediaStrip({ media }: { media: NewsMedia[] }) {
+  if (!media.length) return null
+  // A lone attachment gets the full width; a set becomes a two-up gallery.
+  const solo = media.length === 1
+  return (
+    <div className={`mt-6 grid gap-3 ${solo ? '' : 'sm:grid-cols-2'}`}>
+      {media.map((m) => (
+        <figure key={m.id} className="overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-mist)]">
+          {m.kind === 'image' ? (
+            <img
+              src={m.url}
+              alt={m.caption ?? ''}
+              loading="lazy"
+              className="block max-h-[70vh] w-full object-contain"
+            />
+          ) : m.kind === 'video' ? (
+            <video
+              src={m.url}
+              controls
+              playsInline
+              preload="metadata"
+              className="block max-h-[70vh] w-full bg-black"
+            />
+          ) : (
+            <div className="relative aspect-video">
+              <iframe
+                src={parseClipUrl(m.url).embedUrl ?? undefined}
+                title={m.caption ?? 'Clip'}
+                loading="lazy"
+                allowFullScreen
+                allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                className="absolute inset-0 h-full w-full border-0"
+              />
+            </div>
+          )}
+          {m.caption && (
+            <figcaption className="px-3 py-2 text-xs text-[var(--color-muted)]">{m.caption}</figcaption>
+          )}
+        </figure>
+      ))}
+    </div>
+  )
 }
 
 /** One story. Pinned articles render as the black feature panel. */
@@ -55,6 +108,7 @@ function ArticleCard({ article }: { article: NewsArticle }) {
             ))}
           </div>
         )}
+        <MediaStrip media={article.media ?? []} />
       </div>
       {article.event_id && (
         <Link

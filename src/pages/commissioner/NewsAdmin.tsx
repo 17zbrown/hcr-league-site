@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { invokeIfEnabled } from '../../lib/automations'
-import type { NewsArticle } from '../../lib/types'
+import type { NewsArticle, NewsMedia } from '../../lib/types'
 import { dateKey } from '../../lib/format'
 import { LoadError, Skeleton } from '../../components/ui'
+import { NewsMediaBox } from '../../components/NewsMediaBox'
 
 const CATEGORIES = ['Race Report', 'Preview', 'Announcement', 'Feature']
 
@@ -38,7 +39,7 @@ export default function NewsAdmin() {
     queryFn: async (): Promise<NewsRow[]> => {
       const { data, error } = await supabase
         .from('news')
-        .select('*')
+        .select('*, media:news_media(*)')
         .order('published_at', { ascending: false })
       if (error) throw error
       return (data ?? []) as NewsRow[]
@@ -261,6 +262,13 @@ function ArticleEditor({
   onCancel: () => void
 }) {
   const isNew = article === null
+  // The article's id is decided HERE, not by the database default, because media
+  // uploads need somewhere to live before the row exists. Supplying it on insert
+  // makes "attach a photo, then save" work the same as "save, then attach".
+  const [draftId] = useState(() => article?.id ?? crypto.randomUUID())
+  const [media, setMedia] = useState<NewsMedia[]>(
+    [...(article?.media ?? [])].sort((a, b) => a.sort - b.sort),
+  )
   const [title, setTitle] = useState(article?.title ?? '')
   const [slug, setSlug] = useState(article?.slug ?? '')
   // Once the commissioner types a slug by hand, stop shadowing it from the title.
@@ -310,16 +318,66 @@ function ArticleEditor({
     // (deleted in another tab) reads as an empty array instead of a silent no-op.
     const res = article
       ? await supabase.from('news').update(payload).eq('id', article.id).select()
-      : await supabase.from('news').insert(payload)
-    setBusy(false)
+      : await supabase.from('news').insert({ ...payload, id: draftId })
     if (res.error) {
+      setBusy(false)
       setErr(friendlyDbError(res.error))
       return
     }
     if (article && (res.data ?? []).length === 0) {
+      setBusy(false)
       setErr('This story no longer exists — it may have been deleted.')
       return
     }
+
+    // --- media, reconciled against what the article had before ---
+    // Deletes first so a removed attachment cannot survive as a duplicate, then an
+    // upsert that rewrites sort from array position. The files themselves were
+    // already uploaded (or removed) by the media box; this only syncs the rows.
+    const keptIds = media.map((m) => m.id)
+    const del = await supabase
+      .from('news_media')
+      .delete()
+      .eq('news_id', draftId)
+      .not('id', 'in', `(${keptIds.length ? keptIds.join(',') : '00000000-0000-0000-0000-000000000000'})`)
+    if (del.error) {
+      setBusy(false)
+      setErr(`The story saved, but removed attachments are still showing — ${del.error.message}`)
+      return
+    }
+    // Files for attachments that were saved before and have now genuinely gone.
+    // Done AFTER the row delete succeeds: a file removed while its row survives is a
+    // broken image on a live page, which is worse than a file nobody references.
+    const originalPaths = (article?.media ?? [])
+      .map((m) => m.storage_path)
+      .filter((p): p is string => !!p)
+    const keptPaths = new Set(media.map((m) => m.storage_path).filter(Boolean))
+    const orphaned = originalPaths.filter((p) => !keptPaths.has(p))
+    if (orphaned.length) {
+      const { error } = await supabase.storage.from('news-media').remove(orphaned)
+      // Non-fatal: the article is already correct, this is only unbilled cleanup.
+      if (error) console.warn('news-media cleanup failed', error.message)
+    }
+
+    if (media.length) {
+      const up = await supabase.from('news_media').upsert(
+        media.map((m, i) => ({
+          id: m.id,
+          news_id: draftId,
+          kind: m.kind,
+          url: m.url,
+          storage_path: m.storage_path,
+          caption: m.caption?.trim() || null,
+          sort: i,
+        })),
+      )
+      if (up.error) {
+        setBusy(false)
+        setErr(`The story saved, but its photos and video did not — ${up.error.message}`)
+        return
+      }
+    }
+    setBusy(false)
     onSaved()
   }
 
@@ -394,6 +452,13 @@ function ArticleEditor({
             placeholder={'The green flag dropped at...\n\nSecond paragraph...'}
           />
         </label>
+
+        <div className="block md:col-span-2">
+          <span className="mb-1.5 block font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
+            Photos &amp; video
+          </span>
+          <NewsMediaBox newsId={draftId} items={media} onChange={setMedia} disabled={busy} />
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2">
