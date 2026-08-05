@@ -4,11 +4,16 @@ import { supabase } from '../../lib/supabase'
 import { useMembers, useTeams } from '../../lib/queries'
 import type { Profile } from '../../lib/types'
 import { Skeleton } from '../../components/ui'
+import { SearchBox, useSearch } from '../../components/SearchBox'
 
 export default function Members() {
   const qc = useQueryClient()
   const { data: members, isLoading } = useMembers()
   const { data: teams } = useTeams()
+  const { query, setQuery, filtered, count, total } = useSearch(
+    (members ?? []) as { display_name?: string | null; email?: string | null; role?: string | null }[],
+    (m) => [m.display_name, m.email, m.role],
+  )
 
   if (isLoading) return <Skeleton className="h-96 w-full" />
 
@@ -20,8 +25,13 @@ export default function Members() {
         set from the admin list.
       </p>
 
+      <SearchBox
+        value={query} onChange={setQuery} count={count} total={total}
+        placeholder="Search members by name, email or role…"
+        className="mb-4 max-w-xl"
+      />
       <div className="space-y-2">
-        {(members ?? []).map((m) => (
+        {filtered.map((m: any) => (
           <MemberRow key={m.id} member={m as Profile} teams={teams ?? []} onSaved={() => qc.invalidateQueries({ queryKey: ['members'] })} />
         ))}
         {(!members || members.length === 0) && (

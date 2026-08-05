@@ -6,6 +6,8 @@ import { buildPaceIndex, computeLicense, resultsForDriver } from '../../lib/lice
 import type { Driver, Team } from '../../lib/types'
 import { Skeleton } from '../../components/ui'
 import { LicenseBadge } from '../../components/LicenseBadge'
+import { CountryPicker } from '../../components/CountryPicker'
+import { SearchBox, useSearch } from '../../components/SearchBox'
 
 const CATS = ['', 'Bronze', 'Silver', 'Gold', 'Platinum']
 
@@ -29,6 +31,12 @@ export default function DriversAdmin() {
     return m
   }, [entries])
   const paceIndex = buildPaceIndex(licenseResults ?? [])
+  // Name, nationality, customer ID, team and number all searchable — the admin
+  // looking someone up rarely remembers which of those they know.
+  const { query, setQuery, filtered, count, total } = useSearch(
+    drivers ?? [],
+    (d) => [d.name, d.country, d.iracing_custid, d.team?.name, entryByDriver[d.id]?.number],
+  )
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['drivers'] })
     qc.invalidateQueries({ queryKey: ['free-agents'] })
@@ -51,8 +59,16 @@ export default function DriversAdmin() {
         Licenses are computed automatically from race results. Leave a driver on <strong>Auto</strong>
         {' '}to use the earned tier (shown in each row), or pick a tier to override it for special cases.
       </p>
+      <SearchBox
+        value={query}
+        onChange={setQuery}
+        count={count}
+        total={total}
+        placeholder="Search drivers by name, country, customer ID, team or number…"
+        className="mb-4 max-w-xl"
+      />
       <div className="space-y-2">
-        {(drivers ?? []).map((d) => (
+        {filtered.map((d) => (
           <DriverRow
             key={d.id}
             driver={d}
@@ -146,7 +162,7 @@ function DriverRow({ driver, entry, teams, computed, onChange }: {
     <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-3">
     <div className="grid items-center gap-2 md:grid-cols-[1.4fr_60px_76px_110px_1.4fr_150px_88px_auto_auto]">
       <input className="hcr-input !py-2" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" />
-      <input className="hcr-input !py-2 text-center" value={country} onChange={(e) => setCountry(e.target.value)} placeholder="🏳️" aria-label="Country" />
+      <CountryPicker value={country} onChange={setCountry} compact ariaLabel="Nationality" placeholder="Country" />
       {/* Free agents own their number outright, so it is editable here. A driver on
           a team runs the team's car and their manager owns that number — showing it
           editable would promise something this page cannot deliver. */}

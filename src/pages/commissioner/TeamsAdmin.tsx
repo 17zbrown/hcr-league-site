@@ -3,12 +3,18 @@ import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useTeams } from '../../lib/queries'
 import { CLASS_ORDER, classColor } from '../../lib/format'
+import { SearchBox, useSearch } from '../../components/SearchBox'
 import type { Team } from '../../lib/types'
 import { Skeleton } from '../../components/ui'
 
 export default function TeamsAdmin() {
   const qc = useQueryClient()
   const { data: teams, isLoading } = useTeams()
+  const { query, setQuery, filtered, count, total } = useSearch(
+    teams ?? [],
+    (t) => [t.name, t.car, t.class_id, t.number],
+  )
+
   const [adding, setAdding] = useState(false)
   const invalidate = () => qc.invalidateQueries({ queryKey: ['teams'] })
 
@@ -27,8 +33,13 @@ export default function TeamsAdmin() {
         <h2 className="text-3xl">Teams</h2>
         <button onClick={addTeam} disabled={adding} className="hcr-btn hcr-btn-primary !py-2 !text-xs">+ Add Team</button>
       </div>
+      <SearchBox
+        value={query} onChange={setQuery} count={count} total={total}
+        placeholder="Search teams by name, car, class or number…"
+        className="mb-4 max-w-xl"
+      />
       <div className="space-y-2">
-        {(teams ?? []).map((t) => (
+        {filtered.map((t) => (
           <TeamRow key={t.id} team={t} onChange={invalidate} />
         ))}
       </div>

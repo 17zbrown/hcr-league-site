@@ -6,6 +6,7 @@ import type { NewsArticle, NewsMedia } from '../../lib/types'
 import { dateKey } from '../../lib/format'
 import { LoadError, Skeleton } from '../../components/ui'
 import { NewsMediaBox } from '../../components/NewsMediaBox'
+import { SearchBox, useSearch } from '../../components/SearchBox'
 
 const CATEGORIES = ['Race Report', 'Preview', 'Announcement', 'Feature']
 
@@ -59,6 +60,9 @@ export default function NewsAdmin() {
 
   const list = articles ?? []
   const drafts = list.filter((a) => !a.is_published).length
+  const { query, setQuery, filtered, count, total } = useSearch(
+    list, (a) => [a.title, a.dek, a.category, a.author, a.slug],
+  )
 
   return (
     <div>
@@ -101,7 +105,12 @@ export default function NewsAdmin() {
         </div>
       ) : (
         <div className="space-y-2">
-          {list.map((a) => (
+          <SearchBox
+            value={query} onChange={setQuery} count={count} total={total}
+            placeholder="Search stories by title, dek, category or author…"
+            className="mb-2 max-w-xl"
+          />
+          {filtered.map((a) => (
             <ArticleRow
               key={a.id}
               article={a}

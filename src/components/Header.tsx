@@ -5,6 +5,7 @@ import logo from '../assets/hcr-logo.png'
 import { useAuth } from '../lib/auth'
 import { useLeagueSettings } from '../lib/queries'
 import NotificationBell from './NotificationBell'
+import { GlobalSearch } from './GlobalSearch'
 
 const NAV = [
   { to: '/', label: 'Home' },
@@ -50,6 +51,7 @@ export default function Header() {
           <Wordmark />
 
           <div className="flex items-center gap-2">
+            <GlobalSearch />
             {session && <NotificationBell />}
             {session ? (
               <Link to="/portal" className="hidden rounded-lg bg-[var(--color-deep)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5 sm:block">

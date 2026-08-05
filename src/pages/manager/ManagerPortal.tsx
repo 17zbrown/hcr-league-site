@@ -4,6 +4,7 @@ import { useAuth } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
 import { useCurrentSeason, useDrivers, useEntries, useMyChangeRequests, useRegistrations, useTeams } from '../../lib/queries'
 import { classColor } from '../../lib/format'
+import { flagFor } from '../../lib/countries'
 import { Section, Skeleton } from '../../components/ui'
 import { ChangeRequestForm, ChangeRequestList } from '../../components/ChangeRequest'
 import { TeamCars } from '../../components/TeamCars'
@@ -131,7 +132,7 @@ export default function ManagerPortal() {
               {roster.map((d) => (
                 <li key={d.id} className="flex items-center gap-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4">
                   <span className="flex-1 font-semibold">
-                    {d.name} {d.country}
+                    {d.name} {d.country && <span title={d.country}>{flagFor(d.country) || d.country}</span>}
                   </span>
                   <button
                     onClick={() => release(d.id)}

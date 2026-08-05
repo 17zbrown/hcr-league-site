@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase'
 import { useCurrentSeason, useTakenNumbers } from '../lib/queries'
 import type { SeasonRegistration } from '../lib/types'
 import { Section } from '../components/ui'
+import { CountryPicker } from '../components/CountryPicker'
 
 /**
  * Typeahead hints per class, drawn from what the grid actually runs. Deliberately a
@@ -239,16 +240,9 @@ export default function Account() {
             </label>
             <label className="block">
               <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Nationality</span>
-              <input
-                className="hcr-input"
-                value={nationality}
-                onChange={(e) => setNationality(e.target.value)}
-                placeholder="e.g. United States, or 🇺🇸"
-                maxLength={60}
-              />
+              <CountryPicker value={nationality} onChange={setNationality} />
               <span className="mt-1 block text-xs text-[var(--color-faint)]">
-                Shown as your flag on the roster and in results. A country name or the flag
-                emoji both work.
+                Start typing and pick from the list — the flag shows on the roster and in results.
               </span>
             </label>
 

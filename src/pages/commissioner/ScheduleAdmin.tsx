@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useCurrentSeason, useEvents } from '../../lib/queries'
 import type { RaceEvent } from '../../lib/types'
 import { Skeleton } from '../../components/ui'
+import { SearchBox, useSearch } from '../../components/SearchBox'
 
 const STATUS = ['upcoming', 'next', 'complete']
 
@@ -11,6 +12,9 @@ export default function ScheduleAdmin() {
   const qc = useQueryClient()
   const { data: season } = useCurrentSeason()
   const { data: events, isLoading } = useEvents(season?.id)
+  const { query, setQuery, filtered, count, total } = useSearch(
+    events ?? [], (e) => [e.name, e.track?.name, e.track?.location, e.round, e.status],
+  )
   const invalidate = () => qc.invalidateQueries({ queryKey: ['events'] })
 
   if (isLoading) return <Skeleton className="h-96 w-full" />
@@ -22,8 +26,13 @@ export default function ScheduleAdmin() {
         Edit round names, dates, and status. Set a round to <b>next</b> to feature it on the
         home page; <b>complete</b> once results are in.
       </p>
+      <SearchBox
+        value={query} onChange={setQuery} count={count} total={total}
+        placeholder="Search rounds by name, track, location or status…"
+        className="mb-4 max-w-xl"
+      />
       <div className="space-y-2">
-        {(events ?? []).map((e) => (
+        {filtered.map((e) => (
           <EventRow key={e.id} event={e} onChange={invalidate} />
         ))}
       </div>

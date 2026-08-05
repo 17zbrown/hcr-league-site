@@ -6,6 +6,7 @@ import { resultsForDriver } from '../../lib/license'
 import { classColor } from '../../lib/format'
 import type { Driver, IracingLeagueState } from '../../lib/types'
 import { Skeleton } from '../../components/ui'
+import { SearchBox, useSearch } from '../../components/SearchBox'
 
 /**
  * iRacing league queue — who on this season's grid still needs adding to the league
@@ -107,6 +108,9 @@ export default function IracingLeague() {
     })
   }, [entries, seasonRows])
 
+  const { query, setQuery, filtered, count, total } = useSearch(
+    rows, (r) => [r.driver.name, r.driver.iracing_custid, r.number, r.classId, r.state],
+  )
   const pending = rows.filter((r) => r.state === 'pending')
   const missingId = rows.filter((r) => r.state === 'no-custid')
 
@@ -185,6 +189,11 @@ export default function IracingLeague() {
         </p>
       )}
 
+      <SearchBox
+        value={query} onChange={setQuery} count={count} total={total}
+        placeholder="Search by driver, customer ID, number, class or status…"
+        className="mb-4 max-w-xl"
+      />
       <div className="overflow-x-auto rounded-2xl border border-[var(--color-line)]">
         <table className="w-full min-w-[760px] border-collapse bg-[var(--color-paper)] text-sm">
           <thead>
@@ -197,7 +206,7 @@ export default function IracingLeague() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
+            {filtered.map((r) => {
               const meta = STATE_META[r.state]
               const custid = String(r.driver.iracing_custid ?? '').trim()
               return (

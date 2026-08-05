@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useCurrentSeason, useRegistrations } from '../../lib/queries'
 import { classColor } from '../../lib/format'
 import { Skeleton } from '../../components/ui'
+import { SearchBox, useSearch } from '../../components/SearchBox'
 
 const STATUS = ['pending', 'approved', 'rostered', 'declined']
 
@@ -13,6 +14,11 @@ export default function Registrations() {
   const { data: regs, isLoading } = useRegistrations(season?.id)
 
   const [err, setErr] = useState<string | null>(null)
+  const { query, setQuery, filtered, count, total } = useSearch(
+    (regs ?? []) as any[],
+    (r) => [r.driver?.name, r.display_name, r.iracing_name, r.iracing_custid,
+            r.fia_category, r.preferred_class, r.preferred_car, r.preferred_number, r.status],
+  )
   const setStatus = async (id: string, status: string) => {
     setErr(null)
     const { error } = await supabase.from('season_registrations').update({ status }).eq('id', id)
@@ -37,6 +43,12 @@ export default function Registrations() {
           No entries yet. Members enter from their account page.
         </p>
       ) : (
+        <>
+        <SearchBox
+          value={query} onChange={setQuery} count={count} total={total}
+          placeholder="Search entries by driver, iRacing name, ID, class, car or status…"
+          className="mb-4 max-w-xl"
+        />
         <div className="overflow-x-auto rounded-2xl border border-[var(--color-line)]">
           <table className="w-full min-w-[680px] border-collapse bg-[var(--color-paper)] text-sm">
             <thead>
@@ -53,7 +65,7 @@ export default function Registrations() {
               </tr>
             </thead>
             <tbody>
-              {(regs as any[]).map((r) => (
+              {filtered.map((r) => (
                 <tr key={r.id} className="border-b border-[var(--color-line)] last:border-0">
                   <td className="px-4 py-3 font-semibold">{r.driver?.name ?? r.display_name}</td>
                   <td className="px-4 py-3">{r.iracing_name ?? '—'}</td>
@@ -94,6 +106,7 @@ export default function Registrations() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   )

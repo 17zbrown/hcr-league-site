@@ -6,6 +6,9 @@ import { CLASS_ORDER, classColor } from '../lib/format'
 import type { ClassId } from '../lib/types'
 import { LoadError, Section, Skeleton } from '../components/ui'
 import { LicenseBadge } from '../components/LicenseBadge'
+import { SearchBox } from '../components/SearchBox'
+import { filterBy } from '../lib/search'
+import { flagFor } from '../lib/countries'
 import { Reveal } from '../components/motion'
 
 type SortKey = 'name' | 'points'
@@ -38,6 +41,7 @@ export default function Drivers() {
   }, [entries])
   const [sort, setSort] = useState<SortKey>('name')
   const [classFilter, setClassFilter] = useState<ClassFilter>('All')
+  const [query, setQuery] = useState('')
 
   const licenseByDriver = useMemo(() => {
     const paceIndex = buildPaceIndex(licenseResults ?? [])
@@ -98,9 +102,16 @@ export default function Drivers() {
   }, [drivers, sort, teaserByDriver])
 
   const filtered = useMemo(() => {
-    if (classFilter === 'All') return sorted
-    return sorted.filter((d) => classesByDriver[d.id]?.has(classFilter))
-  }, [sorted, classFilter, classesByDriver])
+    const byClass = classFilter === 'All'
+      ? sorted
+      : sorted.filter((d) => classesByDriver[d.id]?.has(classFilter))
+    // Text search runs AFTER the class chips so the two narrow together rather
+    // than one silently overriding the other.
+    return filterBy(byClass, query, (d) => [
+      d.name, d.country, d.team?.name,
+      entryByDriver[d.id]?.number, entryByDriver[d.id]?.car, entryByDriver[d.id]?.class_id,
+    ])
+  }, [sorted, classFilter, classesByDriver, query, entryByDriver])
 
   return (
     <Section
@@ -135,6 +146,15 @@ export default function Drivers() {
           ))}
         </div>
 
+        <SearchBox
+          value={query}
+          onChange={setQuery}
+          count={filtered.length}
+          total={drivers?.length ?? 0}
+          placeholder="Search name, country, team, car or number…"
+          className="w-full max-w-sm sm:w-auto sm:flex-1"
+        />
+
         <div className="flex items-center gap-3">
           <span className="eyebrow">Sort</span>
           <div className="flex gap-2" role="group" aria-label="Sort drivers">
@@ -164,12 +184,14 @@ export default function Drivers() {
       ) : drivers && filtered.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[var(--color-line-2)] bg-[var(--color-paper)] p-10 text-center">
           <p className="font-display text-2xl">
-            {classFilter === 'All' ? 'No drivers yet.' : `No ${classFilter} drivers.`}
+            {query.trim() ? 'No drivers match.' : classFilter === 'All' ? 'No drivers yet.' : `No ${classFilter} drivers.`}
           </p>
           <p className="mx-auto mt-2 max-w-sm font-body text-sm text-[var(--color-muted)]">
-            {classFilter === 'All'
-              ? 'The roster is empty right now.'
-              : `No one on the roster is entered or has raced in ${classFilter} this season.`}
+            {query.trim()
+              ? `Nothing matches “${query.trim()}”${classFilter === 'All' ? '' : ` in ${classFilter}`}.`
+              : classFilter === 'All'
+                ? 'The roster is empty right now.'
+                : `No one on the roster is entered or has raced in ${classFilter} this season.`}
           </p>
         </div>
       ) : (
@@ -216,7 +238,14 @@ export default function Drivers() {
                   <div className="px-5 pt-3">
                     <div className="flex min-w-0 items-center gap-2">
                       <span className="min-w-0 truncate font-display text-2xl leading-none">{d.name}</span>
-                      {d.country && <span className="shrink-0 text-base leading-none">{d.country}</span>}
+                      {/* flagFor turns a stored country NAME into its flag, and passes
+                          through an emoji already in the column — the roster holds both
+                          since the picker landed, and neither should render as bare text. */}
+                      {d.country && (
+                        <span className="shrink-0 text-base leading-none" title={d.country}>
+                          {flagFor(d.country) || d.country}
+                        </span>
+                      )}
                     </div>
                     <div className="mt-2 truncate font-mono text-[11px] text-[var(--color-muted)]">{meta}</div>
                   </div>
