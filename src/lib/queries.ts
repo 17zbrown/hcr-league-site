@@ -396,6 +396,49 @@ export interface PenaltyRow {
   event?: { round: number; name: string | null } | null
 }
 
+/**
+ * Every car number in use this season, mapped to who holds it.
+ *
+ * Fetched once and checked in memory rather than asking the server per keystroke:
+ * entries are public, the set is tiny, and a sign-up form that stutters while it
+ * waits on a round-trip is worse than one that answers instantly. The server still
+ * has the final say — number_holder() runs again on submit, so a number claimed by
+ * somebody else in the meantime is caught there rather than trusted from here.
+ *
+ * Keys are the number exactly as stored: '04' and '4' are different numbers in
+ * iRacing, and lowercasing/trimming matches how the database compares them.
+ */
+export function useTakenNumbers(seasonId?: string) {
+  return useQuery({
+    enabled: !!seasonId,
+    queryKey: ['taken-numbers', seasonId],
+    // Short, not zero: someone else claiming a number mid-form is rare, and a stale
+    // "free" answer is corrected on submit anyway.
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('entries')
+        .select('id, number, class_id, team:teams(name), drivers:entry_drivers(driver:drivers(id, name))')
+        .eq('season_id', seasonId!)
+      if (error) throw error
+      const map = new Map<string, { holder: string; entryId: string; driverIds: string[] }>()
+      for (const e of (data ?? []) as unknown as {
+        id: string; number: string; class_id: string
+        team?: { name: string } | null
+        drivers?: { driver?: { id: string; name: string } | null }[]
+      }[]) {
+        const names = (e.drivers ?? []).map((d) => d.driver?.name).filter(Boolean) as string[]
+        map.set(e.number.trim().toLowerCase(), {
+          holder: names.join(' / ') || e.team?.name || `a ${e.class_id} entry`,
+          entryId: e.id,
+          driverIds: (e.drivers ?? []).map((d) => d.driver?.id).filter(Boolean) as string[],
+        })
+      }
+      return map
+    },
+  })
+}
+
 export function useDrivers() {
   return useQuery({
     queryKey: ['drivers'],

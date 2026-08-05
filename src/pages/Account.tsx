@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import { useCurrentSeason } from '../lib/queries'
+import { useCurrentSeason, useTakenNumbers } from '../lib/queries'
 import type { SeasonRegistration } from '../lib/types'
 import { Section } from '../components/ui'
 
@@ -26,6 +26,7 @@ const CLASSES = ['GTP', 'LMP2', 'GTD']
 export default function Account() {
   const { profile, session, isAdmin, isManager, signOut, refreshProfile } = useAuth()
   const { data: season } = useCurrentSeason()
+  const { data: takenNumbers } = useTakenNumbers(season?.id)
   const [reg, setReg] = useState<SeasonRegistration | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -40,6 +41,31 @@ export default function Account() {
   // single choice leaves whoever asks second with nothing to fall back on.
   const [prefNumber, setPrefNumber] = useState('')
   const [prefNumberAlt, setPrefNumberAlt] = useState('')
+
+  /**
+   * Is this number already spoken for? Answered from the in-memory set so the
+   * warning appears on the keystroke rather than after a round-trip.
+   *
+   * A number held by the driver's OWN car is not a clash — somebody re-opening
+   * their entry to change a car shouldn't be told their own number is taken.
+   */
+  const numberTaken = useMemo(() => {
+    const mine = profile?.driver_id
+    return (n: string): string | null => {
+      const key = n.trim().toLowerCase()
+      if (!key || !takenNumbers) return null
+      const hit = takenNumbers.get(key)
+      if (!hit) return null
+      if (mine && hit.driverIds.includes(mine)) return null
+      return hit.holder
+    }
+  }, [takenNumbers, profile?.driver_id])
+
+  const firstTakenBy = numberTaken(prefNumber)
+  const altTakenBy = numberTaken(prefNumberAlt)
+  // Both gone is a different message: there is nothing left to fall back on, so it
+  // is a dead end rather than a nudge toward the second choice.
+  const bothTaken = !!firstTakenBy && !!altTakenBy
   const [notes, setNotes] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -82,6 +108,13 @@ export default function Account() {
   const enter = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!season) return
+    // Both choices gone is a dead end, not a warning to click past: race control
+    // would have nothing to assign. Entering with no number at all is still fine,
+    // so this only blocks when both were actually filled in and both are taken.
+    if (bothTaken) {
+      setError('Both of those car numbers are taken — pick another pair before entering.')
+      return
+    }
     setBusy(true)
     setError(null)
     setMsg(null)
@@ -245,23 +278,55 @@ export default function Account() {
                 Preferred car number
               </span>
               <div className="flex gap-2">
-                <input
-                  className="hcr-input tabular text-center"
-                  value={prefNumber}
-                  onChange={(e) => setPrefNumber(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
-                  inputMode="numeric"
-                  placeholder="1st choice"
-                  aria-label="First choice car number"
-                />
-                <input
-                  className="hcr-input tabular text-center"
-                  value={prefNumberAlt}
-                  onChange={(e) => setPrefNumberAlt(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
-                  inputMode="numeric"
-                  placeholder="2nd choice"
-                  aria-label="Second choice car number"
-                />
+                <div className="flex-1">
+                  <input
+                    className={`hcr-input tabular text-center ${firstTakenBy ? '!border-[var(--color-red)]' : ''}`}
+                    value={prefNumber}
+                    onChange={(e) => setPrefNumber(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+                    inputMode="numeric"
+                    placeholder="1st choice"
+                    aria-label="First choice car number"
+                    aria-invalid={!!firstTakenBy}
+                    aria-describedby={firstTakenBy ? 'pref-number-taken' : undefined}
+                  />
+                  {/* aria-live so a screen reader hears the clash as it happens, not
+                      only on submit. */}
+                  {firstTakenBy && (
+                    <p id="pref-number-taken" role="status" aria-live="polite"
+                       className="mt-1 text-xs font-semibold text-[var(--color-red)]">
+                      #{prefNumber} is already taken — {firstTakenBy}
+                    </p>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <input
+                    className={`hcr-input tabular text-center ${altTakenBy ? '!border-[var(--color-red)]' : ''}`}
+                    value={prefNumberAlt}
+                    onChange={(e) => setPrefNumberAlt(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+                    inputMode="numeric"
+                    placeholder="2nd choice"
+                    aria-label="Second choice car number"
+                    aria-invalid={!!altTakenBy}
+                    aria-describedby={altTakenBy ? 'pref-number-alt-taken' : undefined}
+                  />
+                  {altTakenBy && (
+                    <p id="pref-number-alt-taken" role="status" aria-live="polite"
+                       className="mt-1 text-xs font-semibold text-[var(--color-red)]">
+                      #{prefNumberAlt} is already taken — {altTakenBy}
+                    </p>
+                  )}
+                </div>
               </div>
+
+              {bothTaken && (
+                <p role="alert" className="mt-2 rounded-lg bg-[var(--color-red)]/10 px-3 py-2 text-xs text-[var(--color-red)]">
+                  <strong>Sorry — both of those numbers are taken.</strong> You'll need to choose
+                  another pair. Every number in use is on the{' '}
+                  <Link to="/drivers" className="underline underline-offset-2">drivers page</Link>{' '}
+                  if it helps to see what's free.
+                </p>
+              )}
+
               <span className="mt-1 block text-xs text-[var(--color-faint)]">
                 Numbers are league-wide — one car per number across every class, first come
                 first served. If your first choice is gone you get your second, so pick one you'd
@@ -276,7 +341,7 @@ export default function Account() {
             {error && <p role="alert" className="rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">{error}</p>}
             {msg && <p role="status" className="rounded-lg bg-[var(--color-green)]/10 px-4 py-3 text-sm text-[var(--color-green)]">{msg}</p>}
 
-            <button type="submit" disabled={busy} className="hcr-btn hcr-btn-primary w-full">
+            <button type="submit" disabled={busy || bothTaken} className="hcr-btn hcr-btn-primary w-full">
               {busy ? 'Submitting…' : reg ? 'Update Registration' : 'Enter the Season'}
             </button>
           </form>
