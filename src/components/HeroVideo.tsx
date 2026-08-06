@@ -17,9 +17,19 @@ import { useReducedMotion } from 'framer-motion'
  * second of smoke animation that was then yanked away the instant the video
  * started — the fallback flashing up as a loading state it was never meant to be.
  *
- * Data respect: the clip is ~42MB, so phones and Save-Data / 2G connections never
- * load it — they are `unavailable` from the first frame and get the smoke hero
- * immediately, with no dark gap. It also pauses while scrolled out of view.
+ * Data respect: the desktop clip is ~42MB, which is far too much to push at a phone
+ * on cellular. Phones used to be excluded outright for that reason and got the smoke
+ * hero instead — correct about the data, wrong about the outcome, because it left the
+ * site looking like two different products depending on the device.
+ *
+ * So there are two encodes. Phones get a 15-second 640-wide loop (~4.6MB, about two
+ * photos' worth) and desktops get the full 70-second 960-wide clip. Looping hides the
+ * shorter duration: it is a background, and nobody watches a hero to the end.
+ *
+ * Save-Data and 2G still get nothing at all — someone who has explicitly asked their
+ * browser to conserve data means it, and 4.6MB is not an exception to that. They are
+ * `unavailable` from the first frame, with no dark gap. Playback also pauses while
+ * scrolled out of view.
  *
  * prefers-reduced-motion: renders nothing, reports unavailable — the smoke hero
  * paints a settled haze instead.
@@ -27,6 +37,9 @@ import { useReducedMotion } from 'framer-motion'
 export type VideoStatus = 'loading' | 'playing' | 'unavailable'
 
 const SRC = '/hero/hero-1.mp4'
+const MOBILE_SRC = '/hero/hero-1-mobile.mp4'
+/** Below this CSS width the phone encode is served. Matches Tailwind's `sm`. */
+const SMALL_MAX = 640
 const REBUFFER_GRACE_MS = 3000
 // If it has not started by now it is not arriving in a useful timeframe, and a
 // dead black hero is worse than the smoke. Deliberately long: a normal connection
@@ -43,20 +56,20 @@ function connectionAllowsVideo(): boolean {
 export default function HeroVideo({ onStatus }: { onStatus: (status: VideoStatus) => void }) {
   const reduce = useReducedMotion() ?? false
   const ref = useRef<HTMLVideoElement | null>(null)
-  // Decided once at mount: small screens and constrained connections skip the
-  // download entirely (the smoke hero is the mobile experience).
+  // Which encode to fetch, decided once at mount. null means no video at all.
   //
   // A reported width of 0 is not a small screen, it is no measurement at all —
-  // which is what a page mounted while hidden or prerendered reports. Since this
-  // is evaluated once and never revisited, treating that as "phone" would silently
-  // cost the video for the whole session once the page became visible. Only an
-  // actual, positive, small width counts against it.
-  const [enabled] = useState(() => {
-    if (typeof window === 'undefined') return false
+  // which is what a page mounted while hidden or prerendered reports. Since this is
+  // evaluated once and never revisited, treating that as "phone" would pin the whole
+  // session to the low-detail encode the moment the page became visible. Only an
+  // actual, positive, small width selects the mobile file.
+  const [src] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    if (!connectionAllowsVideo()) return null
     const w = window.innerWidth
-    const bigEnough = w === 0 || w >= 640
-    return bigEnough && connectionAllowsVideo()
+    return w > 0 && w < SMALL_MAX ? MOBILE_SRC : SRC
   })
+  const enabled = src !== null
 
   useEffect(() => {
     // Known up front that no video is coming, so say so immediately rather than
@@ -121,13 +134,13 @@ export default function HeroVideo({ onStatus }: { onStatus: (status: VideoStatus
     }
   }, [reduce, enabled, onStatus])
 
-  if (reduce || !enabled) return null
+  if (reduce || !src) return null
 
   return (
     <video
       ref={ref}
       className="absolute inset-0 h-full w-full object-cover"
-      src={SRC}
+      src={src}
       autoPlay
       muted
       loop
