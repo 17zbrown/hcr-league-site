@@ -18,6 +18,11 @@
 // {"edit": true} re-renders the recorded post for any round still in the window and
 // PATCHes it in place — for when the copy or the schedule changes mid-week.
 //
+// {"remind": true} posts a fresh short message pointing at that post. It exists
+// because an edit never notifies anyone: Discord fires mention notifications when a
+// message is CREATED and not when one is changed, so adding @everyone to an existing
+// announcement makes it render and pings nobody.
+//
 // SESSION TIMES COME FROM THE sessions TABLE, rendered as Discord timestamps so
 // every member reads them in their own timezone (the league's 22:45/23:15/00:00 UTC
 // schedule reads 6:45 PM / 7:15 PM / 8:00 PM Eastern). Hardcoding "6:45" would be
@@ -38,6 +43,15 @@ const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
 const WINDOW_DAYS = 7
+
+// Race week is the one post a week that genuinely concerns everyone, so it pings.
+//
+// allowed_mentions is set explicitly rather than left to Discord's default. Omitting
+// it means "parse every mention in the content", which would also fire any @role or
+// @user that happened to appear in a track or event name typed in the admin portal.
+// Naming `everyone` alone makes the ping deliberate and everything else inert.
+const PING = '@everyone'
+const PING_EVERYONE = { parse: ['everyone'] }
 
 interface TrackRow { name: string | null; location: string | null }
 interface EventRow {
@@ -111,13 +125,23 @@ Deno.serve(async (req) => {
     const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const botToken = Deno.env.get('DISCORD_BOT_TOKEN')
 
-    // {"edit": true} re-renders and PATCHes this week's recorded posts instead of
-    // creating anything.
+    // {"edit": true}   re-renders and PATCHes this week's recorded posts.
+    // {"remind": true} posts a fresh short @everyone message pointing at the post
+    //                  that already exists — the only way to actually notify people
+    //                  about a round that was announced earlier, since editing a
+    //                  message never sends a notification.
     let editMode = false
+    let remindMode = false
     try {
       const b = await req.json()
-      if (b && typeof b === 'object' && (b as { edit?: unknown }).edit === true) editMode = true
+      if (b && typeof b === 'object') {
+        if ((b as { edit?: unknown }).edit === true) editMode = true
+        if ((b as { remind?: unknown }).remind === true) remindMode = true
+      }
     } catch { /* no body — normal posting mode */ }
+    if (editMode && remindMode) {
+      return json({ error: 'Choose one of edit or remind, not both — they do different things.' }, 400)
+    }
 
     const authz = req.headers.get('Authorization') ?? ''
     const bearer = authz.replace(/^Bearer\s+/i, '').trim()
@@ -197,11 +221,12 @@ Deno.serve(async (req) => {
       const label = row.name?.trim() || trackOf(row)?.name?.trim() || 'Race'
       const name = clamp(row.round != null ? `R${row.round} · ${label}` : label, 100)
       const prior = priorPost.has(row.id)
-      if (!editMode && prior) { skipped.push({ round: name, reason: 'already posted' }); continue }
+      if (!editMode && !remindMode && prior) { skipped.push({ round: name, reason: 'already posted' }); continue }
       if (editMode && !prior) { skipped.push({ round: name, reason: 'nothing posted yet to edit' }); continue }
+      if (remindMode && !prior) { skipped.push({ round: name, reason: 'nothing posted yet to remind about' }); continue }
 
       const ge = guildEvents.find((g) => g?.name === name)
-      if (!ge && !editMode) {
+      if (!ge && !editMode && !remindMode) {
         // events-sync runs hourly, so this is a sequencing hiccup, not a dead end —
         // next Wednesday (or a manual re-run after the sync) picks it up.
         warnings.push(`No Discord event named "${name}" exists yet — run discord-events-sync, then this again.`)
@@ -213,7 +238,7 @@ Deno.serve(async (req) => {
       // their own emphasised lines, not a clause in a sentence.
       const schedule = scheduleLines(sessionsByEvent.get(row.id) ?? [])
       const content = [
-        `🏁 **It's race week!** Round ${row.round ?? '?'} — **${label}** · ${when}`,
+        `${PING} 🏁 **It's race week!** Round ${row.round ?? '?'} — **${label}** · ${when}`,
         ...schedule,
         `Hit **Interested** below if you're planning to race, or want to follow along.`,
         // The bare event URL is what makes Discord render the event card with its
@@ -221,19 +246,46 @@ Deno.serve(async (req) => {
         `https://discord.com/events/${guildId}/${priorEventId.get(row.id) ?? ge?.id ?? ''}`,
       ].join('\n')
 
+      if (remindMode) {
+        // Deliberately NOT the event URL: repeating that would unfurl a second event
+        // card and read as a duplicate announcement. A jump link points at the post
+        // that already carries the card and its Interested button.
+        const messageId = String(priorPost.get(row.id) ?? '')
+        const jump = /^\d{5,25}$/.test(messageId)
+          ? `https://discord.com/channels/${guildId}/${channelId}/${messageId}`
+          : null
+        const reminder = [
+          `${PING} 🏁 **Race week** — Round ${row.round ?? '?'} · **${label}** is ${when}`,
+          ...schedule,
+          jump
+            ? `Full details and the **Interested** button: ${jump}`
+            : `Details are in the race-week post above.`,
+        ].join('\n')
+        const res = await discord(`/channels/${channelId}/messages`, 'POST', botToken,
+          { content: reminder, allowed_mentions: PING_EVERYONE })
+        if (!res.ok) { warnings.push(`Could not post the reminder for ${name} — ${res.message}`); continue }
+        posted.push(`reminded: ${name}`)
+        continue
+      }
+
       if (editMode) {
         const messageId = String(priorPost.get(row.id) ?? '')
         if (!/^\d{5,25}$/.test(messageId)) {
           skipped.push({ round: name, reason: 'no message id was recorded for the original post' })
           continue
         }
-        const res = await discord(`/channels/${channelId}/messages/${messageId}`, 'PATCH', botToken, { content })
+        // An edit re-sends the ping line so it is not stripped from the post, but
+        // Discord only fires mention notifications when a message is CREATED —
+        // editing one in never notifies anybody. Use remind mode for that.
+        const res = await discord(`/channels/${channelId}/messages/${messageId}`, 'PATCH', botToken,
+          { content, allowed_mentions: PING_EVERYONE })
         if (!res.ok) { warnings.push(`Could not edit ${name} — ${res.message}`); continue }
         posted.push(`edited: ${name}`)
         continue
       }
 
-      const res = await discord(`/channels/${channelId}/messages`, 'POST', botToken, { content })
+      const res = await discord(`/channels/${channelId}/messages`, 'POST', botToken,
+        { content, allowed_mentions: PING_EVERYONE })
       if (!res.ok) { warnings.push(`Could not post ${name} — ${res.message}`); continue }
       const messageId = String((res.data as { id?: string } | null)?.id ?? '')
 
