@@ -47,8 +47,14 @@ const PENALTY_RED = 0xc62430
 const CLEARED_GREEN = 0x12805c
 const SNOWFLAKE = /^\d{5,25}$/
 
-// Every automated announcement pings the server.
+// Which announcements are worth interrupting the whole server for.
 //
+// Results only. A race finishing is the one thing here everybody is waiting on; the
+// race-week post (discord-race-week, separately) is the other. Standings, news and
+// race-control rulings publish quietly — they land in their channels for whoever
+// cares, and pinging sixty people for a news story is how a server gets muted.
+const PINGS: ReadonlySet<string> = new Set(['result'])
+
 // The mention has to live in `content`. An @everyone written inside an embed renders
 // as plain text and notifies nobody — embeds are not scanned for mentions at all —
 // so putting it in the embed would look right in the channel and silently do nothing.
@@ -59,6 +65,16 @@ const SNOWFLAKE = /^\d{5,25}$/
 // just because it was typed. Only `everyone` is armed.
 const PING = '@everyone'
 const PING_EVERYONE = { parse: ['everyone'] }
+
+/**
+ * The mention half of a message payload, or nothing at all.
+ *
+ * Returning {} rather than `content: ''` matters on the edit path: PATCH leaves any
+ * field it is not given alone, so an unpinged kind keeps whatever it already had
+ * instead of having its content blanked.
+ */
+const mentionFor = (kind: string) =>
+  PINGS.has(kind) ? { content: PING, allowed_mentions: PING_EVERYONE } : {}
 
 const DEFAULT_LIMIT = 10
 const MAX_LIMIT = 25
@@ -642,11 +658,11 @@ Deno.serve(async (req) => {
           skipped.push({ key: row.dedupe_key, reason: `Could not find the post for "${title}" — it may have been archived or renamed, so there was nothing to edit.` })
           continue
         }
-        // The ping line is re-sent so an edit does not strip it back off the post.
-        // It notifies nobody either way: Discord fires mention notifications on
-        // message creation only, never on edit.
+        // A pinged kind re-sends its ping line so an edit does not strip it back off
+        // the post. It notifies nobody either way: Discord fires mention
+        // notifications on message creation only, never on edit.
         const patch = await discord(`/channels/${targetId}/messages/${targetId}`, 'PATCH', botToken,
-          { content: PING, embeds: [embed], allowed_mentions: PING_EVERYONE })
+          { ...mentionFor(row.kind), embeds: [embed] })
         if (patch.ok) {
           sent.push(`edited: ${title}`)
           await db.from('discord_outbox').update({ target_id: targetId, edited_at: new Date().toISOString() }).eq('id', row.id)
@@ -657,13 +673,14 @@ Deno.serve(async (req) => {
       }
 
       const t = await typeOf(channelId)
+      const mention = mentionFor(row.kind)
       const post = t === CHAN_FORUM
         ? await discord<{ id?: string; message?: { id?: string } }>(
             `/channels/${channelId}/threads`, 'POST', botToken,
             { name: clip(title || 'HCR League', 100),
-              message: { content: PING, embeds: [embed], allowed_mentions: PING_EVERYONE } })
+              message: { ...mention, embeds: [embed] } })
         : await discord<{ id?: string }>(`/channels/${channelId}/messages`, 'POST', botToken,
-            { content: PING, embeds: [embed], allowed_mentions: PING_EVERYONE })
+            { ...mention, embeds: [embed] })
 
       if (post.ok) {
         // For a forum the thread id is also the starter message id; for a normal
