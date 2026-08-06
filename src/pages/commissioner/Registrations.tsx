@@ -8,6 +8,27 @@ import { ColumnFilterRow, ColumnFilterToggle, SearchBox, useColumnFilters, useSe
 
 const STATUS = ['pending', 'approved', 'rostered', 'declined']
 
+/** The statuses that mean "we have accepted this entry". Declining needs no data. */
+const ACCEPTING = ['approved', 'rostered']
+
+/**
+ * Why an entry cannot be accepted yet, or null if it can.
+ *
+ * Mirrors the CHECK constraint on season_registrations: a full iRacing name
+ * (first and last) and a numeric customer ID. Staff cannot supply either — only
+ * the driver knows them.
+ */
+function missingIracingIdentity(r: any): string | null {
+  const name = String(r?.iracing_name ?? '').trim()
+  const custid = String(r?.iracing_custid ?? '').trim()
+  const gaps: string[] = []
+  if (!name) gaps.push('no iRacing name')
+  else if (!/\S\s+\S/.test(name)) gaps.push(`the iRacing name “${name}” is not a full name`)
+  if (!custid) gaps.push('no iRacing customer ID')
+  else if (!/^\d+$/.test(custid)) gaps.push(`the customer ID “${custid}” is not a number`)
+  return gaps.length ? `${gaps.join(' and ')}.` : null
+}
+
 export default function Registrations() {
   const qc = useQueryClient()
   const { data: season } = useCurrentSeason()
@@ -36,6 +57,19 @@ export default function Registrations() {
 
   const setStatus = async (id: string, status: string) => {
     setErr(null)
+    // An entry cannot be accepted without the two fields that identify the driver
+    // in iRacing. The CHECK constraint on season_registrations means no such row
+    // should exist, so this is a backstop rather than the enforcement — it keeps
+    // the rule visible at the point where accepting actually happens, and refuses
+    // rather than passing the problem along should a legacy row ever surface.
+    if (ACCEPTING.includes(status)) {
+      const r = (regs ?? []).find((x: any) => x.id === id)
+      const missing = missingIracingIdentity(r)
+      if (missing) {
+        setErr(`Cannot mark this entry ${status}: ${missing} Ask the driver to complete their entry first.`)
+        return
+      }
+    }
     const { error } = await supabase.from('season_registrations').update({ status }).eq('id', id)
     if (error) setErr(error.message)
     else qc.invalidateQueries({ queryKey: ['registrations'] })

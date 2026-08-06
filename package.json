@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "tsc -b --noEmit",
     "og": "node scripts/gen-og.mjs",
-    "check:functions": "bash scripts/check-edge-functions.sh"
+    "check:functions": "bash scripts/check-edge-functions.sh",
+    "check:iracing": "node scripts/check-iracing-rules.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.58.0",

@@ -24,6 +24,25 @@ const CAR_SUGGESTIONS: Record<string, string[]> = {
 
 const CLASSES = ['GTP', 'LMP2', 'GTD']
 
+/**
+ * The two fields an entry cannot be accepted without.
+ *
+ * Neither can be filled in later by staff — only the driver knows them, and both
+ * are what make the entry usable: the full name is how every result sheet names
+ * them, and the customer ID is the only thing that can add them to the league in
+ * iRacing.
+ *
+ * These mirror the CHECK constraint on season_registrations exactly, and a test
+ * asserts the two agree. The database is what actually enforces the rule; these
+ * exist so a driver is told what is wrong while they type rather than being
+ * bounced on submit.
+ *
+ * FULL_NAME wants two parts, because an iRacing account always carries a first
+ * and a last name and "Zack" alone matches nothing on a result sheet.
+ */
+const IRACING_FULL_NAME = /\S\s+\S/
+const IRACING_CUSTID = /^\d+$/
+
 export default function Account() {
   const { profile, session, isAdmin, isManager, signOut, refreshProfile } = useAuth()
   const { data: season } = useCurrentSeason()
@@ -71,6 +90,25 @@ export default function Account() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // A blank box is not a mistake until they try to submit — shouting "required" at
+  // an untouched form is hostile. A wrong-format box, on the other hand, is worth
+  // saying immediately.
+  const [attempted, setAttempted] = useState(false)
+
+  const iracingNameError = (() => {
+    const v = iracingName.trim()
+    if (!v) return attempted ? 'Your full iRacing name is required to enter.' : null
+    if (!IRACING_FULL_NAME.test(v)) return 'First and last name, exactly as on your iRacing account.'
+    return null
+  })()
+  const iracingCustidError = (() => {
+    const v = iracingCustid.trim()
+    if (!v) return attempted ? 'Your iRacing customer ID is required to enter.' : null
+    if (!IRACING_CUSTID.test(v)) return 'Digits only — the number on your iRacing account.'
+    return null
+  })()
+  const iracingIncomplete =
+    !IRACING_FULL_NAME.test(iracingName.trim()) || !IRACING_CUSTID.test(iracingCustid.trim())
 
   useEffect(() => {
     if (profile?.display_name) setDisplayName(profile.display_name)
@@ -109,6 +147,14 @@ export default function Account() {
   const enter = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!season) return
+    // An entry missing either of these cannot be accepted, so it is never sent.
+    // The RPC refuses it too, and the table's constraint refuses it after that —
+    // this is only the first and friendliest of the three.
+    setAttempted(true)
+    if (iracingIncomplete) {
+      setError('Add your full iRacing name and customer ID — an entry cannot be accepted without both.')
+      return
+    }
     // Both choices gone is a dead end, not a warning to click past: race control
     // would have nothing to assign. Entering with no number at all is still fine,
     // so this only blocks when both were actually filled in and both are taken.
@@ -209,27 +255,43 @@ export default function Account() {
                   iRacing full name <span className="text-[var(--color-red)]">*</span>
                 </span>
                 <input
-                  className="hcr-input"
+                  className={`hcr-input ${iracingNameError ? '!border-[var(--color-red)]' : ''}`}
                   value={iracingName}
                   onChange={(e) => setIracingName(e.target.value)}
                   placeholder="Exactly as on your iRacing account"
                   autoComplete="name"
                   required
+                  aria-invalid={!!iracingNameError}
+                  aria-describedby={iracingNameError ? 'iracing-name-error' : undefined}
                 />
+                {iracingNameError && (
+                  <p id="iracing-name-error" role="status" aria-live="polite"
+                     className="mt-1 text-xs font-semibold text-[var(--color-red)]">
+                    {iracingNameError}
+                  </p>
+                )}
               </label>
               <label className="block">
                 <span className="mb-1.5 block font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
                   iRacing customer ID# <span className="text-[var(--color-red)]">*</span>
                 </span>
                 <input
-                  className="hcr-input"
+                  className={`hcr-input tabular ${iracingCustidError ? '!border-[var(--color-red)]' : ''}`}
                   value={iracingCustid}
                   onChange={(e) => setIracingCustid(e.target.value.replace(/[^0-9]/g, ''))}
                   inputMode="numeric"
                   pattern="[0-9]+"
                   placeholder="e.g. 123456"
                   required
+                  aria-invalid={!!iracingCustidError}
+                  aria-describedby={iracingCustidError ? 'iracing-custid-error' : undefined}
                 />
+                {iracingCustidError && (
+                  <p id="iracing-custid-error" role="status" aria-live="polite"
+                     className="mt-1 text-xs font-semibold text-[var(--color-red)]">
+                    {iracingCustidError}
+                  </p>
+                )}
               </label>
             </div>
             <label className="block">
