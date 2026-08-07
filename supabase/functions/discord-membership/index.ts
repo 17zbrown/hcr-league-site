@@ -50,14 +50,23 @@ const SITE = 'https://hcrleague.com'
  */
 const WELCOME_MAX_AGE_MS = 2 * 24 * 60 * 60 * 1000
 
-/** The channels worth pointing a newcomer at, in the order they need them. */
-const TOUR: { name: string; blurb: string }[] = [
-  { name: 'website', blurb: 'the league site — schedule, standings, results and sign-up' },
-  { name: 'announcements', blurb: 'race weeks and results — the one channel to keep unmuted' },
-  { name: 'news', blurb: 'every story the site publishes' },
-  { name: 'general-chat', blurb: 'talk to the rest of the grid' },
-  { name: 'race-control', blurb: 'stewarding decisions and rulings' },
-  { name: 'protests', blurb: 'discuss an incident — but protests are **filed on the website**, not here' },
+/**
+ * The channels worth pointing a newcomer at, in the order they need them.
+ *
+ * Each entry lists every name that channel has plausibly been given, because a tour
+ * item that silently vanishes is the failure mode here: the first version of this
+ * looked for "protests" while the server calls it "incident-protests", so the one
+ * line telling people protests are filed on the website quietly dropped out. Listing
+ * aliases means a rename costs a missing link only if nobody adds the new name.
+ */
+const TOUR: { names: string[]; blurb: string }[] = [
+  { names: ['website'], blurb: 'the league site — schedule, standings, results and sign-up' },
+  { names: ['announcements'], blurb: 'race weeks and results — the one channel to keep unmuted' },
+  { names: ['news'], blurb: 'every story the site publishes' },
+  { names: ['general-chat', 'general'], blurb: 'talk to the rest of the grid' },
+  { names: ['race-control'], blurb: 'stewarding decisions and rulings' },
+  { names: ['incident-protests', 'protests'], blurb: 'discuss an incident — but protests are **filed on the website**, not here' },
+  { names: ['rules', 'rulebook'], blurb: 'the rulebook — worth ten minutes before your first race' },
 ]
 
 /**
@@ -69,7 +78,7 @@ const TOUR: { name: string; blurb: string }[] = [
  */
 function welcomeMessage(userId: string, ref: (name: string) => string | null): string {
   const tour = TOUR.map((t) => {
-    const link = ref(t.name)
+    const link = t.names.map(ref).find(Boolean) ?? null
     return link ? `> ${link} — ${t.blurb}` : null
   }).filter(Boolean) as string[]
 
@@ -287,8 +296,23 @@ Deno.serve(async (req) => {
       if (made.ok) {
         website = made.data as Channel
         applied.push('created #website in LEAGUE')
-        // A channel holding one link should open on that link, so it is pinned rather
-        // than left to slide up the history behind the next message.
+      } else warnings.push(`Could not create #website — ${made.message}`)
+    } else if (!website && dryRun) {
+      applied.push('would create #website in LEAGUE with the site link pinned')
+    }
+
+    // A channel holding one link should OPEN on that link, so it is pinned rather than
+    // left to slide up the history behind the next message.
+    //
+    // Checked every run against the channel's actual pins rather than done once at
+    // creation: the first attempt used the wrong route (the pin endpoint is
+    // /channels/{id}/pins/{message}, not /messages/{id}/pin), which 404'd and left the
+    // channel with an unpinned link and no way to retry. Reading the pins first makes
+    // that self-correcting and keeps the whole thing idempotent.
+    if (website && !dryRun) {
+      const pins = await discord(`/channels/${website.id}/pins`, 'GET', botToken)
+      const pinned = Array.isArray(pins.data) ? (pins.data as unknown[]).length : 0
+      if (pins.ok && pinned === 0) {
         const post = await discord(`/channels/${website.id}/messages`, 'POST', botToken, {
           content: [
             `## HCR League`, '',
@@ -297,15 +321,15 @@ Deno.serve(async (req) => {
             'Sign in with the same Discord account you are reading this on.',
           ].join('\n'),
         })
-        const pinId = (post.data as { id?: string } | null)?.id
-        if (post.ok && pinId) {
-          const pin = await discord(`/channels/${website.id}/messages/${pinId}/pin`, 'PUT', botToken)
+        const msgId = (post.data as { id?: string } | null)?.id
+        if (post.ok && msgId) {
+          const pin = await discord(`/channels/${website.id}/pins/${msgId}`, 'PUT', botToken)
           if (pin.ok) applied.push('pinned the site link in #website')
-          else warnings.push(`Posted the link but could not pin it — ${pin.message}`)
-        } else warnings.push(`Created #website but could not post the link — ${post.message}`)
-      } else warnings.push(`Could not create #website — ${made.message}`)
-    } else if (!website && dryRun) {
-      applied.push('would create #website in LEAGUE with the site link pinned')
+          else warnings.push(`Posted the link in #website but could not pin it — ${pin.message}`)
+        } else warnings.push(`Could not post the link in #website — ${post.message}`)
+      } else if (!pins.ok) {
+        warnings.push(`Could not read #website pins — ${pins.message}`)
+      }
     }
     if (website && !dryRun && String(cfg.channel_website ?? '') !== String(website.id)) {
       const { error } = await db.from('discord_config')
