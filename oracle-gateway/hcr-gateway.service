@@ -1,0 +1,82 @@
+# HCR League — Discord gateway relay.
+#
+# Holds one WebSocket to Discord and, on a join or a leave, POSTs to the
+# discord-gateway-hook edge function. It composes nothing and posts nothing to
+# Discord itself, so the blast radius of this unit misbehaving is "joins are
+# announced late", never "the wrong thing was announced".
+#
+# Install to /etc/systemd/system/hcr-gateway.service. Full runbook in README.md.
+
+[Unit]
+Description=HCR League Discord gateway relay
+Documentation=file:///opt/hcr-gateway/README.md
+# The first thing the process does is open a WebSocket, so starting before DHCP
+# has settled just burns a restart on every boot.
+After=network-online.target
+Wants=network-online.target
+
+# Discord permits roughly a thousand IDENTIFYs a day per token. A crash loop at
+# one start every ten seconds would blow through that and get the token
+# temporarily revoked, which would break the edge functions too — they share it.
+# So a genuinely broken build is allowed to fail ten times in five minutes and is
+# then left in the failed state on purpose: visible in `systemctl status`, and
+# harmless, because the two-minute cron is still doing the work. Transient
+# network drops never reach this limit; the bot reconnects in-process.
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=hcr-gateway
+Group=hcr-gateway
+WorkingDirectory=/opt/hcr-gateway
+
+# systemd reads this as PID 1, before the sandbox below applies, so the file can
+# be 0600 and owned by the service user. Format is bare KEY=value lines.
+EnvironmentFile=/etc/hcr-gateway.env
+
+# The entry file is named outright rather than going through `npm start`, so the
+# service does not depend on npm existing or on a package.json script surviving.
+ExecStart=/usr/bin/node /opt/hcr-gateway/index.mjs
+
+Restart=always
+RestartSec=10
+SyslogIdentifier=hcr-gateway
+
+# --- what this process is allowed to touch ------------------------------------
+# It reads its code from /opt, its config from the environment, and writes
+# nothing that has to survive a reboot. ProtectSystem=strict makes the entire
+# filesystem read-only; these two are the only writable places, which is the
+# whole read-write set.
+StateDirectory=hcr-gateway
+StateDirectoryMode=0700
+PrivateTmp=yes
+
+ProtectSystem=strict
+ProtectHome=yes
+
+# Nothing here ever needs to gain privilege: no setuid helpers, no capabilities,
+# not even the ability to acquire one later.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+PrivateDevices=yes
+
+# The bot speaks TCP to Discord and to Supabase and nothing else. AF_UNIX stays
+# because the C library's name resolution uses it.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# Blocks the compat syscall ABI, which matters on both the ARM and the AMD
+# shapes, and then restricts syscalls to the set a normal daemon uses. Anything
+# outside it kills the process rather than returning an error, so a violation
+# shows up as a restart in the journal instead of as mystery misbehaviour.
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+
+# Deliberately NOT set:
+#   MemoryDenyWriteExecute — V8 maps JIT pages writable then executable. Setting
+#     it does not harden Node, it stops the service from starting at all.
+#   DynamicUser — the env file and the state directory belong to a fixed uid, and
+#     a rolling uid would orphan both on every restart.
+
+[Install]
+WantedBy=multi-user.target

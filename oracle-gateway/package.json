@@ -1,0 +1,17 @@
+{
+  "name": "hcr-gateway",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Thin Discord gateway relay: turns joins and leaves into an instant nudge at the discord-membership edge function. Runs on the Oracle Cloud Always Free VM, not in this site's build.",
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3"
+  }
+}
