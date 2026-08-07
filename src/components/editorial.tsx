@@ -83,6 +83,52 @@ export interface Stat {
   hint?: string
 }
 
+/** The type sizes the design asks for, and the floor below which it stops shrinking. */
+const NUM_MAX_REM = 3      // text-5xl, the proportional numerals
+const MONO_MAX_REM = 2.25  // text-4xl, lap times in the mono face
+// The floor is a legibility limit, and it is the one thing that can still clip: once
+// the size stops shrinking, a long enough value in a narrow enough tile has nowhere
+// left to go. 1rem holds a nine-character lap time down to a ~120px tile, which is
+// narrower than a two-up band on the smallest phone — below that the floor wins, and
+// a 16px numeral is the right thing to keep.
+const MIN_REM = 1
+/**
+ * Widest glyph advance we plan for, in em. Measured against what actually renders
+ * here: JetBrains Mono averages ~0.58em and Archivo's digits ~0.60em, and the widest
+ * real string on the page ("1.35%", where '%' pulls the average up) came to 0.615em
+ * per character.
+ *
+ * 0.68 leaves about 10% over that worst observed case. The margin matters because
+ * the count is characters, not glyphs: a value made entirely of wide ones — say
+ * "100.00%" — averages higher than anything currently in the data, and the failure
+ * mode is a clipped number rather than a slightly small one.
+ *
+ * Only values long enough to miss the cap are affected at all; short ones stay at
+ * full size regardless.
+ */
+const GLYPH_EM = 0.68
+
+/**
+ * A font size that makes `chars` glyphs fit the tile, never exceeding `maxRem`.
+ *
+ * WHY THIS IS COMPUTED RATHER THAN A CLASS. The same band renders four-up in the
+ * narrow column of a driver profile — about 130px of usable width — and six-up across
+ * a full-width page. At the narrow end a lap time set at 36px measured 165px and was
+ * simply cut off by the next hairline: clipped, not shrunk.
+ *
+ * A flat container-query ratio fixes the clipping but overcorrects, pulling a short
+ * value like "600" down from 48px to 39px in a tile that had room to spare. Feeding
+ * the actual character count in means the size only drops when the string genuinely
+ * cannot fit, so short values keep the size the design asked for.
+ *
+ * 100cqi is the tile's content width, so this reads as: give each glyph an equal
+ * share of the row, up to the cap.
+ */
+function fitSize(chars: number, maxRem: number): string {
+  const budget = (Math.max(1, chars) * GLYPH_EM).toFixed(2)
+  return `clamp(${MIN_REM}rem, calc(100cqi / ${budget}), ${maxRem}rem)`
+}
+
 /**
  * The reference's signature: a row of tiny letterspaced labels above large
  * light serif numerals, split by hairlines.
@@ -94,21 +140,34 @@ export function StatBand({ stats, columns = 6 }: { stats: Stat[]; columns?: numb
     : columns === 4 ? 'sm:grid-cols-2 lg:grid-cols-4'
     : 'sm:grid-cols-3'
   // Tiles may link (Stat.to) — a plain grid, since <a> isn't valid inside <dl>.
-  const tile = (s: Stat) => (
-    <>
-      <div className="font-body text-[10px] font-semibold uppercase leading-tight tracking-[0.14em] text-[var(--color-muted)]">
-        {s.label}
-      </div>
-      <div className="mt-2 font-display text-4xl leading-none text-[var(--color-ink)] md:text-5xl">
-        {s.text !== undefined ? (
-          <span className={s.text ? 'tabular text-3xl md:text-4xl' : ''}>{s.text ?? '—'}</span>
-        ) : (
-          <AnimatedStat value={s.value} decimals={s.decimals} prefix={s.prefix} suffix={s.suffix} />
-        )}
-      </div>
-      {s.hint && <p className="mt-1.5 text-xs text-[var(--color-faint)]">{s.hint}</p>}
-    </>
-  )
+  const tile = (s: Stat) => {
+    // What will actually be on screen, so the size below is chosen against the real
+    // string rather than a guess. AnimatedStat counts UP to its value, so the final
+    // frame is the widest one and the only one worth sizing for.
+    const shown = s.text !== undefined
+      ? (s.text ?? '—')
+      : s.value == null
+        ? '—'
+        : `${s.prefix ?? ''}${s.value.toFixed(s.decimals ?? 0)}${s.suffix ?? ''}`
+    return (
+      <>
+        <div className="font-body text-[10px] font-semibold uppercase leading-tight tracking-[0.14em] text-[var(--color-muted)]">
+          {s.label}
+        </div>
+        <div
+          className="mt-2 font-display leading-none text-[var(--color-ink)]"
+          style={{ fontSize: fitSize(shown.length, s.text !== undefined && s.text ? MONO_MAX_REM : NUM_MAX_REM) }}
+        >
+          {s.text !== undefined ? (
+            <span className={s.text ? 'tabular' : ''}>{s.text ?? '—'}</span>
+          ) : (
+            <AnimatedStat value={s.value} decimals={s.decimals} prefix={s.prefix} suffix={s.suffix} />
+          )}
+        </div>
+        {s.hint && <p className="mt-1.5 text-xs text-[var(--color-faint)]">{s.hint}</p>}
+      </>
+    )
+  }
   return (
     <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-[var(--color-line)] ${cols}`}>
       {stats.map((s) =>
@@ -116,12 +175,12 @@ export function StatBand({ stats, columns = 6 }: { stats: Stat[]; columns?: numb
           <Link
             key={s.label}
             to={s.to}
-            className="group bg-[var(--color-paper)] px-5 py-6 transition-colors hover:bg-[var(--color-cloud)]"
+            className="group @container bg-[var(--color-paper)] px-5 py-6 transition-colors hover:bg-[var(--color-cloud)]"
           >
             {tile(s)}
           </Link>
         ) : (
-          <div key={s.label} className="bg-[var(--color-paper)] px-5 py-6">{tile(s)}</div>
+          <div key={s.label} className="@container bg-[var(--color-paper)] px-5 py-6">{tile(s)}</div>
         ),
       )}
     </div>
