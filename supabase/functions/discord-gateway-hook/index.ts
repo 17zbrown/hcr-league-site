@@ -15,10 +15,12 @@
 //
 // An earlier draft turned it off, reasoning that the only key which can invoke a
 // JWT-protected function is the service-role key, and that a machine on the public
-// internet should not hold one. The premise is false: verify_jwt accepts any JWT
-// signed with the project's JWT secret, and the ANON key is one. The site already
-// relies on this — src/pages/commissioner/DiscordAutomations.tsx invokes functions
-// with the anon key as `apikey` and a user JWT as Bearer.
+// internet should not hold one. That premise is false. The gate accepts the project's
+// PUBLISHABLE key as a bearer credential — this project is on Supabase's newer key
+// format, so it is `sb_publishable_…` rather than a signed JWT, but the gateway takes
+// it either way. Verified directly against this deployment: no credential returns 401
+// before any of this code runs, the publishable key plus a wrong shared secret
+// returns our own 401, and the publishable key plus the right secret returns 200.
 //
 // So the VM carries the anon key, which grants it nothing the public website does not
 // already grant every visitor: discord_config, discord_automations and discord_members

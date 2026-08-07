@@ -52,9 +52,10 @@ You need:
 
   An earlier draft turned it off on the reasoning that only the service-role key
   can invoke a JWT-protected function, and that a machine on the public internet
-  should not hold one. That premise is wrong: `verify_jwt` accepts any JWT signed
-  with the project's JWT secret, and the **anon key is one** — the commissioner
-  portal already invokes functions with it. So the VM carries the anon key
+  should not hold one. That premise is wrong: the gate accepts the project's
+  **publishable key** as a bearer credential. This project is on Supabase's newer
+  key format, so that key looks like `sb_publishable_…` rather than a signed JWT,
+  but the gateway takes it either way — verified against the live deployment. So the VM carries the anon key
   (`HCR_HOOK_AUTH`, §3), which grants it nothing the public website does not
   already grant every visitor, and Supabase rejects unauthenticated callers before
   the function or the database is touched.
@@ -188,10 +189,10 @@ HCR_GATEWAY_SECRET=the-plaintext-from-oracle-gateway/.gateway-secret
   compares digests, so plaintext never lands in the database.
 
 `HCR_HOOK_AUTH` is **required**: it is the `Bearer` token for Supabase's own
-gateway, which verifies a JWT before the function runs. Set it to the **anon
-(publishable)** key — public by design and already shipped in the website's
-JavaScript, so putting it here grants this machine nothing a visitor does not
-already have. The bot refuses to start if either this or the gateway
+gateway, which verifies a JWT before the function runs. Set it to the **publishable**
+key (`VITE_SUPABASE_ANON_KEY` in the site's `.env`, beginning `sb_publishable_`) —
+public by design and already shipped in the website's JavaScript, so putting it
+here grants this machine nothing a visitor does not already have. The bot refuses to start if either this or the gateway
 secret looks like a service-role key — that key must never reach this machine.
 
 Confirm the mode before you move on — `ls -l /etc/hcr-gateway.env` must show
