@@ -89,9 +89,13 @@ function welcomeMessage(userId: string, ref: (name: string) => string | null): s
     '',
     '**Getting on the grid**',
     `**1.** Go to ${SITE} and hit **Sign in** — use this same Discord account, it takes one click.`,
-    '**2.** Open **My Account** and enter the season.',
-    '**3.** You will need your **full iRacing name** and **iRacing customer ID**. Those are how we add you to the league inside iRacing and match you to your results, so an entry without both cannot be accepted.',
-    '**4.** Pick your class, your car, and two car numbers. Numbers are league-wide and first come, first served — your second choice is there for when the first is already gone.',
+    // Mentioned as something to have ready, not as a rule. Everyone signing up for an
+    // iRacing league knows they will be asked for their iRacing details; spelling out
+    // that the entry is refused without them reads as a warning to people who have
+    // done nothing wrong. The form itself enforces it and says so at the point it
+    // matters, which is where a rule belongs.
+    '**2.** Open **My Account** and enter the season — have your iRacing name and customer ID to hand.',
+    '**3.** Pick your class, your car, and two car numbers. Numbers are league-wide and first come, first served — your second choice is there for when the first is already gone.',
     '',
     'Race Control confirms your grid slot from there. Once you are entered, your nickname in this server updates itself to your iRacing name and car number.',
     ...(tour.length ? ['', '**Where things are**', ...tour] : []),
