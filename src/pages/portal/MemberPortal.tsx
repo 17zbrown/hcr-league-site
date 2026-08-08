@@ -14,24 +14,43 @@ import { StatusPill } from '../../components/ProtestThread'
 
 const CATEGORIES = ['Contact', 'Unsafe rejoin', 'Track limits', 'Blocking', 'Unsporting conduct', 'Other']
 
-type Tab = 'overview' | 'car' | 'file' | 'mine'
+/**
+ * Three tabs, not four.
+ *
+ * It used to be profile / my car / file a protest / my protests, which split one
+ * question — "how do I ask for something?" — across three of them. Change requests
+ * were buried inside My car, filing a protest and tracking it were separate places,
+ * and nothing showed a member what they were currently waiting on.
+ *
+ * Action centre is the answer to that question: everything you can ask for, plus the
+ * state of everything you already asked for, in one place. My car goes back to being
+ * what it says — the facts about your entry.
+ */
+type Tab = 'overview' | 'car' | 'actions'
 
 export default function MemberPortal() {
   const { profile, session, isRaceControl, isAdmin, signOut } = useAuth()
   const [tab, setTab] = useState<Tab>('overview')
   const [filedNote, setFiledNote] = useState(false)
   const { data: protests } = useProtests({ mine: true, userId: session?.user?.id })
+  const { data: myRequests } = useMyChangeRequests()
+
+  // The badge counts what the member is WAITING ON, not everything they have ever
+  // filed. A resolved protest from March is not an outstanding action, and putting it
+  // in the count would make the number meaningless within a season.
+  const openCount =
+    (protests ?? []).filter((p) => p.status !== 'resolved' && p.status !== 'dismissed').length +
+    (myRequests ?? []).filter((r) => r.status === 'pending').length
 
   const selectTab = (id: Tab) => {
-    if (id !== 'mine') setFiledNote(false)
+    if (id !== 'actions') setFiledNote(false)
     setTab(id)
   }
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'My profile' },
     { id: 'car', label: 'My car' },
-    { id: 'file', label: 'File a protest' },
-    { id: 'mine', label: `My protests${protests?.length ? ` (${protests.length})` : ''}` },
+    { id: 'actions', label: `Action centre${openCount ? ` (${openCount})` : ''}` },
   ]
 
   return (
@@ -61,26 +80,172 @@ export default function MemberPortal() {
       </div>
 
       {tab === 'overview' && <Overview onSignOut={signOut} />}
-      {tab === 'car' && <MyCar />}
-      {tab === 'file' && <FileProtest onFiled={() => { setFiledNote(true); setTab('mine') }} />}
-      {tab === 'mine' && (
-        <>
-          {filedNote && (
-            <p role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--color-green)]/10 px-4 py-3 text-sm text-[var(--color-green)]">
-              Protest submitted — race control has been notified.
-              <button
-                onClick={() => setFiledNote(false)}
-                aria-label="Dismiss"
-                className="-my-2 inline-flex min-h-11 min-w-11 items-center justify-center font-semibold hover:text-[var(--color-ink)]"
-              >
-                ✕
-              </button>
-            </p>
-          )}
-          <MyProtests />
-        </>
+      {tab === 'car' && <MyCar onRequestChange={() => selectTab('actions')} />}
+      {tab === 'actions' && (
+        <ActionCentre
+          filedNote={filedNote}
+          onFiled={() => setFiledNote(true)}
+          onDismissNote={() => setFiledNote(false)}
+        />
       )}
     </Section>
+  )
+}
+
+/* ---------------- action centre ---------------- */
+/**
+ * Everything a member can ask for, and the state of everything they already asked.
+ *
+ * This exists because "how do I request something?" had three different answers
+ * depending on what you wanted, and none of them told you what you were waiting on.
+ * Change requests were inside My car; filing a protest and reading the outcome were
+ * separate tabs. A member had to already know the shape of the system to use it.
+ *
+ * WAITING-ON GOES FIRST. Somebody opening this tab has usually come to check on
+ * something, not to start something new, so the open items are above the forms. When
+ * there is nothing outstanding that block disappears rather than showing an empty
+ * shell, and the forms move up to fill the space.
+ */
+function ActionCentre({
+  filedNote, onFiled, onDismissNote,
+}: {
+  filedNote: boolean
+  onFiled: () => void
+  onDismissNote: () => void
+}) {
+  const { session } = useAuth()
+  const { data: protests } = useProtests({ mine: true, userId: session?.user?.id })
+  const { data: requests } = useMyChangeRequests()
+
+  const openProtests = (protests ?? []).filter((p) => p.status !== 'resolved' && p.status !== 'dismissed')
+  const openRequests = (requests ?? []).filter((r) => r.status === 'pending')
+  const waiting = openProtests.length + openRequests.length
+
+  return (
+    <div className="space-y-8">
+      {filedNote && (
+        <p role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-[var(--color-green)]/10 px-4 py-3 text-sm text-[var(--color-green)]">
+          Protest submitted — race control has been notified.
+          <button
+            onClick={onDismissNote}
+            aria-label="Dismiss"
+            className="-my-2 inline-flex min-h-11 min-w-11 items-center justify-center font-semibold hover:text-[var(--color-ink)]"
+          >
+            ✕
+          </button>
+        </p>
+      )}
+
+      {waiting > 0 && (
+        <section>
+          <h3 className="mb-1 text-2xl">Waiting on race control</h3>
+          <p className="mb-4 text-sm text-[var(--color-muted)]">
+            {waiting === 1 ? 'One thing' : `${waiting} things`} of yours {waiting === 1 ? 'is' : 'are'} still open.
+          </p>
+          <div className="grid gap-3 md:grid-cols-2">
+            {openRequests.length > 0 && (
+              <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
+                <div className="eyebrow mb-3">Change requests</div>
+                <ChangeRequestList rows={openRequests} />
+              </div>
+            )}
+            {openProtests.length > 0 && (
+              <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
+                <div className="eyebrow mb-3">Protests</div>
+                <ul className="space-y-2">
+                  {openProtests.map((p) => (
+                    <li key={p.id} className="flex items-center justify-between gap-3 text-sm">
+                      <Link to={`/portal/protests/${p.id}`} className="min-w-0 truncate font-semibold hover:underline">
+                        {p.category}{p.event?.name ? ` · ${p.event.name}` : ''}
+                      </Link>
+                      <StatusPill status={p.status} />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      <section>
+        <h3 className="mb-1 text-2xl">Request a change</h3>
+        <p className="mb-4 max-w-xl text-sm text-[var(--color-muted)]">
+          Your number, car or class. Race control decides these because the grid is published
+          and the standings are keyed to it — approving a request applies it for you.
+        </p>
+        <RequestChangeCard />
+      </section>
+
+      <section>
+        <h3 className="mb-1 text-2xl">File a protest</h3>
+        <p className="mb-4 max-w-xl text-sm text-[var(--color-muted)]">
+          Protests are filed here on the site, not in Discord, so they reach race control with
+          the evidence attached and a record that cannot be lost in a channel.
+        </p>
+        <FileProtest onFiled={onFiled} />
+      </section>
+
+      {(requests ?? []).some((r) => r.status !== 'pending') && (
+        <section>
+          <h3 className="mb-4 text-2xl">Decided</h3>
+          <ChangeRequestList rows={(requests ?? []).filter((r) => r.status !== 'pending')} />
+        </section>
+      )}
+
+      <section>
+        <h3 className="mb-4 text-2xl">All my protests</h3>
+        <MyProtests />
+      </section>
+    </div>
+  )
+}
+
+/**
+ * The change-request form, plus the two states where there is nothing to request.
+ *
+ * Split out of MyCar so the Action centre and the car page can both show it without
+ * one importing the other's layout. The kinds offered differ by situation: a driver
+ * on a team cannot ask for a number, because the team owns it and their manager sets
+ * it directly through set_entry_number.
+ */
+function RequestChangeCard() {
+  const { profile } = useAuth()
+  const { data: season } = useCurrentSeason()
+  const { data: entries, isLoading } = useEntries(season?.id)
+
+  const mine = useMemo(
+    () => (entries ?? []).find((e) => (e.drivers ?? []).some((l) => l.driver?.id === profile?.driver_id)),
+    [entries, profile?.driver_id],
+  )
+
+  if (isLoading) return <Skeleton className="h-40 w-full" />
+
+  if (!profile?.driver_id || !mine) {
+    return (
+      <p className="rounded-xl border border-dashed border-[var(--color-line-2)] bg-[var(--color-paper)] p-5 text-sm text-[var(--color-muted)]">
+        You need a car on this season's grid before there is anything to change. Enter the
+        season from your account page and race control will assign one.
+      </p>
+    )
+  }
+
+  const onTeam = !!mine.team_id
+  return (
+    <>
+      {onTeam && (
+        <p className="mb-3 text-sm text-[var(--color-muted)]">
+          You run your team's car, so your number is theirs to change — ask your manager.
+          Car and class still come through race control.
+        </p>
+      )}
+      <ChangeRequestForm
+        kinds={onTeam ? ['car', 'class'] : ['number', 'car', 'class']}
+        entryId={mine.id}
+        driverId={profile.driver_id}
+        current={{ number: mine.number, car: mine.car, class: mine.class_id }}
+      />
+    </>
   )
 }
 
@@ -94,11 +259,10 @@ export default function MemberPortal() {
  * remember. A driver on a team sees their number as the TEAM's, because the team
  * owns it and their manager is the one who can change it.
  */
-function MyCar() {
+function MyCar({ onRequestChange }: { onRequestChange: () => void }) {
   const { profile } = useAuth()
   const { data: season } = useCurrentSeason()
   const { data: entries, isLoading } = useEntries(season?.id)
-  const { data: requests } = useMyChangeRequests()
 
   const mine = useMemo(
     () => (entries ?? []).find((e) => (e.drivers ?? []).some((l) => l.driver?.id === profile?.driver_id)),
@@ -155,21 +319,17 @@ function MyCar() {
         )}
       </div>
 
-      {(requests ?? []).length > 0 && (
-        <div>
-          <div className="font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
-            My requests
-          </div>
-          <ChangeRequestList rows={requests ?? []} />
-        </div>
-      )}
-
-      <ChangeRequestForm
-        kinds={onTeam ? ['car', 'class'] : ['number', 'car', 'class']}
-        entryId={mine.id}
-        driverId={profile.driver_id}
-        current={{ number: mine.number, car: mine.car, class: mine.class_id }}
-      />
+      {/* Neither the form nor the request list is repeated here. The Action centre
+          owns both, so there is exactly one place to look for what is pending.
+          The form itself lives in the Action centre. Two copies of it would mean two
+          places to look when something is pending, which is the confusion this
+          reorganisation exists to remove. */}
+      <button
+        onClick={onRequestChange}
+        className="hcr-btn hcr-btn-dark mt-2 self-start"
+      >
+        Request a change →
+      </button>
     </div>
   )
 }
