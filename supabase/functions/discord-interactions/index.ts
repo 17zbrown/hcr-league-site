@@ -46,10 +46,6 @@
 // app's General Information page, and it can only ever verify a signature, never
 // produce one. Keeping it in config means the endpoint is configurable from SQL
 // instead of the dashboard. The bot TOKEN, which can act as the bot, stays a secret.
-// DISCORD_PUBLIC_KEY is the application's PUBLIC key from the Discord developer
-// portal (General Information → Public Key), 64 hex characters. It is not a secret in
-// the cryptographic sense — it verifies, it cannot sign — but it lives with the other
-// secrets so nothing has to reach outside the function to find it.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const DISCORD = 'https://discord.com/api/v10'
