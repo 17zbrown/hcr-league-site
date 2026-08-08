@@ -1021,7 +1021,7 @@ By registering for HCR League, each driver agrees to the following:
 I have read and understand the HCR League Rulebook. I agree to follow all league rules, respect other competitors, and accept stewarding decisions. I understand that HCR League staff may issue penalties, suspend drivers, or remove drivers from the league if necessary.
 I agree to race cleanly, communicate respectfully, and help make HCR League a competitive and enjoyable iRacing league. I agree that any decisions not covered herein by the HCR Official League Rulebook may be adjudicated using the iRacing Official Sporting Code or Terms of Service and EULA.
 References
-HCR Discord Invite Link: https://discord.gg/GBvqQBDTx
+HCR Discord Invite Link: https://discord.gg/fcMHFkqwdp
 IMSA WeatherTech Championship Schedule: https://www.imsa.com/weathertech/weathertech-2026-schedule/
 IMSA Michelin Endurance Cup: https://www.imsa.com/imsa-michelin-endurance-cup/ iRacing Terms of Use and EULA: Terms of Use and EULA - iRacing.com | iRacing.com Motorsport Simulations iRacing Official Sporting Code: iRacing Official Sporting Code - iRacing.com | iRacing.com Motorsport
 Simulations
