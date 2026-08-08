@@ -1,23 +1,28 @@
-// discord-membership — keeps #welcome announcing joins, and reports departures to a
-// staff-only channel.
+// discord-membership — greets arrivals in #welcome, reports departures to a
+// staff-only channel, and keeps #website carrying the site link.
 //
 // TWO DIFFERENT MECHANISMS, because Discord treats the two events very differently:
 //
 //   JOINS are native. Discord posts "X joined the server" into whichever channel is
-//   set as the guild's system channel, instantly, with no bot listening. This
-//   function's only job there is to point that setting at #welcome and make sure the
-//   join flag is not suppressed — after which Discord does it forever, for free, and
-//   faster than anything we could poll.
+//   set as the guild's system channel, instantly, with no bot listening. That stays
+//   on — it is free and immediate. On top of it this function posts its OWN welcome,
+//   because a join notice cannot carry instructions and a newcomer needs them.
 //
 //   DEPARTURES are not announced by Discord at all, to any channel, ever. Seeing one
-//   as it happens needs a gateway connection, which this stack does not have. So the
-//   member list is rolled and diffed: anyone on the previous roll and absent from
-//   this one has gone. That is a POLL — late by up to the cron interval, and unable
-//   to distinguish left / kicked / banned. It is the honest ceiling without a
-//   persistent bot, and it beats not noticing.
+//   as it happens needs a gateway connection, which an edge function cannot hold. So
+//   the member list is rolled and diffed: anyone on the previous roll and absent from
+//   this one has gone, and Discord never says whether they left, were kicked or were
+//   banned.
+//
+// The same diff finds arrivals. A gateway relay on a small VM (see oracle-gateway/ in
+// the repo) now nudges this function the moment Discord reports either event, so in
+// practice both are near-instant; the every-two-minutes cron remains underneath as
+// the backstop for when that VM is down.
 //
 // The first run seeds the roll and announces nothing, because on an empty table
 // every one of sixty members would look like a new arrival.
+//
+// {"dryRun": true} touches nothing and returns the welcome as it would be posted.
 //
 // Secrets (Supabase → Edge Functions):  DISCORD_BOT_TOKEN
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -424,7 +429,7 @@ Deno.serve(async (req) => {
     // --- welcomes -------------------------------------------------------------------
     // Posted by the bot rather than relying on Discord's own join notice, because that
     // notice cannot carry instructions. Both run: Discord's fires instantly, this one
-    // follows within the hour with the part a newcomer actually needs.
+    // follows as soon as the gateway relay nudges us.
     const welcomeChannel = String(welcome?.id ?? '')
     const welcomed: string[] = []
     // In a dry run with nobody new, show the copy against the newest member so it can
@@ -481,8 +486,7 @@ Deno.serve(async (req) => {
           description: lines.join('\n'),
           color: 0xc62430,
           footer: {
-            text: 'Noticed by a periodic check, so this may be up to an hour after they left. ' +
-                  'Discord does not say whether someone left, was kicked or was banned.',
+            text: 'Discord does not say whether someone left, was kicked or was banned.',
           },
         }],
       })
