@@ -39,7 +39,13 @@
 // weakened, or run against a re-serialised object instead of the raw text, this
 // endpoint becomes a public "give me a role" button for anyone who knows the URL.
 //
-// Secrets (Supabase → Edge Functions):  DISCORD_PUBLIC_KEY, DISCORD_BOT_TOKEN
+// Secrets (Supabase → Edge Functions):  DISCORD_BOT_TOKEN
+//
+// The application's PUBLIC key lives in discord_config.application_public_key rather
+// than an Edge Function secret. It is genuinely public — Discord prints it on the
+// app's General Information page, and it can only ever verify a signature, never
+// produce one. Keeping it in config means the endpoint is configurable from SQL
+// instead of the dashboard. The bot TOKEN, which can act as the bot, stays a secret.
 // DISCORD_PUBLIC_KEY is the application's PUBLIC key from the Discord developer
 // portal (General Information → Public Key), 64 hex characters. It is not a secret in
 // the cryptographic sense — it verifies, it cannot sign — but it lives with the other
@@ -104,19 +110,20 @@ function hexToBytes(hex: string): Uint8Array<ArrayBuffer> | null {
  */
 let verifier: { key: CryptoKey; algorithm: AlgorithmIdentifier } | null = null
 
-async function loadVerifier(): Promise<typeof verifier> {
+async function loadVerifier(keyHex: string): Promise<typeof verifier> {
   if (verifier) return verifier
 
-  const raw = hexToBytes((Deno.env.get('DISCORD_PUBLIC_KEY') ?? '').trim())
+  const raw = hexToBytes(keyHex.trim())
   // 32 bytes is the whole of an Ed25519 public key. Anything else is the wrong value
   // pasted in — most often the application ID or the bot token — and it is worth
   // saying so in the log, since the symptom is otherwise an endpoint that Discord
   // simply refuses to save with no explanation.
   if (!raw || raw.length !== 32) {
     console.error(
-      'discord-interactions: DISCORD_PUBLIC_KEY is missing or is not 64 hex characters. ' +
-      'Copy the Public Key from the Discord developer portal (General Information) — ' +
-      'not the application ID, not the bot token. Every interaction is refused until it is set.')
+      'discord-interactions: discord_config.application_public_key is missing or is not ' +
+      '64 hex characters. Copy the Public Key from the Discord developer portal (General ' +
+      'Information) — not the application ID, not the bot token. Every interaction is ' +
+      'refused until it is set.')
     return null
   }
 
@@ -156,12 +163,12 @@ async function loadVerifier(): Promise<typeof verifier> {
  * a freshness check would start turning legitimate clicks into failures the first
  * time a clock drifted.
  */
-async function signatureIsValid(signatureHex: string, timestamp: string, rawBody: string): Promise<boolean> {
+async function signatureIsValid(keyHex: string, signatureHex: string, timestamp: string, rawBody: string): Promise<boolean> {
   if (!timestamp) return false
   const signature = hexToBytes(signatureHex)
   if (!signature || signature.length !== 64) return false
 
-  const v = await loadVerifier()
+  const v = await loadVerifier(keyHex)
   if (!v) return false
 
   try {
@@ -212,7 +219,26 @@ Deno.serve(async (req) => {
   // req.text() can only be called once, which is the other reason it is taken here
   // and passed down rather than re-read later.
   const rawBody = await req.text()
+
+  // The verifying key comes from discord_config, so it has to be read before the gate
+  // rather than after it. That means one indexed single-row select ahead of an
+  // as-yet-unverified caller, which is the price of not needing a dashboard visit to
+  // configure this. It fails CLOSED: no key, no config, or a failed read all end in a
+  // 401, never a pass. The loaded key is cached in the isolate, so this select only
+  // really happens on a cold start.
+  const supaUrl = Deno.env.get('SUPABASE_URL')!
+  const supaService = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  let publicKeyHex = ''
+  try {
+    const { data } = await createClient(supaUrl, supaService)
+      .from('discord_config').select('application_public_key').eq('id', 1).maybeSingle()
+    publicKeyHex = String(data?.application_public_key ?? '')
+  } catch (e) {
+    console.error(`discord-interactions: could not read the public key — ${String((e as Error)?.message ?? e)}`)
+  }
+
   const passed = await signatureIsValid(
+    publicKeyHex,
     req.headers.get('X-Signature-Ed25519') ?? '',
     req.headers.get('X-Signature-Timestamp') ?? '',
     rawBody,
