@@ -12,6 +12,7 @@ import AutomationAdmin from './AutomationAdmin'
 import LeagueInfo from './LeagueInfo'
 import DiscordSettings from './DiscordSettings'
 import IracingLeague from './IracingLeague'
+import CarsAdmin from './CarsAdmin'
 
 /**
  * Race Control Dashboard — the SaaS-console layout (sidebar of grouped
@@ -20,7 +21,7 @@ import IracingLeague from './IracingLeague'
  */
 type TabId =
   | 'overview' | 'results' | 'schedule'
-  | 'drivers' | 'teams' | 'members' | 'registrations'
+  | 'drivers' | 'teams' | 'cars' | 'members' | 'registrations'
   | 'news' | 'automation' | 'iracing'
   | 'info' | 'discord'
 
@@ -41,6 +42,7 @@ const GROUPS: NavGroup[] = [
     items: [
       { id: 'drivers', label: 'Drivers' },
       { id: 'teams', label: 'Teams' },
+      { id: 'cars', label: 'Cars' },
       { id: 'members', label: 'Members & Roles' },
       { id: 'registrations', label: 'Season Entries' },
       { id: 'iracing', label: 'iRacing League' },
@@ -83,6 +85,7 @@ export default function CommissionerPortal() {
       case 'teams': return <TeamsAdmin />
       case 'members': return <Members />
       case 'registrations': return <Registrations />
+      case 'cars': return <CarsAdmin />
       case 'iracing': return <IracingLeague />
       case 'news': return <NewsAdmin />
       case 'automation': return <AutomationAdmin />
