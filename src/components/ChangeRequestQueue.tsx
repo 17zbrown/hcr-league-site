@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { usePendingChangeRequests } from '../lib/queries'
+import { useDrivers, usePendingChangeRequests } from '../lib/queries'
 import { Skeleton } from './ui'
 
 const LABEL: Record<string, string> = {
@@ -9,6 +9,7 @@ const LABEL: Record<string, string> = {
   car: 'Car model',
   class: 'Class',
   extra_car: 'Additional car',
+  team: 'Form a team',
 }
 
 interface QueueRow {
@@ -21,6 +22,8 @@ interface QueueRow {
   driver?: { name: string } | null
   team?: { name: string } | null
   entry?: { number: string; class_id: string; car: string | null } | null
+  /** kind='team' only: the other drivers named. Ids, resolved to names for display. */
+  teammate_ids?: string[] | null
 }
 
 /**
@@ -35,6 +38,10 @@ interface QueueRow {
 export function ChangeRequestQueue() {
   const qc = useQueryClient()
   const { data: rows, isLoading } = usePendingChangeRequests()
+  const { data: drivers } = useDrivers()
+  // Resolved once rather than per row: a queue of twenty team requests would otherwise
+  // scan the roster twenty times over.
+  const driversById = new Map((drivers ?? []).map((d) => [d.id, d]))
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [notes, setNotes] = useState<Record<string, string>>({})
@@ -99,6 +106,23 @@ export function ChangeRequestQueue() {
             ) : null}
             <strong>{r.requested_value}</strong>
           </p>
+          {/* A team request is the only kind whose substance is not in requested_value.
+              Approving one without seeing the line-up would be deciding blind, so the
+              names are resolved and shown rather than left as ids in the database. */}
+          {r.kind === 'team' && (
+            <p className="mt-2 text-sm">
+              <span className="text-[var(--color-muted)]">With: </span>
+              {(r.teammate_ids ?? []).length === 0 ? (
+                <span className="text-[var(--color-red)]">nobody named — decline this</span>
+              ) : (
+                <strong>
+                  {(r.teammate_ids ?? [])
+                    .map((id) => driversById.get(id)?.name ?? 'a driver no longer on the roster')
+                    .join(', ')}
+                </strong>
+              )}
+            </p>
+          )}
           {r.note && <p className="mt-1 text-sm text-[var(--color-muted)]">“{r.note}”</p>}
 
           <div className="mt-3 flex flex-wrap items-center gap-2">

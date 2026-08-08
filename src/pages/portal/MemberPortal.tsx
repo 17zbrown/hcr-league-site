@@ -240,7 +240,7 @@ function RequestChangeCard() {
         </p>
       )}
       <ChangeRequestForm
-        kinds={onTeam ? ['car', 'class'] : ['number', 'car', 'class']}
+        kinds={onTeam ? ['car', 'class'] : ['number', 'car', 'class', 'team']}
         entryId={mine.id}
         driverId={profile.driver_id}
         current={{ number: mine.number, car: mine.car, class: mine.class_id }}
