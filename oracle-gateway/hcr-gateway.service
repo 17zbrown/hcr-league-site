@@ -18,12 +18,24 @@ Wants=network-online.target
 # Discord permits roughly a thousand IDENTIFYs a day per token. A crash loop at
 # one start every ten seconds would blow through that and get the token
 # temporarily revoked, which would break the edge functions too — they share it.
-# So a genuinely broken build is allowed to fail ten times in five minutes and is
-# then left in the failed state on purpose: visible in `systemctl status`, and
-# harmless, because the two-minute cron is still doing the work. Transient
-# network drops never reach this limit; the bot reconnects in-process.
-StartLimitIntervalSec=300
-StartLimitBurst=10
+#
+# It retries for ever rather than giving up. An earlier version stopped after ten
+# failures in five minutes, reasoning that a crash loop means a config error, that a
+# human is needed, and that the two-minute cron covers the gap meanwhile. The first
+# two are right and the conclusion still does not follow.
+#
+# The realistic failure is the bot token being rotated. The bot exits, burns ten
+# restarts in a hundred seconds, and then stays dead — including after somebody fixes
+# the token, because nothing brings it back but a manual restart, and nobody watches
+# `systemctl status` on a machine that has no other purpose. Losing "instant" silently
+# and indefinitely is the worst outcome available.
+#
+# The backstop argument actually points the other way: precisely because the cron is
+# still doing the work, a bot that keeps retrying costs nothing. Thirty seconds
+# between attempts holds a misconfigured service to two log lines a minute, which is
+# cheap, and every recoverable fault — a rotated token, a network that was not up at
+# boot, Supabase briefly unreachable — heals itself without anyone being told.
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -40,7 +52,7 @@ EnvironmentFile=/etc/hcr-gateway.env
 ExecStart=/usr/local/bin/node /opt/hcr-gateway/index.mjs
 
 Restart=always
-RestartSec=10
+RestartSec=30
 SyslogIdentifier=hcr-gateway
 
 # --- what this process is allowed to touch ------------------------------------
