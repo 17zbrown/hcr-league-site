@@ -75,20 +75,38 @@ const TOUR: { names: string[]; blurb: string }[] = [
 ]
 
 /**
- * The welcome a new member sees, mentioning them by id so it actually pings.
+ * The single welcome guide the bot keeps at the bottom of #welcome.
+ *
+ * ONE MESSAGE, RECYCLED — not one per arrival. The guide is the same every time, so
+ * posting a fresh copy for each newcomer buried the channel in identical tours and
+ * pushed the actual conversation out of sight. Instead the previous copy is deleted
+ * and a new one posted, which is the only way to keep something at the BOTTOM of a
+ * Discord channel: pinning moves a message to the pinned list at the top, where
+ * nobody looks, and there is no "sticky last message" feature to use.
+ *
+ * It still names whoever just arrived, and still mentions them, so the ping and the
+ * personal greeting survive the change. Several people arriving together are all
+ * named in the one message rather than getting one each.
  *
  * `ref` turns a channel name into a live <#id> link when that channel exists and
  * returns null when it does not, so the tour lists only real places — a newcomer
  * being sent to a channel that was renamed or removed is worse than a shorter list.
  */
-function welcomeMessage(userId: string, ref: (name: string) => string | null): string {
+function welcomeMessage(userIds: string[], ref: (name: string) => string | null): string {
   const tour = TOUR.map((t) => {
     const link = t.names.map(ref).find(Boolean) ?? null
     return link ? `> ${link} — ${t.blurb}` : null
   }).filter(Boolean) as string[]
 
+  // "@a, @b and @c" — Discord renders each as a real mention, so everyone named is
+  // pinged by the one message.
+  const names = userIds.map((id) => `<@${id}>`)
+  const greeting = names.length === 0 ? 'Welcome to HCR League 🏁'
+    : names.length === 1 ? `Welcome to HCR League, ${names[0]} 🏁`
+    : `Welcome to HCR League, ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} 🏁`
+
   return [
-    `## Welcome to HCR League, <@${userId}> 🏁`,
+    `## ${greeting}`,
     '',
     'Three-class endurance racing — GTP, LMP2 and GTD share the track and score three separate championships.',
     '',
@@ -443,21 +461,43 @@ Deno.serve(async (req) => {
         wouldWelcome: arrived.map((a) => a.name),
         wouldAnnounceDepartures: [...known.values()].filter((r) => !seen.has(r.user_id) && !r.left_seen_at).length,
         welcomeChannel: welcomeChannel ? `#welcome (${welcomeChannel})` : 'MISSING — no #welcome channel found',
-        samplePreview: sampleId ? welcomeMessage(sampleId, ref) : '(no members to sample)',
+        samplePreview: sampleId ? welcomeMessage([sampleId], ref) : '(no members to sample)',
         sampleIsReal: arrived.length > 0,
       })
     }
     if (!firstRun && arrived.length && welcomeChannel) {
-      for (const a of arrived) {
-        const res = await discord(`/channels/${welcomeChannel}/messages`, 'POST', botToken, {
-          content: welcomeMessage(a.id, ref),
-          allowed_mentions: { users: [a.id] }, // only the newcomer; never @everyone here
-        })
-        if (res.ok) {
-          welcomed.push(a.name)
-          await db.from('discord_members').update({ welcomed_at: now }).eq('user_id', a.id)
-        } else warnings.push(`Could not welcome ${a.name} — ${res.message}`)
-      }
+      // Post the new copy BEFORE deleting the old one. If the post fails, the channel
+      // keeps the guide it already had rather than being left with none — the wrong
+      // order here would turn a transient Discord error into a missing welcome.
+      const res = await discord(`/channels/${welcomeChannel}/messages`, 'POST', botToken, {
+        content: welcomeMessage(arrived.map((a) => a.id), ref),
+        // Only the newcomers. A guide that gets reposted on every join is the last
+        // place an accidental @everyone should be reachable.
+        allowed_mentions: { users: arrived.map((a) => a.id) },
+      })
+      const posted = (res.data as { id?: string } | null)?.id
+      if (res.ok && posted) {
+        welcomed.push(...arrived.map((a) => a.name))
+        await db.from('discord_members').update({ welcomed_at: now })
+          .in('user_id', arrived.map((a) => a.id))
+
+        const previous = String(cfg.welcome_message_id ?? '').trim()
+        if (previous && previous !== posted) {
+          const del = await discord(`/channels/${welcomeChannel}/messages/${previous}`, 'DELETE', botToken)
+          // A 404 means somebody already removed it by hand, which is a success for
+          // our purposes: there is no stale copy left, which is all we wanted.
+          if (!del.ok && del.status !== 404) {
+            warnings.push(`Posted the new welcome but could not remove the previous one — ${del.message}`)
+          }
+        }
+        const { error } = await db.from('discord_config')
+          .update({ welcome_message_id: posted, updated_at: new Date().toISOString() }).eq('id', 1)
+        if (error) {
+          warnings.push(`Welcome posted but its id could not be saved, so the next one will not ` +
+                        `clean this copy up — ${error.message}`)
+        }
+        applied.push(`welcomed ${arrived.length} arrival(s) and moved the guide to the bottom of #welcome`)
+      } else warnings.push(`Could not post the welcome — ${res.message}`)
     } else if (arrived.length && !welcomeChannel) {
       warnings.push(`${arrived.length} member(s) joined but there is no #welcome channel to greet them in.`)
     }
