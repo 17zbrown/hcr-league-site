@@ -37,7 +37,7 @@ EnvironmentFile=/etc/hcr-gateway.env
 
 # The entry file is named outright rather than going through `npm start`, so the
 # service does not depend on npm existing or on a package.json script surviving.
-ExecStart=/usr/bin/node /opt/hcr-gateway/index.mjs
+ExecStart=/usr/local/bin/node /opt/hcr-gateway/index.mjs
 
 Restart=always
 RestartSec=10

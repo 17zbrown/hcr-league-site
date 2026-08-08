@@ -99,6 +99,11 @@ Create the instance and note its **public IP**.
 
 ---
 
+> **Note on the node path.** The unit runs `/usr/local/bin/node`, which is where the
+> official tarball in §2 installs it. If you install Node from apt or NodeSource
+> instead it lands in `/usr/bin/node` and systemd will fail with a missing
+> executable — change `ExecStart` to match, or symlink it.
+
 ## 2. Set up Ubuntu
 
 SSH in as `ubuntu@<public-ip>`.
