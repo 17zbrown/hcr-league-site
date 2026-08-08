@@ -237,6 +237,10 @@ Deno.serve(async (req) => {
 
     return json({ ok: true, invoked: AUTOMATION, event })
   } catch (e) {
-    return json({ error: String((e as Error)?.message ?? e) }, 500)
+    // The raw message can name a table, a column or a network path, and the caller
+    // here is unauthenticated until the secret check says otherwise. Detail goes to
+    // the function log; the wire gets a bare sentence.
+    console.error(`discord-gateway-hook: unhandled — ${String((e as Error)?.message ?? e)}`)
+    return json({ error: 'Internal error' }, 500)
   }
 })

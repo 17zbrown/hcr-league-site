@@ -77,10 +77,11 @@ const EPHEMERAL = 1 << 6
  * the posting end produces a button that looks perfect, is clickable, and silently
  * does nothing.
  *
- * It is written out again in discord-membership rather than imported, because
- * importing it would mean importing this module and running its Deno.serve. Two
- * copies of one literal is the cost. If a third thing ever needs it, move it to
- * ../_shared/ (as license.ts already does) instead of copying it once more.
+ * NOTHING POSTS THIS BUTTON YET. The poster lands with the rest of the gate work —
+ * discord-membership's welcome guide gains the button when the gate is armed — and
+ * when it does, it must write this literal out rather than import it, because
+ * importing this module would run its Deno.serve. If a third thing ever needs it,
+ * move it to ../_shared/ (as license.ts already does) instead of copying it again.
  *
  * Changing the value orphans every button already sitting in #welcome — they keep
  * sending the old id — so a change here means reposting that message too.

@@ -44,7 +44,6 @@ const OVERWRITE_ROLE = 0
 const LEAGUE = 'LEAGUE'
 const ENDURANCE = 'ENDURANCE'
 const SPECTATOR = 'Spectator'
-const RC_ANNOUNCE = 'race-control-announcements'
 // Discord's MEDIUM: verified email, and an account at least 5 minutes old.
 const VERIFICATION_MEDIUM = 2
 

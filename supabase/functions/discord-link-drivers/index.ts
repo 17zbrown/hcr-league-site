@@ -214,10 +214,6 @@ Deno.serve(async (req) => {
     const botToken = Deno.env.get('DISCORD_BOT_TOKEN')
 
     // --- auth: an admin, or cron ---
-    // No bearer token at all means nobody is claiming to be anybody — that's the cron
-    // path. The service-role key is the same thing wearing a badge: whoever holds it
-    // already owns the database, so there is no user to look up. Anything else is a
-    // person, and a person has to be an admin.
     const authz = req.headers.get('Authorization') ?? ''
     const bearer = authz.replace(/^Bearer\s+/i, '').trim()
     // An ABSENT bearer token is not cron. The gateway accepts the project's
@@ -305,6 +301,21 @@ Deno.serve(async (req) => {
         `The saved Spectator role id (${clip(roleId)}) is not a Discord id, so the role was not synced. Fix it in Admin → Discord, or clear the field and re-run to have it found by name.`,
       )
       roleId = ''
+    }
+
+    // --- 1c. which roles mean "racing"? ---
+    // Spectator and a class role are contradictory: one says "not entered this
+    // season", the other only ever marks a racer. The Spectator loop below therefore
+    // skips anyone holding a class role, linked or not — a GTP/LMP2/GTD role on an
+    // unlinked member is a human's claim that this person races, and the answer to a
+    // contradiction is the link that settles it, not a Spectator grant racing it.
+    const classRoleIds = new Set<string>()
+    {
+      const { data: crRows } = await db.from('discord_class_roles').select('role_id')
+      for (const r of (crRows ?? []) as { role_id?: string | null }[]) {
+        const rid = String(r?.role_id ?? '').trim()
+        if (SNOWFLAKE.test(rid)) classRoleIds.add(rid)
+      }
     }
 
     // --- 2. who is in the server, and what are they called? ---
@@ -722,6 +733,7 @@ Deno.serve(async (req) => {
     const removedSpectator: string[] = []
     let alreadyCorrect = 0
     let leftAlonePossible = 0
+    let leftAloneClassRole = 0
     let hierarchyBlocked = false
     let staleRoleWarned = false
 
@@ -731,6 +743,14 @@ Deno.serve(async (req) => {
         const label = m.labels[0] ?? m.id
         const entered = enteredUids.has(m.id)
         const hasRole = m.roles.has(roleId)
+
+        // A class role on a member with no linked entry is somebody's claim that
+        // this person races. Not deepened here in either direction: no Spectator
+        // goes ON while it stands, and none comes off on the strength of it.
+        if (!entered && [...classRoleIds].some((rid) => m.roles.has(rid))) {
+          leftAloneClassRole++
+          continue
+        }
 
         if (!entered && possiblyEntered.has(m.id)) {
           // Might be an entered driver we have not linked yet — leave them be.
@@ -781,12 +801,33 @@ Deno.serve(async (req) => {
         `${leftAlonePossible} member${leftAlonePossible === 1 ? '' : 's'} answer to the name of an entered driver who is not linked yet, so their Spectator status was deliberately left alone until the link resolves.`,
       )
     }
+    if (leftAloneClassRole) {
+      warnings.push(
+        `${leftAloneClassRole} member${leftAloneClassRole === 1 ? ' holds' : 's hold'} a class role without a linked entry, so Spectator was not touched for them — the role is a claim they race, and the link that proves it either way is the fix, not a guess here.`,
+      )
+    }
 
-    // --- 8. log ---
-    // One row per driver considered. The log is the record of why a link happened —
-    // or why it deliberately didn't — long after the report has scrolled away.
-    for (let i = 0; i < logRows.length; i += LOG_CHUNK) {
-      const { error: logErr } = await db.from('discord_link_log').insert(logRows.slice(i, i + LOG_CHUNK))
+    // --- 8. log — transitions only ---
+    // One row per driver WHOSE ANSWER CHANGED. The first version logged every driver
+    // every run, which at 24 runs a day was ~600 identical no_match rows a day — and
+    // a log nobody can read is not a record. The latest row per driver is fetched
+    // and a new one written only when the outcome, or the account it points at,
+    // differs. A steady state is silence; a transition is a row.
+    let toLog = logRows
+    {
+      const { data: latest, error: latestErr } = await db.rpc('discord_link_log_latest')
+      if (latestErr) {
+        warnings.push(`Could not read the log's last state, so this run logged every driver — ${latestErr.message}`)
+      } else {
+        const prev = new Map(
+          ((latest ?? []) as { driver_id: string; outcome: string; discord_user_id: string | null }[])
+            .map((r) => [String(r.driver_id), `${r.outcome}|${r.discord_user_id ?? ''}`]),
+        )
+        toLog = logRows.filter((r) => prev.get(r.driver_id) !== `${r.outcome}|${r.discord_user_id ?? ''}`)
+      }
+    }
+    for (let i = 0; i < toLog.length; i += LOG_CHUNK) {
+      const { error: logErr } = await db.from('discord_link_log').insert(toLog.slice(i, i + LOG_CHUNK))
       if (logErr) {
         warnings.push(`The run finished but part of it could not be written to the link log — ${logErr.message}`)
         break
@@ -809,6 +850,7 @@ Deno.serve(async (req) => {
       members_scanned: membersScanned,
       scan_capped: scanCapped,
       profiles_linked: profilesLinked,
+      log_rows_written: toLog.length,
       warnings,
     })
   } catch (e) {

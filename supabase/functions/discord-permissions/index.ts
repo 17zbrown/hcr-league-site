@@ -213,7 +213,7 @@ Deno.serve(async (req) => {
         const managed = new Set((roles.data ?? []).filter((r) => r.managed).map((r) => String(r.id)))
         botRole = (mem.data?.roles ?? []).map(String).find((r) => managed.has(r)) ?? ''
       }
-      if (!botRole) warnings.push("Could not find the bot's own role, so it was not explicitly allowed to open forum posts. It can still post while it holds Administrator — but grant it Create Posts on the results forum before you take Administrator away.")
+      if (!botRole) warnings.push("Could not find the bot's own role, so it was not explicitly allowed to post. It can still post while it holds Administrator — but grant it Send Messages on these channels before you take Administrator away.")
     }
 
     const chRes = await discord<Channel[]>(`/guilds/${guildId}/channels`, 'GET', botToken)

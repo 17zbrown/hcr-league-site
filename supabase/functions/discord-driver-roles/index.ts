@@ -1,25 +1,36 @@
-// discord-driver-roles — gives every linked driver the Discord role for the class
-// they race.
+// discord-driver-roles — keeps every LINKED member's Discord presence matching the
+// entry list: exactly one class role, Spectator only when seatless, and a nickname
+// of "Name #car".
 //
-// Scope note, because this function used to do more: licence tiers are NOT handled
-// here. discord-sync owns those — it recomputes the tier, persists it to
-// drivers.license_current, swaps the Discord role and announces promotions in
-// #license-ups, and it already runs after every results import. Two functions both
-// deciding which licence role somebody should hold is one too many, so this one was
-// cut back to the job discord-sync doesn't do.
+// THE ENTRY LIST IS THE TRUTH, NOT RACE HISTORY. The first version of this derived
+// classes from results.class_id, which meant a driver kept a role for every class
+// they had ever raced and the function could never remove anything — by the fourth
+// round the server showed 50 class-role holders against a 37-car grid, with GTD's
+// role alone exceeding the entire GTD roster. What a member's roles should say is
+// what they run NOW, and entries + entry_drivers for the current season is the one
+// table that knows.
 //
-// Class roles come from public.discord_class_roles, a row per class keyed on
-// classes.id, so putting a fourth class on the grid is an insert rather than a
-// migration and taking one out of Discord's hands is a delete. A class with no row
-// is simply not mirrored.
+// SCOPED TO LINKED DRIVERS, DELIBERATELY. A member with no drivers.discord_user_id
+// pointing at them is never touched — not renamed, not stripped, not granted. Their
+// roles may well be wrong, but an unlinked member's class role is a human's claim
+// about who they are, and revoking it on no evidence destroys the only record tying
+// them to a class. The linker closes that gap member by member, and every link
+// brings one more person under this function's care. Unlinked members holding
+// contradictory roles are REPORTED, so the queue is visible while it drains.
 //
-// Which classes somebody has raced comes from results.class_id, attributed by name
-// with the same rule src/lib/attribution.ts uses — this has to agree with the site
-// exactly or a driver could be shown in GTD on their profile and GTP in Discord.
+// WHAT RECONCILE MEANS, per linked driver in the server:
+//   seated  → their entry's class role ON, every other class role OFF, Spectator
+//             OFF, nickname "Name #car" (registration iRacing name first, roster
+//             name as fallback; the name is trimmed to Discord's 32, never the
+//             number).
+//   seatless → every class role OFF, Spectator ON. No nickname change — there is
+//             no number to show, and stripping a name is not this function's call.
 //
-// ADDITIVE ONLY. There is no DELETE in this file. A driver who has changed class
-// keeps a role for each class they have raced in, because only a human knows which
-// one is current — the run says who those drivers are so somebody can trim it.
+// Licence tiers are still NOT handled here. discord-sync owns those.
+//
+// The nickname of the SERVER OWNER cannot be changed by any bot — Discord refuses
+// regardless of permissions — so the owner is skipped with a note rather than a
+// warning that reads like something is broken.
 //
 // Callable two ways, mirroring public.assert_admin_or_cron: an admin, or cron.
 // Cron must present a service-role credential; there is no unauthenticated path.
@@ -27,8 +38,8 @@
 // Secrets (Supabase → Edge Functions):  DISCORD_BOT_TOKEN
 // Auto-provided:  SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
 //
-// The bot needs **Manage Roles**, and its own role must sit ABOVE GTP, LMP2 and GTD
-// in Server Settings → Roles or Discord refuses with a 403.
+// The bot needs **Manage Roles** and **Manage Nicknames**, and its own role must sit
+// ABOVE GTP, LMP2, GTD and Spectator in Server Settings → Roles.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const DISCORD = 'https://discord.com/api/v10'
@@ -43,66 +54,31 @@ const json = (body: unknown, status = 200) =>
 const MEMBER_PAGE = 1000
 const MAX_MEMBER_PAGES = 5
 const MAX_DRIVERS = 5000
-const MAX_RESULTS = 20000
-const RESULT_PAGE = 1000
+const NICK_MAX = 32
 
 const SNOWFLAKE = /^\d{5,25}$/
 
-interface ResultRow {
-  drivers_text?: string | null
-  class_id?: string | null
-}
 interface DriverRow {
   id: string
   name: string | null
   discord_user_id: string | null
 }
 interface Member {
+  nick?: string | null
   roles?: string[] | null
-  user?: { id?: string | null } | null
-}
-
-// --- name handling: a straight port of src/lib/attribution.ts ---
-function normalizeName(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '') // diacritics
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ') // punctuation -> space
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-function crewNames(driversText?: string | null): string[] {
-  if (!driversText) return []
-  return driversText
-    .split(/\s*(?:\/|,|;|&|\+|\band\b)\s*/i)
-    .map((s) => normalizeName(s.trim()))
-    .filter(Boolean)
-}
-const nameTokens = (normalized: string) => normalized.split(' ').filter((t) => t.length > 1)
-
-/** resultListsDriver from attribution.ts. */
-function resultListsDriver(driversText: string | null | undefined, driverName: string): boolean {
-  const target = normalizeName(driverName)
-  if (!target) return false
-  const names = crewNames(driversText)
-  if (names.includes(target)) return true
-  // exact-token-set fallback: abbreviated forms intentionally not matched
-  const targetTokens = nameTokens(target)
-  if (targetTokens.length < 2) return false
-  return names.some((seg) => {
-    const segTokens = nameTokens(seg)
-    return segTokens.length === targetTokens.length && targetTokens.every((t) => segTokens.includes(t))
-  })
+  user?: { id?: string | null; bot?: boolean | null } | null
 }
 
 type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; message: string }
 
-// GET to read, PUT to add a role. There is deliberately no way to express a DELETE.
+// GET to read, PUT/DELETE for roles, PATCH for nicknames. This function is a
+// reconciler now: removal is part of the contract, bounded to the class roles and
+// Spectator on LINKED members and to nothing else.
 async function discord<T>(
   path: string,
-  method: 'GET' | 'PUT',
+  method: 'GET' | 'PUT' | 'DELETE' | 'PATCH',
   token: string,
+  body?: unknown,
   attempt = 0,
 ): Promise<ApiResult<T>> {
   let res: Response
@@ -110,6 +86,7 @@ async function discord<T>(
     res = await fetch(`${DISCORD}${path}`, {
       method,
       headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     })
   } catch (e) {
     return { ok: false, status: 0, message: `Could not reach Discord (${String((e as Error)?.message ?? e)})` }
@@ -117,7 +94,7 @@ async function discord<T>(
   if (res.status === 429 && attempt < 3) {
     const retry = Number(res.headers.get('retry-after') ?? '1')
     await new Promise((r) => setTimeout(r, (Number.isFinite(retry) ? retry : 1) * 1000 + 250))
-    return discord<T>(path, method, token, attempt + 1)
+    return discord<T>(path, method, token, body, attempt + 1)
   }
   const text = await res.text()
   let parsed: unknown = null
@@ -137,17 +114,20 @@ const badToken = 'Discord rejected the bot token — check the DISCORD_BOT_TOKEN
 const quote = (s: string) => `"${s}"`
 
 /**
- * Is this a legacy service-role JWT?
- *
- * Only ever consulted for a token the Supabase gateway has ALREADY accepted, and
- * that is what makes reading an unverified claim sound here: this function is
- * deployed with verify_jwt on, so the signature was checked before any of this code
- * ran. A forged or unsigned token never arrives. The project's anon / publishable
- * key does arrive, but carries role "anon", so it fails this.
- *
- * Needed because Supabase is mid-migration between key formats: the runtime's
- * SUPABASE_SERVICE_ROLE_KEY on this project is an sb_secret_ string, while the
- * dashboard still issues a legacy service_role JWT. Both are the scheduler.
+ * "Name #car", capped at Discord's 32 characters by trimming the NAME, never the
+ * number — "Francisco Morales Rodrig… #16" still identifies the car, which is the
+ * half race control actually greps for. Mirrors public.discord_nickname_for; if one
+ * changes, change the other.
+ */
+function nicknameFor(name: string, num: string): string {
+  const suffix = num ? ` #${num}` : ''
+  if (name.length + suffix.length <= NICK_MAX) return name + suffix
+  return name.slice(0, Math.max(1, NICK_MAX - suffix.length)).trimEnd() + suffix
+}
+
+/**
+ * Is this a legacy service-role JWT? Only consulted for a token the gateway has
+ * already accepted — verify_jwt is on, so the signature was checked before this ran.
  */
 function isServiceRoleJwt(token: string): boolean {
   const parts = token.split('.')
@@ -171,8 +151,8 @@ Deno.serve(async (req) => {
     const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const botToken = Deno.env.get('DISCORD_BOT_TOKEN')
 
-    // Nothing here removes anything, so the default is to just do it — same
-    // ergonomics as the driver linker. dryRun is there for looking first.
+    // This function removes things now, so dryRun is worth reaching for: it reports
+    // every change it would make and touches nothing.
     let dryRun = false
     try {
       const body = await req.json()
@@ -182,15 +162,6 @@ Deno.serve(async (req) => {
     // --- auth: an admin, or cron ---
     const authz = req.headers.get('Authorization') ?? ''
     const bearer = authz.replace(/^Bearer\s+/i, '').trim()
-    // An ABSENT bearer token is not cron. The gateway accepts the project's
-    // publishable key via the `apikey` header with no Authorization header at all,
-    // and that key ships inside the public frontend bundle — so treating "no token"
-    // as "this must be the scheduler" left every one of these functions callable by
-    // anybody who could guess the slug. It did, until this line changed.
-    //
-    // What actually identifies the scheduler is a service-role credential: either an
-    // exact match on the runtime's own key, or a legacy service_role JWT whose
-    // signature the gateway has already verified.
     const viaCron = bearer.length > 0 && (bearer === service || isServiceRoleJwt(bearer))
     if (!viaCron) {
       const userClient = createClient(url, anon, { global: { headers: { Authorization: authz } } })
@@ -206,11 +177,20 @@ Deno.serve(async (req) => {
     if (cfgErr) return json({ error: `Could not read the Discord config — ${cfgErr.message}` }, 500)
     const cfg = (cfgRow ?? null) as Record<string, unknown> | null
     if (!cfg?.enabled) return json({ skipped: 'Discord integration is disabled in config.' })
+    // The same switch the linker honours: an admin who turned off "set roles
+    // automatically" would not expect this function to keep enforcing them.
+    if (!cfg.auto_sync_roles) return json({ skipped: 'Automatic role sync is switched off.' })
     const guildId = String(cfg.guild_id ?? '').trim()
     if (!guildId) return json({ skipped: 'No Discord server is configured yet.' })
     if (!botToken) return json({ error: 'DISCORD_BOT_TOKEN secret is not set.' }, 400)
 
     const warnings: string[] = []
+    const spectatorRole = SNOWFLAKE.test(String(cfg.role_spectator ?? '').trim())
+      ? String(cfg.role_spectator).trim()
+      : ''
+    if (!spectatorRole) {
+      warnings.push('No Spectator role id is saved in config, so seatless linked drivers keep whatever they hold.')
+    }
 
     // --- class -> role ---
     const classRoles = new Map<string, string>()
@@ -226,7 +206,55 @@ Deno.serve(async (req) => {
       }
     }
     if (classRoles.size === 0) {
-      return json({ skipped: 'No classes are mapped to Discord roles, so there is nothing to mirror.' })
+      return json({ skipped: 'No classes are mapped to Discord roles, so there is nothing to reconcile.' })
+    }
+    const classRoleIds = new Set(classRoles.values())
+
+    // --- the season, the seats, and the names to show ---
+    const { data: season, error: seasonErr } = await db
+      .from('seasons').select('id').eq('is_current', true).limit(1).maybeSingle()
+    if (seasonErr || !season?.id) {
+      return json({ error: `Could not find the current season — ${seasonErr?.message ?? 'no season is marked current'}. Nothing was changed.` }, 500)
+    }
+
+    // driver id -> their car this season. One seat per driver is an invariant the
+    // site enforces; if data ever breaks it, first seat wins and it is reported.
+    const seatOf = new Map<string, { class_id: string; number: string }>()
+    {
+      const { data: seatRows, error } = await db
+        .from('entry_drivers')
+        .select('driver_id, entries!inner(season_id, class_id, number)')
+        .eq('entries.season_id', season.id)
+      if (error) return json({ error: `Could not read the entry list — ${error.message}. Nothing was changed.` }, 500)
+      for (const r of (seatRows ?? []) as { driver_id?: string | null; entries?: { class_id?: string | null; number?: string | null } | null }[]) {
+        const did = String(r?.driver_id ?? '').trim()
+        const cls = String(r?.entries?.class_id ?? '').trim()
+        const num = String(r?.entries?.number ?? '').trim()
+        if (!did || !cls) continue
+        if (seatOf.has(did)) {
+          warnings.push(`Driver ${did} appears on more than one current-season entry; the first seat read was used.`)
+          continue
+        }
+        seatOf.set(did, { class_id: cls, number: num })
+      }
+    }
+
+    // driver id -> the iRacing name they registered with, when they registered.
+    // The roster name is the fallback: it came off a results PDF and is close, but
+    // the registration name is the one they typed as their own.
+    const iracingNameOf = new Map<string, string>()
+    {
+      const { data: regRows, error } = await db
+        .from('season_registrations')
+        .select('driver_id, iracing_name')
+        .eq('season_id', season.id)
+        .not('driver_id', 'is', null)
+      if (error) warnings.push(`Could not read registrations for nickname names — ${error.message}. Roster names were used instead.`)
+      for (const r of (regRows ?? []) as { driver_id?: string | null; iracing_name?: string | null }[]) {
+        const did = String(r?.driver_id ?? '').trim()
+        const nm = String(r?.iracing_name ?? '').trim()
+        if (did && nm) iracingNameOf.set(did, nm)
+      }
     }
 
     // --- drivers who already have a Discord account attached ---
@@ -243,34 +271,17 @@ Deno.serve(async (req) => {
       })
     }
 
-    // --- every result, paged: PostgREST caps a single response and a short read
-    // would make a driver look like they had never raced in a class ---
-    const results: ResultRow[] = []
-    let read = 0
-    let total: number | null = null
-    while (read < MAX_RESULTS) {
-      const to = Math.min(read + RESULT_PAGE, MAX_RESULTS) - 1
-      const { data, error, count } = await db
-        .from('results').select('drivers_text, class_id', { count: 'exact' }).range(read, to)
-      if (error) {
-        if ((error as { code?: string }).code === 'PGRST103') break
-        return json({ error: `Could not read the results — ${error.message}. Nothing was changed.` }, 500)
-      }
-      if (typeof count === 'number') total = count
-      const batch = (data ?? []) as ResultRow[]
-      read += batch.length
-      results.push(...batch)
-      if (!batch.length) break
-      if (total !== null && read >= total) break
-    }
-    if (total !== null && read < total) {
-      warnings.push(
-        `Only ${read} of ${total} results rows were read, so a class somebody raced in may have been missed. Nobody loses a role over it — this only ever adds — and the next run picks it up.`,
-      )
+    // --- the owner, whose nickname no bot can touch ---
+    let ownerId = ''
+    {
+      const g = await discord<{ owner_id?: string | null }>(`/guilds/${guildId}`, 'GET', botToken)
+      if (g.ok) ownerId = String(g.data?.owner_id ?? '').trim()
+      // A failed read just means an owner rename attempt would 403 and be reported;
+      // not worth stopping the run over.
     }
 
     // --- who is in the server, and what do they hold ---
-    const membersById = new Map<string, Set<string>>()
+    const membersById = new Map<string, { nick: string | null; roles: Set<string> }>()
     let after = '0'
     let pages = 0
     let reachedEnd = false
@@ -290,8 +301,11 @@ Deno.serve(async (req) => {
       const batch = Array.isArray(res.data) ? res.data : []
       for (const m of batch) {
         const uid = String(m?.user?.id ?? '').trim()
-        if (!uid) continue
-        membersById.set(uid, new Set((m.roles ?? []).map(String)))
+        if (!uid || m?.user?.bot) continue
+        membersById.set(uid, {
+          nick: m.nick ?? null,
+          roles: new Set((m.roles ?? []).map(String)),
+        })
       }
       if (batch.length < MEMBER_PAGE) { reachedEnd = true; break }
       const last = String(batch[batch.length - 1]?.user?.id ?? '').trim()
@@ -304,56 +318,116 @@ Deno.serve(async (req) => {
       )
     }
 
-    // --- apply ---
+    // --- reconcile every linked driver ---
     const granted: string[] = []
-    const multiClass: string[] = []
+    const revoked: string[] = []
+    const spectatorOn: string[] = []
+    const spectatorOff: string[] = []
+    const renamed: string[] = []
     let alreadyCorrect = 0
     let notInGuild = 0
-    let blocked = false
+    let ownerSkipped: string | null = null
+    let hierarchyBlocked = false
+
+    // One helper so every role write shares the same error handling. Returns true
+    // when the change is (or would be) made.
+    const setRole = async (uid: string, rid: string, on: boolean, label: string): Promise<boolean> => {
+      if (hierarchyBlocked) return false
+      if (dryRun) return true
+      const res = await discord(`/guilds/${guildId}/members/${uid}/roles/${rid}`, on ? 'PUT' : 'DELETE', botToken)
+      if (res.ok) return true
+      if (res.status === 403) {
+        // Hierarchy, not permission: the bot can hold Manage Roles and still be
+        // unable to touch a role above its own. Same answer for everybody left.
+        hierarchyBlocked = true
+        warnings.push(
+          "Discord refused a role change (403) — drag the bot's role ABOVE GTP, LMP2, GTD and Spectator in Server Settings → Roles, then run this again.",
+        )
+        return false
+      }
+      warnings.push(`Could not ${on ? 'grant' : 'remove'} a role for ${quote(label)} — ${res.message}`)
+      return false
+    }
 
     for (const d of drivers) {
       const name = String(d.name ?? '').trim()
-      if (!name) continue
       const uid = String(d.discord_user_id)
-      const mine = results.filter((r) => resultListsDriver(r.drivers_text, name))
-      if (mine.length === 0) continue // never raced — the linker's League Member grant covers them
+      const member = membersById.get(uid)
+      if (!member) { notInGuild++; continue }
 
-      const classes = [...new Set(mine.map((r) => String(r.class_id ?? '').trim()).filter(Boolean))].sort()
-      if (classes.length > 1) multiClass.push(`${name} (${classes.join(', ')})`)
-
-      const held = membersById.get(uid)
-      if (!held) { notInGuild++; continue }
+      const seat = seatOf.get(d.id) ?? null
+      const wantRole = seat ? (classRoles.get(seat.class_id) ?? '') : ''
+      if (seat && !wantRole) {
+        warnings.push(`Class ${seat.class_id} has no Discord role mapped, so ${quote(name)} could not be reconciled.`)
+        continue
+      }
 
       let touched = false
-      for (const cls of classes) {
-        const rid = classRoles.get(cls)
-        if (!rid || held.has(rid)) continue
-        if (blocked) break
-        if (dryRun) { granted.push(`${name} → ${cls}`); touched = true; continue }
-        const put = await discord(`/guilds/${guildId}/members/${uid}/roles/${rid}`, 'PUT', botToken)
-        if (put.ok) { granted.push(`${name} → ${cls}`); touched = true; continue }
-        if (put.status === 403) {
-          // Hierarchy, not permission: the bot can hold Manage Roles and still be
-          // unable to hand out a role above its own. Same for everybody left.
-          blocked = true
-          warnings.push(
-            "Discord refused to grant a class role (403) — drag the bot's role ABOVE GTP, LMP2 and GTD in Server Settings → Roles, then run this again.",
-          )
-          continue
+
+      // The class roles: exactly the seat's, or none at all.
+      for (const rid of classRoleIds) {
+        const has = member.roles.has(rid)
+        const want = rid === wantRole
+        if (has === want) continue
+        if (await setRole(uid, rid, want, name)) {
+          const cls = [...classRoles.entries()].find(([, v]) => v === rid)?.[0] ?? rid
+          ;(want ? granted : revoked).push(`${name} ${want ? '→' : '−'} ${cls}`)
+          touched = true
         }
-        if (put.status === 404) {
-          warnings.push(`Discord does not recognise the role mapped to class ${cls} — check discord_class_roles still points at a role that exists.`)
-          continue
-        }
-        warnings.push(`Could not give ${quote(name)} the ${cls} role — ${put.message}`)
       }
+
+      // Spectator: the exact inverse of having a seat.
+      if (spectatorRole) {
+        const has = member.roles.has(spectatorRole)
+        const want = !seat
+        if (has !== want) {
+          if (await setRole(uid, spectatorRole, want, name)) {
+            ;(want ? spectatorOn : spectatorOff).push(name)
+            touched = true
+          }
+        }
+      }
+
+      // The nickname, for seated drivers only. Seatless drivers keep whatever they
+      // have — there is no number to show and stripping a name is not our call.
+      if (seat) {
+        const displayName = iracingNameOf.get(d.id) ?? name
+        const want = nicknameFor(displayName, seat.number)
+        if ((member.nick ?? '') !== want) {
+          if (uid === ownerId) {
+            // Discord refuses this for every bot, with any permission. Not a warning
+            // — nothing is broken — but said once so the one unmanaged nickname in
+            // the server is accounted for.
+            ownerSkipped = `${name} owns the server, and Discord lets no bot rename the owner — set ${quote(want)} by hand.`
+          } else if (dryRun) {
+            renamed.push(`${name} → ${quote(want)}`)
+            touched = true
+          } else {
+            const res = await discord(`/guilds/${guildId}/members/${uid}`, 'PATCH', botToken, { nick: want })
+            if (res.ok) { renamed.push(`${name} → ${quote(want)}`); touched = true }
+            else if (res.status === 403) {
+              warnings.push(`Discord refused to rename ${quote(name)} (403) — the bot needs Manage Nicknames and its role must sit above theirs.`)
+            } else {
+              warnings.push(`Could not rename ${quote(name)} — ${res.message}`)
+            }
+          }
+        }
+      }
+
       if (!touched) alreadyCorrect++
     }
 
-    // Not a failure, but the one thing here a human has to settle.
-    if (multiClass.length) {
+    // --- report the queue this function is NOT allowed to fix ---
+    // Unlinked members holding a class role are the linker's backlog, not ours, but
+    // the number belongs in every report so the drain is visible.
+    let unlinkedHoldingClassRole = 0
+    for (const [uid, m] of membersById) {
+      if (drivers.some((d) => String(d.discord_user_id) === uid)) continue
+      if ([...classRoleIds].some((rid) => m.roles.has(rid))) unlinkedHoldingClassRole++
+    }
+    if (unlinkedHoldingClassRole) {
       warnings.push(
-        `${multiClass.length} driver${multiClass.length === 1 ? ' has' : 's have'} raced in more than one class and hold a role for each — ${multiClass.join('; ')}. Nothing here removes a role, so take off the one they no longer drive by hand.`,
+        `${unlinkedHoldingClassRole} member${unlinkedHoldingClassRole === 1 ? ' holds' : 's hold'} a class role without being linked to a driver, and stay untouched until the link is made — an unlinked member's roles are somebody's claim about who they are, not this function's to revoke.`,
       )
     }
     if (notInGuild) {
@@ -366,13 +440,18 @@ Deno.serve(async (req) => {
       ok: true,
       dryRun,
       drivers_linked: drivers.length,
+      seats: seatOf.size,
       classes_mapped: classRoles.size,
-      results_read: read,
       granted,
+      revoked,
+      spectator_granted: spectatorOn,
+      spectator_removed: spectatorOff,
+      renamed,
+      owner_note: ownerSkipped,
       already_correct: alreadyCorrect,
       warnings,
     })
   } catch (e) {
-    return json({ error: `Class role sync failed — ${String((e as Error)?.message ?? e)}` }, 500)
+    return json({ error: `Class role reconcile failed — ${String((e as Error)?.message ?? e)}` }, 500)
   }
 })

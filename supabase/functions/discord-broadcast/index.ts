@@ -608,7 +608,7 @@ Deno.serve(async (req) => {
         const dismissed = pr.status === 'dismissed'
         const penalty = String(pr.penalty ?? '').trim()
         const round = ev?.round != null ? `Round ${ev.round}` : null
-        title = clip(['Stewards\u2019 decision', round, ev?.name].filter(Boolean).join(' \u2014 '), MAX_TITLE)
+        title = clip(['Stewards’ decision', round, ev?.name].filter(Boolean).join(' — '), MAX_TITLE)
 
         const fields: Record<string, unknown>[] = []
         if (against) fields.push({ name: 'Driver', value: clip(against, MAX_FIELD), inline: true })
@@ -619,8 +619,8 @@ Deno.serve(async (req) => {
         fields.push({
           name: 'Outcome',
           value: dismissed
-            ? 'Dismissed \u2014 no further action.'
-            : (penalty ? clip(penalty, MAX_FIELD) : 'Upheld \u2014 no penalty applied.'),
+            ? 'Dismissed — no further action.'
+            : (penalty ? clip(penalty, MAX_FIELD) : 'Upheld — no penalty applied.'),
           inline: false,
         })
 
@@ -632,7 +632,7 @@ Deno.serve(async (req) => {
           // yellow rather than being coloured like a punishment.
           color: dismissed ? CLEARED_GREEN : (penalty ? PENALTY_RED : HCR_YELLOW),
           fields,
-          footer: { text: 'HCR League \u00b7 race control \u00b7 decisions are final once published' },
+          footer: { text: 'HCR League · race control · decisions are final once published' },
         }
       } else {
         skipped.push({ key: row.dedupe_key, reason: `Unknown announcement kind "${row.kind}".` })

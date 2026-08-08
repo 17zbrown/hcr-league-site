@@ -129,6 +129,7 @@ interface Member {
   user?: { id?: string | null; username?: string | null; bot?: boolean | null } | null
   nick?: string | null
   joined_at?: string | null
+  roles?: string[] | null
 }
 
 interface Overwrite { id: string; type: number; allow?: string | null; deny?: string | null }
@@ -374,7 +375,7 @@ Deno.serve(async (req) => {
     }
 
     // --- departures: roll the member list and diff --------------------------------
-    const seen = new Map<string, { username: string; nick: string | null; joined: string | null }>()
+    const seen = new Map<string, { username: string; nick: string | null; joined: string | null; roles: string[] }>()
     let after = '0'
     let pages = 0
     let complete = false
@@ -397,6 +398,11 @@ Deno.serve(async (req) => {
           username: String(m.user?.username ?? ''),
           nick: m.nick ?? null,
           joined: m.joined_at ?? null,
+          // The member payload already carries every role id they hold, so keeping a
+          // copy costs no extra API call — and it is the only way the database can
+          // answer "who holds two class roles" or "who has Spectator AND a class",
+          // which the full-site audit could previously only prove in aggregate.
+          roles: Array.isArray(m.roles) ? m.roles.filter((r): r is string => typeof r === 'string' && r !== '') : [],
         })
       }
       if (batch.length < MEMBER_PAGE) { complete = true; break }
@@ -435,7 +441,7 @@ Deno.serve(async (req) => {
     const now = new Date().toISOString()
     const rows = [...seen.entries()].map(([id, m]) => ({
       user_id: id, username: m.username, nickname: m.nick, joined_at: m.joined,
-      last_seen: now, left_seen_at: null, announced_departure: false,
+      last_seen: now, left_seen_at: null, announced_departure: false, roles: m.roles,
     }))
     if (!dryRun) {
       for (let i = 0; i < rows.length; i += 500) {
@@ -461,6 +467,7 @@ Deno.serve(async (req) => {
         wouldWelcome: arrived.map((a) => a.name),
         wouldAnnounceDepartures: [...known.values()].filter((r) => !seen.has(r.user_id) && !r.left_seen_at).length,
         welcomeChannel: welcomeChannel ? `#welcome (${welcomeChannel})` : 'MISSING — no #welcome channel found',
+        currentGuideMessage: String(cfg.welcome_message_id ?? '') || '(none posted yet)',
         samplePreview: sampleId ? welcomeMessage([sampleId], ref) : '(no members to sample)',
         sampleIsReal: arrived.length > 0,
       })
@@ -481,9 +488,9 @@ Deno.serve(async (req) => {
         await db.from('discord_members').update({ welcomed_at: now })
           .in('user_id', arrived.map((a) => a.id))
 
-        const previous = String(cfg.welcome_message_id ?? '').trim()
-        if (previous && previous !== posted) {
-          const del = await discord(`/channels/${welcomeChannel}/messages/${previous}`, 'DELETE', botToken)
+        const previousGuide = String(cfg.welcome_message_id ?? '').trim()
+        if (previousGuide && previousGuide !== posted) {
+          const del = await discord(`/channels/${welcomeChannel}/messages/${previousGuide}`, 'DELETE', botToken)
           // A 404 means somebody already removed it by hand, which is a success for
           // our purposes: there is no stale copy left, which is all we wanted.
           if (!del.ok && del.status !== 404) {
