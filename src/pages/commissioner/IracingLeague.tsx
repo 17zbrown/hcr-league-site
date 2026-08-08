@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
-import { useCurrentSeason, useEntries, useSeasonResultsFull } from '../../lib/queries'
+import { useCurrentSeason, useEntries, useRegistrations, useSeasonResultsFull } from '../../lib/queries'
 import { resultsForDriver } from '../../lib/license'
 import { classColor } from '../../lib/format'
 import type { Driver, IracingLeagueState } from '../../lib/types'
@@ -63,11 +63,27 @@ const STATE_META: Record<IracingLeagueState, { label: string; note: string; tone
   },
 }
 
+/** Only the fields this page reads. useRegistrations returns more. */
+interface Registration {
+  id: string
+  user_id: string | null
+  driver_id: string | null
+  display_name: string | null
+  iracing_name: string | null
+  iracing_custid: string | null
+  preferred_class: string | null
+  driver?: { name?: string | null } | null
+}
+
 interface Row {
   driver: Driver
   number: string
   classId: string
   state: IracingLeagueState
+  /** The name to search for in iRacing, which is not always the roster name. */
+  iracingName: string | null
+  /** Registered but not yet given a car. They still need adding to the league. */
+  awaitingEntry?: boolean
 }
 
 export default function IracingLeague() {
@@ -75,6 +91,11 @@ export default function IracingLeague() {
   const { data: season } = useCurrentSeason()
   const { data: entries, isLoading } = useEntries(season?.id)
   const { data: seasonRows } = useSeasonResultsFull(season?.id)
+  // Registrations, not just entries. Somebody who signed up an hour ago needs adding
+  // to the iRacing league whether or not Race Control has assigned them a car yet —
+  // building this page from entries alone hid every new sign-up until they were put
+  // on the grid, which is exactly backwards for a queue of outstanding work.
+  const { data: registrations } = useRegistrations(season?.id)
 
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -82,6 +103,22 @@ export default function IracingLeague() {
 
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = []
+    const seen = new Set<string>()
+    // Customer IDs already on the grid. Two registrations here are not linked to a
+    // driver record at all (driver_id is null), so matching on driver id alone let
+    // the same person appear twice — once from their entry and once as "not on the
+    // grid yet". The iRacing customer ID is the identity that actually identifies a
+    // person across both, so it is what decides whether a row is a duplicate.
+    const custidsOnGrid = new Set<string>()
+    // A registration carries the iRacing name the driver typed themselves, which is
+    // what you actually search for in iRacing — the roster name is often a nickname.
+    const regByDriver = new Map<string, { iracing_name: string | null; iracing_custid: string | null }>()
+    const regByUser = new Map<string, { iracing_name: string | null; iracing_custid: string | null }>()
+    for (const r of (registrations ?? []) as Registration[]) {
+      if (r.driver_id) regByDriver.set(r.driver_id, r)
+      if (r.user_id) regByUser.set(r.user_id, r)
+    }
+
     for (const e of entries ?? []) {
       for (const link of e.drivers ?? []) {
         const d = link.driver
@@ -90,15 +127,48 @@ export default function IracingLeague() {
         // is in the league whether or not anyone remembered to tick the box, and
         // whether or not we know their customer ID.
         const raced = resultsForDriver(seasonRows ?? [], d.name).length > 0
+        const userId = (d as Driver & { user_id?: string | null }).user_id
+        const reg = regByDriver.get(d.id) ?? (userId ? regByUser.get(userId) : undefined)
+        // The customer ID can arrive on the registration before anyone copies it onto
+        // the driver record, so either source counts as knowing it.
+        const custid = String(d.iracing_custid ?? reg?.iracing_custid ?? '').trim()
         const state: IracingLeagueState =
           d.iracing_league_confirmed_at ? 'confirmed'
             : raced ? 'raced'
             : d.iracing_league_marked_at ? 'marked'
-            : !String(d.iracing_custid ?? '').trim() ? 'no-custid'
+            : !custid ? 'no-custid'
             : 'pending'
-        out.push({ driver: d, number: e.number, classId: e.class_id, state })
+        seen.add(d.id)
+        if (custid) custidsOnGrid.add(custid)
+        out.push({
+          driver: { ...d, iracing_custid: custid || null },
+          number: e.number, classId: e.class_id, state,
+          iracingName: reg?.iracing_name ?? null,
+        })
       }
     }
+
+    // Everyone who signed up but has no car yet. Without these the queue silently
+    // omits the newest sign-ups, who are precisely the people still to be added.
+    for (const r of (registrations ?? []) as Registration[]) {
+      if (r.driver_id && seen.has(r.driver_id)) continue
+      const custid = String(r.iracing_custid ?? '').trim()
+      if (custid && custidsOnGrid.has(custid)) continue // already listed via their entry
+      const name = r.driver?.name || r.display_name || r.iracing_name || 'Unnamed entry'
+      out.push({
+        driver: {
+          id: r.driver_id ?? `reg:${r.id}`,
+          name,
+          iracing_custid: custid || null,
+        } as Driver,
+        number: '—',
+        classId: r.preferred_class ?? '—',
+        state: custid ? 'pending' : 'no-custid',
+        iracingName: r.iracing_name ?? null,
+        awaitingEntry: true,
+      })
+    }
+
     return out.sort((a, b) => {
       // The work first, then the unactionable, then everything already settled.
       const rank: Record<IracingLeagueState, number> = {
@@ -106,15 +176,15 @@ export default function IracingLeague() {
       }
       return rank[a.state] - rank[b.state] || a.driver.name.localeCompare(b.driver.name)
     })
-  }, [entries, seasonRows])
+  }, [entries, seasonRows, registrations])
 
   const { query, setQuery, filtered, count, total } = useSearch(
-    rows, (r) => [r.driver.name, r.driver.iracing_custid, r.number, r.classId, r.state],
+    rows, (r) => [r.driver.name, r.iracingName, r.driver.iracing_custid, r.number, r.classId, r.state],
   )
   // The status column filters on the label a controller can actually read, not the
   // internal key — "to add" is what the badge says, so it is what must match.
   const cf = useColumnFilters<Row>({
-    driver: (r) => r.driver.name,
+    driver: (r) => [r.driver.name, r.iracingName].filter(Boolean).join(' '),
     entry: (r) => `#${r.number} ${r.classId}`,
     custid: (r) => r.driver.iracing_custid,
     state: (r) => STATE_META[r.state].label,
@@ -240,13 +310,33 @@ export default function IracingLeague() {
               const custid = String(r.driver.iracing_custid ?? '').trim()
               return (
                 <tr key={r.driver.id} className="border-b border-[var(--color-line)] last:border-0">
-                  <td className="px-4 py-3 font-semibold">{r.driver.name}</td>
                   <td className="px-4 py-3">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: classColor(r.classId) }} />
-                      <span className="tabular">#{r.number}</span>
-                      <span className="text-[var(--color-muted)]">{r.classId}</span>
-                    </span>
+                    <span className="font-semibold">{r.driver.name}</span>
+                    {/* The iRacing name is what you type into iRacing's search, and it
+                        often is not the roster name — "Benji Hoar" is "Benjamin Hoar"
+                        there. Shown underneath whenever the two differ. */}
+                    {r.iracingName && r.iracingName !== r.driver.name && (
+                      <span className="block text-xs text-[var(--color-muted)]">
+                        iRacing: {r.iracingName}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    {r.awaitingEntry ? (
+                      <span
+                        className="text-xs text-[var(--color-muted)]"
+                        title="Signed up but not yet given a car. They still need adding to the iRacing league."
+                      >
+                        Not on the grid yet
+                        {r.classId !== '—' && <span className="ml-1">· wants {r.classId}</span>}
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-2.5 w-2.5 rounded-full" style={{ background: classColor(r.classId) }} />
+                        <span className="tabular">#{r.number}</span>
+                        <span className="text-[var(--color-muted)]">{r.classId}</span>
+                      </span>
+                    )}
                   </td>
                   <td className="tabular px-4 py-3">
                     {custid ? (
