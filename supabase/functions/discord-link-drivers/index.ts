@@ -796,13 +796,19 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Steady-state observations go in `notes`, not `warnings`. discord_status_of
+    // turns any non-empty warnings[] into an amber run in the admin panel, and both
+    // of these are permanent facts about a server where people race without a site
+    // account — filing them as warnings would leave this automation amber forever
+    // and make the colour meaningless. Warnings are for things to fix.
+    const notes: string[] = []
     if (leftAlonePossible) {
-      warnings.push(
+      notes.push(
         `${leftAlonePossible} member${leftAlonePossible === 1 ? '' : 's'} answer to the name of an entered driver who is not linked yet, so their Spectator status was deliberately left alone until the link resolves.`,
       )
     }
     if (leftAloneClassRole) {
-      warnings.push(
+      notes.push(
         `${leftAloneClassRole} member${leftAloneClassRole === 1 ? ' holds' : 's hold'} a class role without a linked entry, so Spectator was not touched for them — the role is a claim they race, and the link that proves it either way is the fix, not a guess here.`,
       )
     }
@@ -851,6 +857,7 @@ Deno.serve(async (req) => {
       scan_capped: scanCapped,
       profiles_linked: profilesLinked,
       log_rows_written: toLog.length,
+      notes,
       warnings,
     })
   } catch (e) {

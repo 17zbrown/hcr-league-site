@@ -418,20 +418,27 @@ Deno.serve(async (req) => {
     }
 
     // --- report the queue this function is NOT allowed to fix ---
-    // Unlinked members holding a class role are the linker's backlog, not ours, but
-    // the number belongs in every report so the drain is visible.
+    // These go in `notes`, NOT `warnings`, and the distinction is load-bearing:
+    // public.discord_status_of marks a run 'warning' whenever warnings[] is
+    // non-empty, and the admin panel colours it accordingly. Both facts below are
+    // steady states, not faults — people race in this server without a site
+    // account, and that may never change — so filing them as warnings would leave
+    // two automations permanently amber and teach everyone to ignore the colour.
+    // A warning here means something needs fixing. A note means something is worth
+    // knowing.
     let unlinkedHoldingClassRole = 0
     for (const [uid, m] of membersById) {
       if (drivers.some((d) => String(d.discord_user_id) === uid)) continue
       if ([...classRoleIds].some((rid) => m.roles.has(rid))) unlinkedHoldingClassRole++
     }
+    const notes: string[] = []
     if (unlinkedHoldingClassRole) {
-      warnings.push(
+      notes.push(
         `${unlinkedHoldingClassRole} member${unlinkedHoldingClassRole === 1 ? ' holds' : 's hold'} a class role without being linked to a driver, and stay untouched until the link is made — an unlinked member's roles are somebody's claim about who they are, not this function's to revoke.`,
       )
     }
     if (notInGuild) {
-      warnings.push(
+      notes.push(
         `${notInGuild} linked driver${notInGuild === 1 ? ' is' : 's are'} not in the server (or not on a page this run read), so they were left alone.`,
       )
     }
@@ -449,6 +456,8 @@ Deno.serve(async (req) => {
       renamed,
       owner_note: ownerSkipped,
       already_correct: alreadyCorrect,
+      unlinked_with_class_role: unlinkedHoldingClassRole,
+      notes,
       warnings,
     })
   } catch (e) {
