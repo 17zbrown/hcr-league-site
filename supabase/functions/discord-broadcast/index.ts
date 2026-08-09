@@ -49,11 +49,17 @@ const SNOWFLAKE = /^\d{5,25}$/
 
 // Which announcements are worth interrupting the whole server for.
 //
-// Results only. A race finishing is the one thing here everybody is waiting on; the
-// race-week post (discord-race-week, separately) is the other. Standings, news and
-// race-control rulings publish quietly — they land in their channels for whoever
-// cares, and pinging sixty people for a news story is how a server gets muted.
-const PINGS: ReadonlySet<string> = new Set(['result'])
+// The league owner's standing instruction, and it has changed once: this was
+// results-only, and is now results, standings and news — everything the site
+// publishes to the server on its own. discord-race-week pings its own event post
+// separately, and any one-off announcement posted by hand pings too.
+//
+// PENALTIES AND RULINGS ARE DELIBERATELY ABSENT. They were not named in that
+// instruction, they are not announcements anybody asked for, and a stewarding
+// decision against one driver is the wrong reason to notify sixty people. Add
+// 'penalty' and 'ruling' here if that call ever changes — nothing else needs
+// touching.
+const PINGS: ReadonlySet<string> = new Set(['result', 'standings', 'news'])
 
 // The mention has to live in `content`. An @everyone written inside an embed renders
 // as plain text and notifies nobody — embeds are not scanned for mentions at all —
