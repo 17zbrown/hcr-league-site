@@ -56,13 +56,17 @@ export default function NewsAdmin() {
     qc.invalidateQueries({ queryKey: ['news', 'admin'] })
   }
 
-  if (isLoading) return <Skeleton className="h-96 w-full" />
-
+  // EVERY HOOK RUNS BEFORE THE FIRST RETURN. useSearch used to sit below the
+  // loading guard, so it was skipped on the first render and called on the second
+  // — React counts hooks per render and throws outright when the count changes,
+  // which is why this page died on open rather than degrading.
   const list = articles ?? []
   const drafts = list.filter((a) => !a.is_published).length
   const { query, setQuery, filtered, count, total } = useSearch(
     list, (a) => [a.title, a.dek, a.category, a.author, a.slug],
   )
+
+  if (isLoading) return <Skeleton className="h-96 w-full" />
 
   return (
     <div>

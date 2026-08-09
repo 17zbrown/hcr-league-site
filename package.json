@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/gen-og.mjs && tsc -b && vite build",
+    "build": "node scripts/gen-og.mjs && node scripts/check-hooks.mjs && tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "tsc -b --noEmit",
+    "lint": "tsc -b --noEmit && node scripts/check-hooks.mjs",
     "og": "node scripts/gen-og.mjs",
+    "check:hooks": "node scripts/check-hooks.mjs",
     "check:functions": "bash scripts/check-edge-functions.sh",
     "check:iracing": "node scripts/check-iracing-rules.mjs"
   },
