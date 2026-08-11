@@ -88,6 +88,20 @@ const EPHEMERAL = 1 << 6
  */
 const GATE_CUSTOM_ID = 'hcr_gate_enter'
 
+/**
+ * The attendance buttons, posted by discord-attendance.
+ *
+ * These carry a payload: `hcr_attend_yes:<event uuid>`. The race is named in the
+ * button itself so a press is self-describing — the alternative is inferring which
+ * race a click belongs to from "whatever is next", and the one time that inference
+ * is wrong (somebody scrolls up and presses last week's post) it records an answer
+ * against the wrong race and nobody ever notices. With the id present a stale
+ * button is either still correct or provably stale.
+ */
+const ATTEND_YES = 'hcr_attend_yes'
+const ATTEND_NO = 'hcr_attend_no'
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 const HEX = /^[0-9a-fA-F]+$/
 
 /** Hex string → bytes, or null if it is not clean, even-length hex. */
@@ -269,6 +283,48 @@ Deno.serve(async (req) => {
     }
 
     const customId = String(interaction.data?.custom_id ?? '')
+
+    // --- attendance -----------------------------------------------------------
+    // Handled before the gate check because these carry a payload after a colon
+    // and would never match an equality test.
+    if (customId.startsWith(`${ATTEND_YES}:`) || customId.startsWith(`${ATTEND_NO}:`)) {
+      const [prefix, eventId] = customId.split(':')
+      const planned = prefix === ATTEND_YES
+      if (!UUID.test(String(eventId ?? ''))) {
+        console.error(`discord-interactions: attendance button carried no usable event id (${customId})`)
+        return reply('That attendance post is out of date — use the most recent one.')
+      }
+      const clicker = String(interaction.member?.user?.id ?? interaction.user?.id ?? '').trim()
+      if (!clicker) return reply('Press this in the HCR League server rather than here.')
+
+      const url = Deno.env.get('SUPABASE_URL')!
+      const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+      const db = createClient(url, service)
+
+      // The race is named so the confirmation is checkable — pressing a button and
+      // being told "noted" gives no way to tell you answered the wrong week.
+      const { data: ev } = await db.from('events').select('round, name, status').eq('id', eventId).maybeSingle()
+      if (!ev) return reply('That race is no longer on the calendar.')
+      if (ev.status === 'complete') {
+        return reply(`Round ${ev.round} has already been run — that post is history now.`)
+      }
+
+      const { error } = await db.rpc('race_attendance_set', {
+        p_event: eventId, p_discord_user_id: clicker, p_planned: planned,
+      })
+      if (error) {
+        console.error(`discord-interactions: could not record attendance — ${error.message}`)
+        return reply(ASK_A_COMMISSIONER)
+      }
+
+      // Deliberately does NOT edit the public post. Every name lives in the private
+      // race-control channel; a public running list turns "who has not replied" into
+      // a scoreboard of who is ignoring the commissioner, and that was not the ask.
+      return reply(planned
+        ? `You are down as racing at Round ${ev.round} — ${ev.name} 🏁\n\nChanged your mind? Press "Can't make it" on the same post.`
+        : `Noted — you are not racing at Round ${ev.round} — ${ev.name}.\n\nIf that changes, press "I'm racing" on the same post.`)
+    }
+
     if (customId !== GATE_CUSTOM_ID) {
       console.error(`discord-interactions: unrecognised custom_id ${JSON.stringify(customId)}`)
       return reply('That button is out of date — ask a commissioner to repost the welcome message.')
