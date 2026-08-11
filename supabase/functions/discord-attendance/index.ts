@@ -168,11 +168,17 @@ Deno.serve(async (req) => {
 
     let dryRun = false
     let reviewEventId = ''
+    // {"force": true} opens the ask before its Wednesday. For starting a drive
+    // mid-week on a race that is already close, which is exactly the situation the
+    // very first one is in. It does NOT bypass the once-ever check — the row in
+    // race_attendance_posts still stops a second ask being posted.
+    let force = false
     try {
       const b = await req.json()
       if (b && typeof b === 'object') {
         const o = b as Record<string, unknown>
         if (o.dryRun === true) dryRun = true
+        if (o.force === true) force = true
         if (typeof o.review === 'string') reviewEventId = o.review
       }
     } catch { /* no body — normal daily run */ }
@@ -350,7 +356,7 @@ Deno.serve(async (req) => {
     const opensOn = wednesdayBefore(raceAt)
     const label = `Round ${next.round} — ${next.name}`
 
-    if (today.ymd < opensOn) {
+    if (today.ymd < opensOn && !force) {
       notes.push(`${label} opens for attendance on ${opensOn} (${today.ymd} today).`)
       return json({ ok: true, dryRun, next: label, opensOn, applied, notes, warnings })
     }
@@ -469,10 +475,27 @@ Deno.serve(async (req) => {
       allowed_mentions: { parse: ['everyone'] },
     })
     if (!rem.ok) return json({ error: `Could not post the reminder — ${rem.message}`, applied, warnings }, 502)
+    const remId = String((rem.data as { id?: string } | null)?.id ?? '')
+
+    // Recycle: yesterday's nudge comes down now that today's is up, so the channel
+    // carries one live reminder instead of four by race day. Deleted AFTER the new
+    // one posts — the reverse order would turn a transient Discord error into a day
+    // with no reminder at all. The ORIGINAL ask is never touched; it owns the
+    // buttons, and deleting it would take the whole drive down with it.
+    const previousNudge = String(post.reminder_message_id ?? '').trim()
+    if (previousNudge && previousNudge !== remId) {
+      const del = await discord(`/channels/${askChannel}/messages/${previousNudge}`, 'DELETE', botToken)
+      // A 404 means somebody already removed it by hand, which is the outcome we
+      // wanted anyway: no stale reminder left behind.
+      if (!del.ok && del.status !== 404) {
+        warnings.push(`Posted today's reminder but could not remove yesterday's — ${del.message}`)
+      }
+    }
 
     await db.from('race_attendance_posts').update({
       last_reminded_on: today.ymd,
       reminders_sent: Number(post.reminders_sent ?? 0) + 1,
+      reminder_message_id: remId || null,
     }).eq('event_id', String(next.id))
 
     applied.push(`reminded the server about ${label} (${silent.length} still silent)`)

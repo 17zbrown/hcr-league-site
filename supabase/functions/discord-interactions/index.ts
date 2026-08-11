@@ -221,6 +221,67 @@ async function discord(path: string, method: string, token: string, body?: unkno
            message: (parsed as { message?: string } | null)?.message ?? text.slice(0, 200) }
 }
 
+/**
+ * Redraw the race-control tally the moment somebody answers.
+ *
+ * THIS EMBED IS DUPLICATED FROM discord-attendance ON PURPOSE, and the two must be
+ * kept identical. The alternative — letting only the daily cron redraw it — leaves
+ * an answer invisible to staff for up to a day, which defeats the point of a live
+ * tally. Importing across functions is not possible (each is its own deployment),
+ * so the render is copied. If the columns or wording change in discord-attendance,
+ * change them here too, or the message will visibly reshape itself every time it
+ * alternates between the two writers.
+ *
+ * Best effort by design: a failure here is logged and swallowed. The answer is
+ * already saved, the member has been told so, and the daily run redraws it anyway
+ * — none of which is worth turning into a red "interaction failed" in their face.
+ */
+const NO_CAR = '_no car set_'
+async function refreshTally(
+  db: ReturnType<typeof createClient>, token: string, eventId: string,
+): Promise<void> {
+  const { data: post } = await db.from('race_attendance_posts')
+    .select('control_channel_id, control_message_id').eq('event_id', eventId).maybeSingle()
+  const channelId = String(post?.control_channel_id ?? '').trim()
+  const messageId = String(post?.control_message_id ?? '').trim()
+  if (!channelId || !messageId) return
+
+  const { data: ev } = await db.from('events')
+    .select('round, name, date, track_id').eq('id', eventId).maybeSingle()
+  if (!ev) return
+  const { data: track } = ev.track_id
+    ? await db.from('tracks').select('name, config').eq('id', ev.track_id).maybeSingle()
+    : { data: null }
+
+  const { data: rows } = await db.rpc('race_attendance_tally', { p_event: eventId })
+  const tally = (rows ?? []) as {
+    driver_name: string; class_id: string; car_number: string | null
+    car: string | null; answer: boolean | null
+  }[]
+  const list = (rs: typeof tally) => rs.length === 0 ? '—' : rs.map((r) =>
+    `\`${r.class_id}${r.car_number ? ` #${r.car_number}` : ''}\` **${r.driver_name}** — ${r.car?.trim() || NO_CAR}`
+  ).join('\n').slice(0, 1024)
+
+  const yes = tally.filter((r) => r.answer === true)
+  const no = tally.filter((r) => r.answer === false)
+  const silent = tally.filter((r) => r.answer === null)
+  const at = Math.floor(new Date(String(ev.date)).getTime() / 1000)
+
+  await discord(`/channels/${channelId}/messages/${messageId}`, 'PATCH', token, {
+    embeds: [{
+      title: `Attendance — Round ${ev.round} — ${ev.name}`,
+      description: `${[track?.name, track?.config].filter(Boolean).join(' · ')}\n<t:${at}:F> (<t:${at}:R>)`,
+      color: 0xf2e114,
+      fields: [
+        { name: `Racing (${yes.length})`, value: list(yes), inline: false },
+        { name: `Cannot make it (${no.length})`, value: list(no), inline: false },
+        { name: `No answer (${silent.length})`, value: list(silent), inline: false },
+      ],
+      footer: { text: `HCR League · staff only · ${tally.length} on the grid · updates as people answer` },
+    }],
+  })
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
@@ -315,6 +376,23 @@ Deno.serve(async (req) => {
       if (error) {
         console.error(`discord-interactions: could not record attendance — ${error.message}`)
         return reply(ASK_A_COMMISSIONER)
+      }
+
+      // Redraw the staff tally NOW rather than waiting for the daily run, so race
+      // control sees an answer within a second or two of it being given.
+      //
+      // Bounded, because Discord abandons an interaction that is not answered within
+      // THREE SECONDS and shows the member a red "This interaction failed" — which
+      // would be a lie, since their answer is already committed. The refresh gets
+      // 1.5s and is dropped if it overruns. Losing it costs nothing: the daily run
+      // redraws the same message from the same data.
+      const refreshToken = Deno.env.get('DISCORD_BOT_TOKEN')
+      if (refreshToken) {
+        await Promise.race([
+          refreshTally(db, refreshToken, eventId).catch((e) =>
+            console.error(`discord-interactions: tally refresh failed — ${String((e as Error)?.message ?? e)}`)),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
+        ])
       }
 
       // Deliberately does NOT edit the public post. Every name lives in the private
