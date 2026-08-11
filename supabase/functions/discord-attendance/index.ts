@@ -69,6 +69,7 @@ interface TallyRow {
   driver_name: string
   class_id: string
   car_number: string | null
+  car: string | null
   discord_user_id: string | null
   answer: boolean | null
 }
@@ -76,9 +77,15 @@ interface ReviewRow {
   driver_name: string
   class_id: string
   car_number: string | null
+  car: string | null
   planned: boolean
   raced: boolean
-  status: 'as_planned' | 'no_show' | 'unannounced' | 'absent'
+  status: 'as_planned' | 'no_show' | 'unannounced' | 'absent' | 'off_grid'
+  /** Straight from the imported classification — the race control sheet. */
+  finish_pos: number | null
+  cls_pos: number | null
+  laps: number | null
+  race_status: string | null
 }
 interface Channel { id: string; name?: string | null; type: number; parent_id?: string | null }
 
@@ -131,10 +138,22 @@ function isServiceRoleJwt(token: string): boolean {
   } catch { return false }
 }
 
-/** Names grouped by class, for an embed field. */
-function nameList(rows: { driver_name: string; class_id: string; car_number: string | null }[]): string {
+/**
+ * One line per driver, for an embed field.
+ *
+ * Leads with class and number because that is how race control reads a grid —
+ * "how many in GTD, and what are they in" — and ends with the car, which is the
+ * half that tells you the shape of the field. A driver whose entry has no car
+ * recorded says so rather than trailing an empty dash, so the gap is visible and
+ * fixable rather than looking like a rendering bug.
+ */
+function nameList(
+  rows: { driver_name: string; class_id: string; car_number: string | null; car: string | null }[],
+): string {
   if (!rows.length) return '—'
-  return clip(rows.map((r) => `${r.driver_name}${r.car_number ? ` #${r.car_number}` : ''} · ${r.class_id}`).join('\n'))
+  return clip(rows.map((r) =>
+    `\`${r.class_id}${r.car_number ? ` #${r.car_number}` : ''}\` **${r.driver_name}** — ${r.car?.trim() || '_no car set_'}`
+  ).join('\n'))
 }
 
 Deno.serve(async (req) => {
@@ -230,24 +249,43 @@ Deno.serve(async (req) => {
 
       const by = (s: string) => all.filter((r) => r.status === s)
       const asPlanned = by('as_planned'), noShow = by('no_show')
-      const unannounced = by('unannounced'), absent = by('absent')
-      const raced = asPlanned.length + unannounced.length
+      const unannounced = by('unannounced'), absent = by('absent'), offGrid = by('off_grid')
+      const raced = asPlanned.length + unannounced.length + offGrid.length
       const answered = asPlanned.length + noShow.length
 
+      // A line for somebody the classification has something to say about: where
+      // they finished and how far they got. "Raced" on its own hides the
+      // difference between a full distance and nine laps before a disconnection,
+      // and that difference is most of what race control is looking for.
+      const ranLine = (rows: ReviewRow[]) => rows.length === 0 ? '—' : clip(rows.map((r) => {
+        const bits = [
+          r.cls_pos != null ? `P${r.cls_pos} in class` : null,
+          r.laps != null ? `${r.laps} laps` : null,
+          r.race_status && !/^running$/i.test(r.race_status) ? r.race_status : null,
+        ].filter(Boolean)
+        return `\`${r.class_id}${r.car_number ? ` #${r.car_number}` : ''}\` **${r.driver_name}** — ${r.car?.trim() || '_no car set_'}${bits.length ? ` · ${bits.join(' · ')}` : ''}`
+      }).join('\n'))
+
       const fields: Record<string, unknown>[] = [
-        { name: `Raced (${raced})`, value: nameList([...asPlanned, ...unannounced]), inline: false },
+        { name: `Raced (${raced})`, value: ranLine([...asPlanned, ...unannounced, ...offGrid]), inline: false },
       ]
       if (noShow.length) {
-        fields.push({ name: `Said yes, did not race (${noShow.length})`, value: nameList(noShow), inline: false })
+        fields.push({ name: `Said they were racing, did not (${noShow.length})`, value: nameList(noShow), inline: false })
       }
       if (unannounced.length) {
-        fields.push({ name: `Raced without saying (${unannounced.length})`, value: nameList(unannounced), inline: false })
+        fields.push({ name: `Raced without saying (${unannounced.length})`, value: ranLine(unannounced), inline: false })
+      }
+      // Anybody in the classification with no entry on the grid. Worth its own
+      // heading rather than being folded in: it means somebody raced who race
+      // control was not expecting at all.
+      if (offGrid.length) {
+        fields.push({ name: `⚠️ In the results, not on the grid (${offGrid.length})`, value: ranLine(offGrid), inline: false })
       }
       fields.push({ name: `Neither answered nor raced (${absent.length})`, value: nameList(absent), inline: false })
 
       const accuracy = answered === 0
-        ? 'Nobody was asked before this race, so there is nothing to compare against — this is just who turned up.'
-        : `${asPlanned.length} of ${answered} who answered actually raced.`
+        ? 'Nobody was asked before this race, so there is nothing to compare against — this is just who turned up, taken from the imported classification.'
+        : `${asPlanned.length} of ${answered} who said they were racing actually did. Finishing positions and laps are from the race control sheet.`
 
       const res = await discord(`/channels/${controlChannel}/messages`, 'POST', botToken, {
         embeds: [{
