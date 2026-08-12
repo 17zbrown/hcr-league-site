@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
-import { useCurrentSeason, useDrivers, useEntries, useEvents, useLicenseResults, useMyChangeRequests, useProtests } from '../../lib/queries'
+import { useCurrentSeason, useDrivers, useEntries, useEvents, useLicenseResults, useMyChangeRequests, useMyRegistration, useProtests } from '../../lib/queries'
 import { buildPaceIndex, computeLicense, resultsForDriver } from '../../lib/license'
 import { classColor, fmtDateLong } from '../../lib/format'
 import { Section, Skeleton } from '../../components/ui'
@@ -35,20 +35,33 @@ export default function MemberPortal() {
   const { data: protests } = useProtests({ mine: true, userId: session?.user?.id })
   const { data: myRequests } = useMyChangeRequests()
 
-  // IS THIS MEMBER ACTUALLY ON THE GRID? Everything below assumes they are — three
-  // tabs about a car, a licence and a change request — and somebody who has signed
-  // in but never entered the season saw all of it with no idea what to do next. The
-  // one action they needed, /account, was a ghost button at the bottom of the first
-  // tab, and the Discord welcome guide called it "My Account", a label that appears
-  // nowhere on the site. That was the whole gap between joining and racing.
+  // WHERE IS THIS MEMBER IN THE JOURNEY? Everything below assumes they are on the
+  // grid — three tabs about a car, a licence and a change request — and somebody who
+  // signed in but never entered saw all of it with no idea what to do next. The one
+  // action they needed, /account, was a ghost button at the bottom of the first tab,
+  // and the Discord welcome guide called it "My Account", a label that appears
+  // nowhere on the site. That was the gap between joining and racing.
+  //
+  // THERE ARE THREE STATES, NOT TWO, and reading only `entries` collapses two of
+  // them into the wrong answer. Entering the season writes season_registrations;
+  // being placed on the grid writes entries; and there is a real, human-length gap
+  // between the two while race control works through the list. Judging by entries
+  // alone told a driver who had submitted the form minutes earlier — and been told
+  // "you're entered" — that they were not on the grid, and offered them the same
+  // button again. They would reasonably fill it in twice.
   const { data: season } = useCurrentSeason()
   const { data: seasonEntries, isLoading: entriesLoading } = useEntries(season?.id)
+  const { data: myReg, isLoading: regLoading } = useMyRegistration(season?.id, session?.user?.id)
   const hasEntry = useMemo(
     () =>
       !!profile?.driver_id &&
       (seasonEntries ?? []).some((e) => (e.drivers ?? []).some((l) => l.driver?.id === profile.driver_id)),
     [seasonEntries, profile?.driver_id],
   )
+  // 'waiting' covers every non-rejected registration that has not yet become a seat.
+  // Deliberately generous: if the status vocabulary ever gains a value, somebody who
+  // has entered is told "we have it" rather than "you have not entered".
+  const waitingOnRaceControl = !hasEntry && !!myReg && myReg.status !== 'rejected'
 
   // The badge counts what the member is WAITING ON, not everything they have ever
   // filed. A resolved protest from March is not an outstanding action, and putting it
@@ -79,23 +92,39 @@ export default function MemberPortal() {
       )}
 
       {/*
-        The next step, for the one person who most needs it.
-        Only while we KNOW there is no entry — rendering this during the load would
-        flash "you are not on the grid" at drivers who are, which is worse than
-        showing nothing for a moment.
+        The next step, for the one person who most needs it — and nothing at all for
+        somebody already racing.
+
+        Held until BOTH reads have landed. Rendering mid-load would flash "you are
+        not on the grid" at a driver who is, and that sentence is alarming enough
+        that a flash of it is worse than a moment of nothing.
       */}
-      {!entriesLoading && !hasEntry && (
-        <div className="mb-8 rounded-2xl border border-[var(--color-brand)] bg-[var(--color-brand)]/[0.08] p-6">
-          <h2 className="font-display text-2xl leading-tight">You are not on this season's grid yet</h2>
-          <p className="mt-2 max-w-2xl text-sm text-[var(--color-muted)]">
-            Entering takes about two minutes — your class, your car, two car numbers and your
-            iRacing details. Race control confirms the slot and sends your iRacing league invite
-            from there.
-          </p>
-          <Link to="/account" className="hcr-btn hcr-btn-primary mt-4 inline-flex">
-            Enter the season →
-          </Link>
-        </div>
+      {!entriesLoading && !regLoading && !hasEntry && (
+        waitingOnRaceControl ? (
+          <div className="mb-8 rounded-2xl border border-[var(--color-line)] bg-[var(--color-mist)] p-6">
+            <h2 className="font-display text-2xl leading-tight">Your entry is in</h2>
+            <p className="mt-2 max-w-2xl text-sm text-[var(--color-muted)]">
+              Race control is placing you on the grid and will send your iRacing league invite —
+              you need to accept that invite before you can join the race session. Nothing else to
+              do here; your car appears on this page once the slot is confirmed.
+            </p>
+            <Link to="/account" className="hcr-btn hcr-btn-ghost mt-4 inline-flex">
+              Review what you sent
+            </Link>
+          </div>
+        ) : (
+          <div className="mb-8 rounded-2xl border border-[var(--color-brand)] bg-[var(--color-brand)]/[0.08] p-6">
+            <h2 className="font-display text-2xl leading-tight">You are not on this season's grid yet</h2>
+            <p className="mt-2 max-w-2xl text-sm text-[var(--color-muted)]">
+              Entering takes about two minutes — your class, your car, two car numbers and your
+              iRacing details. Race control confirms the slot and sends your iRacing league invite
+              from there.
+            </p>
+            <Link to="/account" className="hcr-btn hcr-btn-primary mt-4 inline-flex">
+              Enter the season →
+            </Link>
+          </div>
+        )
       )}
 
       <div className="mb-8 flex flex-wrap gap-1 border-b border-[var(--color-line)]">

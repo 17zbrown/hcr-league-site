@@ -484,6 +484,35 @@ export function useRegistrations(seasonId?: string) {
   })
 }
 
+/**
+ * The signed-in member's OWN registration for a season, if they have one.
+ *
+ * Separate from useRegistrations, which is the commissioner's list and is gated by
+ * RLS to staff. This one is scoped to the caller by user_id, so a member can see
+ * the state of the thing they submitted — which they could not before, and which is
+ * why the portal used to tell somebody who had just entered that they had not.
+ *
+ * Entering the season writes season_registrations. Being placed on the grid writes
+ * entries. Those are two different facts and there is a real, human-length gap
+ * between them, so anything reporting "are you in?" has to read both.
+ */
+export function useMyRegistration(seasonId?: string, userId?: string) {
+  return useQuery({
+    enabled: !!seasonId && !!userId,
+    queryKey: ['my-registration', seasonId, userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('season_registrations')
+        .select('id, status, created_at, preferred_class, preferred_car, preferred_number')
+        .eq('season_id', seasonId!)
+        .eq('user_id', userId!)
+        .maybeSingle()
+      if (error) throw error
+      return data ?? null
+    },
+  })
+}
+
 export function useChampions() {
   return useQuery({
     queryKey: ['champions'],
