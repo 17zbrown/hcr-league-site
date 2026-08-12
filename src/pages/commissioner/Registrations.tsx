@@ -8,11 +8,22 @@ import { ColumnFilterRow, ColumnFilterToggle, SearchBox, useColumnFilters, useSe
 
 const STATUS = ['pending', 'approved', 'rostered', 'declined']
 
-/** The statuses that mean "we have accepted this entry". Declining needs no data. */
+/** The statuses that mean "we have accepted this sign-up". Declining needs no data. */
 const ACCEPTING = ['approved', 'rostered']
 
 /**
- * Why an entry cannot be accepted yet, or null if it can.
+ * Sign-ups from the web form — NOT the grid.
+ *
+ * This was labelled "Season Entries", which is the one piece of copy in the portal
+ * that actively lied: it reads season_registrations, so it showed the handful of
+ * people who used the form while the grid on the Grid tab held thirty-nine cars.
+ * Anyone checking "is everyone entered?" here got the wrong answer. Signing up and
+ * being placed on the grid are two different facts with a human-length gap between
+ * them, and this page is only ever about the first one.
+ */
+
+/**
+ * Why a sign-up cannot be accepted yet, or null if it can.
  *
  * Mirrors the CHECK constraint on season_registrations: a full iRacing name
  * (first and last) and a numeric customer ID. Staff cannot supply either — only
@@ -50,14 +61,13 @@ export default function Registrations() {
     class: (r) => r.preferred_class,
     car: (r) => r.preferred_car,
     number: (r) => [r.preferred_number, r.preferred_number_alt].filter(Boolean).join(' '),
-    team: (r) => (r.driver?.team_id ? 'Yes' : 'Free agent'),
     status: (r) => r.status,
   })
   const shown = cf.apply(filtered)
 
   const setStatus = async (id: string, status: string) => {
     setErr(null)
-    // An entry cannot be accepted without the two fields that identify the driver
+    // A sign-up cannot be accepted without the two fields that identify the driver
     // in iRacing. The CHECK constraint on season_registrations means no such row
     // should exist, so this is a backstop rather than the enforcement — it keeps
     // the rule visible at the point where accepting actually happens, and refuses
@@ -66,7 +76,7 @@ export default function Registrations() {
       const r = (regs ?? []).find((x: any) => x.id === id)
       const missing = missingIracingIdentity(r)
       if (missing) {
-        setErr(`Cannot mark this entry ${status}: ${missing} Ask the driver to complete their entry first.`)
+        setErr(`Cannot mark this sign-up ${status}: ${missing} Ask the driver to complete their sign-up first.`)
         return
       }
     }
@@ -79,24 +89,25 @@ export default function Registrations() {
 
   return (
     <div>
-      <h2 className="mb-2 text-3xl">Season Entries</h2>
-      <p className="mb-6 text-sm text-[var(--color-muted)]">
-        Everyone who has entered {season?.name ?? 'the season'}. Confirm entries and track who's
-        been placed on the grid.
+      <h2 className="mb-2 text-3xl">Signups</h2>
+      <p className="mb-6 max-w-2xl text-sm text-[var(--color-muted)]">
+        Submissions to the {season?.name ?? 'season'} sign-up form — what each driver asked for,
+        and how far along it is. This is not the grid: the cars actually running are on{' '}
+        <strong>Grid</strong>, and plenty of them never came through this form.
       </p>
 
       {err && <p className="mb-4 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">{err}</p>}
 
       {(!regs || regs.length === 0) ? (
         <p className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 text-sm text-[var(--color-muted)]">
-          No entries yet. Members enter from their account page.
+          Nobody has used the sign-up form yet. Members sign up from their account page.
         </p>
       ) : (
         <>
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <SearchBox
             value={query} onChange={setQuery} count={count} total={total}
-            placeholder="Search entries by driver, iRacing name, ID, class, car or status…"
+            placeholder="Search sign-ups by driver, iRacing name, ID, class, car or status…"
             className="max-w-xl flex-1"
           />
           <ColumnFilterToggle ctl={cf} />
@@ -112,7 +123,6 @@ export default function Registrations() {
                 <th className="px-4 py-3">Class</th>
                 <th className="px-4 py-3">Car</th>
                 <th className="px-4 py-3">No. wanted</th>
-                <th className="px-4 py-3">On team?</th>
                 <th className="px-4 py-3">Status</th>
               </tr>
               <ColumnFilterRow
@@ -125,7 +135,6 @@ export default function Registrations() {
                   { key: 'class', label: 'Class' },
                   { key: 'car', label: 'Car' },
                   { key: 'number', label: 'Number wanted' },
-                  { key: 'team', label: 'On a team' },
                   { key: 'status', label: 'Status' },
                 ]}
               />
@@ -133,8 +142,8 @@ export default function Registrations() {
             <tbody>
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-8 text-center text-[var(--color-muted)]">
-                    No entries match {cf.active > 0 && query.trim() ? 'the search and column filters' : cf.active > 0 ? 'these column filters' : 'that search'}.
+                  <td colSpan={8} className="px-4 py-8 text-center text-[var(--color-muted)]">
+                    No sign-ups match {cf.active > 0 && query.trim() ? 'the search and column filters' : cf.active > 0 ? 'these column filters' : 'that search'}.
                   </td>
                 </tr>
               )}
@@ -160,7 +169,6 @@ export default function Registrations() {
                       ? `#${r.preferred_number}${r.preferred_number_alt ? ` / #${r.preferred_number_alt}` : ''}`
                       : '—'}
                   </td>
-                  <td className="px-4 py-3 text-[var(--color-muted)]">{r.driver?.team_id ? 'Yes' : 'Free agent'}</td>
                   <td className="px-4 py-3">
                     <select
                       className="hcr-select !py-1.5 !text-xs"

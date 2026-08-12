@@ -116,8 +116,24 @@ export interface Driver {
   team_id: string | null
   irating: number | null
   license_override: string | null
-  points_adjust: number
+  /**
+   * Steward correction to a season total. Nullable on purpose: zero and "nobody has
+   * adjusted this" score identically but mean different things, and only one of them
+   * should survive somebody clearing the field.
+   */
+  points_adjust: number | null
   iracing_custid: string | null
+  /**
+   * The auth account this driver is bound to. Written by sign-up and by the Discord
+   * linker — never edited by hand, because a wrong value hands one person's portal
+   * and entry to somebody else.
+   */
+  user_id?: string | null
+  /** Discord snowflake. The attendance bot can only reach a driver through this. */
+  discord_user_id?: string | null
+  /** Tier the Discord sync last granted a role for. Derived downstream, never authored. */
+  license_current?: string | null
+  created_at?: string | null
   /** Self-reported: an admin said they added this driver to the iRacing league. */
   iracing_league_marked_at?: string | null
   /**

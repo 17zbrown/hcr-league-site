@@ -16,6 +16,12 @@ import { ColumnFilterRow, ColumnFilterToggle, SearchBox, useColumnFilters, useSe
  * drives, and changing it changes it for his team-mates too. Putting the fields on the
  * thing they actually describe makes that obvious instead of surprising.
  *
+ * entry_drivers has a composite key and no unique constraint on entry_id, so a second
+ * driver on a car is legal even though today every car has exactly one. Folding this
+ * into Drivers would pass every test on the current data and then, the first time a
+ * co-driver appeared, show one car on two rows with two Save buttons fighting over the
+ * same number. That is why this stays entry-grain no matter how similar it looks.
+ *
  * It also closes a real hole: Race Control could already approve a class or car change
  * request and then had nowhere to apply it. The queue could accept work the site could
  * not finish.
@@ -48,13 +54,12 @@ export default function CarsAdmin() {
   }))
 
   const { query, setQuery, filtered, count, total } = useSearch(
-    withNames, (r) => [r.entry.number, r.entry.class_id, r.entry.car, r.entry.team?.name, r.who],
+    withNames, (r) => [r.entry.number, r.entry.class_id, r.entry.car, r.who],
   )
   const cf = useColumnFilters<(typeof withNames)[number]>({
     number: (r) => r.entry.number,
     class: (r) => r.entry.class_id,
     car: (r) => r.entry.car,
-    team: (r) => r.entry.team?.name ?? 'Free agent',
     drivers: (r) => r.who,
   })
   const shown = cf.apply(filtered)
@@ -63,11 +68,12 @@ export default function CarsAdmin() {
 
   return (
     <div>
-      <h2 className="mb-2 text-3xl">Cars</h2>
+      <h2 className="mb-2 text-3xl">Grid</h2>
       <p className="mb-6 max-w-2xl text-sm text-[var(--color-muted)]">
-        Every car on this season’s grid. Class, model and number live on the car rather than
-        the driver, because a team’s car is shared — changing its class changes it for
-        everyone in it. Numbers are league-wide and the server refuses a duplicate.
+        Every car actually running this season — this is the grid, not the sign-up list.
+        Class, model and number live on the car rather than the driver, because a car can be
+        shared; changing its class changes it for everyone in it. Numbers are league-wide and
+        the server refuses a duplicate.
       </p>
 
       {err && (
@@ -90,7 +96,6 @@ export default function CarsAdmin() {
               <th className="px-4 py-3">No.</th>
               <th className="px-4 py-3">Class</th>
               <th className="px-4 py-3">Car</th>
-              <th className="px-4 py-3">Team</th>
               <th className="px-4 py-3">Drivers</th>
               <th className="px-4 py-3" />
             </tr>
@@ -100,7 +105,6 @@ export default function CarsAdmin() {
                 { key: 'number', label: 'Number' },
                 { key: 'class', label: 'Class' },
                 { key: 'car', label: 'Car' },
-                { key: 'team', label: 'Team' },
                 { key: 'drivers', label: 'Drivers' },
                 null,
               ]}
@@ -213,7 +217,6 @@ function CarRow({
           {(CAR_SUGGESTIONS[classId] ?? []).map((c) => <option key={c} value={c} />)}
         </datalist>
       </td>
-      <td className="px-4 py-2 text-[var(--color-muted)]">{entry.team?.name ?? 'Free agent'}</td>
       <td className="px-4 py-2">{who || <span className="text-[var(--color-faint)]">nobody assigned</span>}</td>
       <td className="px-4 py-2 text-right">
         <button

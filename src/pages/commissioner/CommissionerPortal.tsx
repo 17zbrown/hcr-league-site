@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom'
 import DashboardOverview from './DashboardOverview'
 import Members from './Members'
 import Registrations from './Registrations'
-import TeamsAdmin from './TeamsAdmin'
 import DriversAdmin from './DriversAdmin'
 import ScheduleAdmin from './ScheduleAdmin'
 import ResultsAdmin from './ResultsAdmin'
@@ -11,18 +10,24 @@ import NewsAdmin from './NewsAdmin'
 import AutomationAdmin from './AutomationAdmin'
 import LeagueInfo from './LeagueInfo'
 import DiscordSettings from './DiscordSettings'
-import IracingLeague from './IracingLeague'
 import CarsAdmin from './CarsAdmin'
 
 /**
  * Race Control Dashboard — the SaaS-console layout (sidebar of grouped
  * sections, content pane) in the site's paddock-catalog language: white
  * ground, near-black rail, mono micro-labels, yellow as the active accent.
+ *
+ * The People group is four sections and each one answers a different question, which
+ * is the test a new tab has to pass. Drivers is a PERSON, Grid is a CAR, Signups is a
+ * SUBMISSION to the web form, Members is a SITE ACCOUNT. They looked interchangeable
+ * only because two of them were misnamed: "Cars" was really the grid, and "Season
+ * Entries" showed the seven people who used the form rather than the thirty-nine on
+ * the grid, which is the one that actually misled.
  */
 type TabId =
   | 'overview' | 'results' | 'schedule'
-  | 'drivers' | 'teams' | 'cars' | 'members' | 'registrations'
-  | 'news' | 'automation' | 'iracing'
+  | 'drivers' | 'cars' | 'members' | 'registrations'
+  | 'news' | 'automation'
   | 'info' | 'discord'
 
 interface NavItem { id: TabId; label: string }
@@ -41,11 +46,9 @@ const GROUPS: NavGroup[] = [
     label: 'People',
     items: [
       { id: 'drivers', label: 'Drivers' },
-      { id: 'teams', label: 'Teams' },
-      { id: 'cars', label: 'Cars' },
+      { id: 'cars', label: 'Grid' },
+      { id: 'registrations', label: 'Signups' },
       { id: 'members', label: 'Members & Roles' },
-      { id: 'registrations', label: 'Season Entries' },
-      { id: 'iracing', label: 'iRacing League' },
     ],
   },
   {
@@ -64,29 +67,58 @@ const GROUPS: NavGroup[] = [
   },
 ]
 
+const KNOWN = new Set<string>(GROUPS.flatMap((g) => g.items.map((i) => i.id as string)))
+
+/**
+ * Sections that no longer exist, and where their work went.
+ *
+ * A stale link that silently lands on the dashboard is indistinguishable from a
+ * broken portal, so a retired id resolves to the section that absorbed it and says
+ * so out loud rather than being swallowed.
+ */
+const RETIRED: Record<string, { to: TabId; note: string }> = {
+  teams: {
+    to: 'cars',
+    note: 'Teams is gone — HCR fields no teams, and a car’s number, class and model live on the Grid.',
+  },
+  iracing: {
+    to: 'drivers',
+    note: 'The iRacing league queue now lives inside Drivers, on the same rows it was asking about.',
+  },
+}
+
+/** Where a fresh load should land, honouring ?tab= and any retired id in it. */
+function landing(): { tab: TabId; notice: string | null } {
+  const asked = new URLSearchParams(window.location.search).get('tab')
+  if (!asked) return { tab: 'overview', notice: null }
+  const retired = RETIRED[asked]
+  if (retired) return { tab: retired.to, notice: retired.note }
+  return KNOWN.has(asked) ? { tab: asked as TabId, notice: null } : { tab: 'overview', notice: null }
+}
+
 export default function CommissionerPortal() {
-  const [tab, setTab] = useState<TabId>('overview')
+  const [start] = useState(landing)
+  const [tab, setTab] = useState<TabId>(start.tab)
+  const [notice, setNotice] = useState<string | null>(start.notice)
   const navigate = useNavigate()
+
+  const go = (t: string) => {
+    if (t === 'protests') { navigate('/control'); return } // steward queue lives there
+    const retired = RETIRED[t]
+    if (retired) { setTab(retired.to); setNotice(retired.note); return }
+    setTab(KNOWN.has(t) ? (t as TabId) : 'overview')
+    setNotice(KNOWN.has(t) ? null : `There is no “${t}” section any more, so this is the dashboard.`)
+  }
 
   const panel = (() => {
     switch (tab) {
-      case 'overview': return (
-        <DashboardOverview
-          onNavigate={(t) => {
-            if (t === 'protests') { navigate('/control'); return } // steward queue lives there
-            const known = GROUPS.flatMap((g) => g.items.map((i) => i.id as string))
-            setTab(known.includes(t) ? (t as TabId) : 'overview')
-          }}
-        />
-      )
+      case 'overview': return <DashboardOverview onNavigate={go} />
       case 'results': return <ResultsAdmin />
       case 'schedule': return <ScheduleAdmin />
       case 'drivers': return <DriversAdmin />
-      case 'teams': return <TeamsAdmin />
       case 'members': return <Members />
       case 'registrations': return <Registrations />
       case 'cars': return <CarsAdmin />
-      case 'iracing': return <IracingLeague />
       case 'news': return <NewsAdmin />
       case 'automation': return <AutomationAdmin />
       case 'info': return <LeagueInfo />
@@ -124,7 +156,7 @@ export default function CommissionerPortal() {
                     return (
                       <button
                         key={t.id}
-                        onClick={() => setTab(t.id)}
+                        onClick={() => { setTab(t.id); setNotice(null) }}
                         aria-current={active ? 'page' : undefined}
                         className={`min-h-11 whitespace-nowrap rounded-lg px-3.5 py-2.5 text-left font-alt text-[13px] font-bold transition-colors ${
                           active
@@ -142,7 +174,22 @@ export default function CommissionerPortal() {
           </div>
         </nav>
 
-        <div className="min-w-0">{panel}</div>
+        <div className="min-w-0">
+          {notice && (
+            <div className="mb-4 flex items-start justify-between gap-3 rounded-lg bg-[var(--color-brand)]/15 px-4 py-3 text-sm">
+              <span>{notice}</span>
+              <button
+                type="button"
+                onClick={() => setNotice(null)}
+                aria-label="Dismiss"
+                className="shrink-0 rounded px-1.5 text-[var(--color-muted)] hover:text-[var(--color-ink)]"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          {panel}
+        </div>
       </div>
     </div>
   )

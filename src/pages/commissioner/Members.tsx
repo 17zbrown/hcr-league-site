@@ -1,15 +1,27 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
-import { useMembers, useTeams } from '../../lib/queries'
+import { useMembers } from '../../lib/queries'
 import type { Profile } from '../../lib/types'
 import { Skeleton } from '../../components/ui'
 import { SearchBox, useSearch } from '../../components/SearchBox'
 
+/**
+ * Site accounts, not drivers.
+ *
+ * Ten profiles against thirty-nine drivers, and only five drivers carry a user_id at
+ * all — so this and the roster are two nearly-disjoint sets that happen to share some
+ * names. Merging them would bury thirty-four drivers under empty account columns and
+ * drop the accounts that never race, including any commissioner who does not.
+ *
+ * The Team Manager controls that used to sit here are gone with the Teams section:
+ * HCR fields no teams, so the checkbox granted a role over nothing and the select had
+ * nothing to choose. Portal access is the only thing this page decides now.
+ */
+
 export default function Members() {
   const qc = useQueryClient()
   const { data: members, isLoading } = useMembers()
-  const { data: teams } = useTeams()
   const { query, setQuery, filtered, count, total } = useSearch(
     (members ?? []) as { display_name?: string | null; email?: string | null; role?: string | null }[],
     (m) => [m.display_name, m.email, m.role],
@@ -20,9 +32,10 @@ export default function Members() {
   return (
     <div>
       <h2 className="mb-2 text-3xl">Members &amp; Roles</h2>
-      <p className="mb-6 text-sm text-[var(--color-muted)]">
-        Grant a member Team Manager access and assign the team they run. Commissioner status is
-        set from the admin list.
+      <p className="mb-6 max-w-2xl text-sm text-[var(--color-muted)]">
+        People with a site account, and how much of the portal each one can reach. Most drivers
+        have no account, so this is a shorter list than the roster on <strong>Drivers</strong>.
+        Commissioner status is set from the admin list, not here.
       </p>
 
       <SearchBox
@@ -32,7 +45,7 @@ export default function Members() {
       />
       <div className="space-y-2">
         {filtered.map((m: any) => (
-          <MemberRow key={m.id} member={m as Profile} teams={teams ?? []} onSaved={() => qc.invalidateQueries({ queryKey: ['members'] })} />
+          <MemberRow key={m.id} member={m as Profile} onSaved={() => qc.invalidateQueries({ queryKey: ['members'] })} />
         ))}
         {(!members || members.length === 0) && (
           <p className="text-sm text-[var(--color-muted)]">No members yet.</p>
@@ -42,9 +55,7 @@ export default function Members() {
   )
 }
 
-function MemberRow({ member, teams, onSaved }: { member: Profile; teams: any[]; onSaved: () => void }) {
-  const [isManager, setIsManager] = useState(member.is_team_manager)
-  const [teamId, setTeamId] = useState<string>(member.managed_team_id ?? '')
+function MemberRow({ member, onSaved }: { member: Profile; onSaved: () => void }) {
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,31 +63,18 @@ function MemberRow({ member, teams, onSaved }: { member: Profile; teams: any[]; 
   const [role, setRole] = useState<string>((member as { role?: string }).role ?? 'member')
 
   useEffect(() => {
-    setIsManager(member.is_team_manager)
-    setTeamId(member.managed_team_id ?? '')
     setRole((member as { role?: string }).role ?? 'member')
-  }, [member.is_team_manager, member.managed_team_id, member])
+  }, [member])
 
-  const dirty =
-    isManager !== member.is_team_manager ||
-    (teamId || null) !== (member.managed_team_id ?? null) ||
-    role !== ((member as { role?: string }).role ?? 'member')
+  const dirty = role !== ((member as { role?: string }).role ?? 'member')
 
   const save = async () => {
     setBusy(true)
     setError(null)
-    // portal access role (member / race_control / admin)
-    const roleRes = await supabase.from('profiles').update({ role }).eq('id', member.id)
-    if (roleRes.error) {
-      setError(roleRes.error.message)
-      setBusy(false)
-      return
-    }
-    const { error } = await supabase.rpc('set_member_role', {
-      p_user_id: member.id,
-      p_is_team_manager: isManager,
-      p_managed_team_id: isManager && teamId ? teamId : null,
-    })
+    // Portal access only. set_member_role is not called any more: it writes nothing
+    // but is_team_manager and managed_team_id, and passing false/null on every save
+    // would be a silent revoke dressed up as a role change.
+    const { error } = await supabase.from('profiles').update({ role }).eq('id', member.id)
     if (error) setError(error.message)
     else {
       setSaved(true)
@@ -87,7 +85,7 @@ function MemberRow({ member, teams, onSaved }: { member: Profile; teams: any[]; 
   }
 
   return (
-    <div className="grid items-center gap-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 md:grid-cols-[1.4fr_150px_auto_1.2fr_auto]">
+    <div className="grid items-center gap-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4 md:grid-cols-[1.6fr_170px_auto]">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span className="truncate font-semibold">{member.display_name ?? member.email}</span>
@@ -102,22 +100,10 @@ function MemberRow({ member, teams, onSaved }: { member: Profile; teams: any[]; 
         <option value="admin">Admin</option>
       </select>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={isManager} onChange={(e) => setIsManager(e.target.checked)} className="h-5 w-5 accent-[var(--color-blue)]" />
-        Team Manager
-      </label>
-
-      <select className="hcr-select !py-2" value={teamId} onChange={(e) => setTeamId(e.target.value)} disabled={!isManager}>
-        <option value="">— No team —</option>
-        {teams.map((t) => (
-          <option key={t.id} value={t.id}>#{t.number} {t.name}</option>
-        ))}
-      </select>
-
       <button onClick={save} disabled={!dirty || busy} className="hcr-btn hcr-btn-dark !py-2 !text-xs">
         {busy ? '…' : saved ? 'Saved ✓' : 'Save'}
       </button>
-      {error && <p className="text-xs text-[var(--color-red)] md:col-span-4">{error}</p>}
+      {error && <p className="text-xs text-[var(--color-red)] md:col-span-3">{error}</p>}
     </div>
   )
 }

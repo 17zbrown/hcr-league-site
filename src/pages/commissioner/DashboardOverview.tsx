@@ -190,7 +190,10 @@ export default function DashboardOverview({
   const progressPct = totalRounds > 0 ? Math.round((completedCount / totalRounds) * 100) : 0
 
   const driverCount = drivers?.length ?? 0
-  const freeAgents = (drivers ?? []).filter((d) => !d.team_id).length
+  // Not "how many are free agents" — with no teams in the league that was every
+  // driver, every time. The Discord gap is the number that actually needs acting on:
+  // the attendance bot can only reach a driver through their snowflake.
+  const noDiscord = (drivers ?? []).filter((d) => !String(d.discord_user_id ?? '').trim()).length
   const openProtests = protestsQ.data?.length ?? 0
   const publishedCount = (newsQ.data ?? []).filter((n) => n.is_published).length
   const draftCount = (newsQ.data ?? []).length - publishedCount
@@ -253,7 +256,11 @@ export default function DashboardOverview({
         <StatCard
           label="Drivers on roster"
           value={driverCount}
-          hint={`${teams?.length ?? 0} teams · ${freeAgents} free agent${freeAgents === 1 ? '' : 's'}`}
+          hint={
+            noDiscord > 0
+              ? `${noDiscord} with no Discord ID — the bot cannot reach them`
+              : 'Every driver has a Discord ID'
+          }
           onClick={go('drivers')}
         />
         {!protestsQ.isError && (
