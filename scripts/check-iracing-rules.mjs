@@ -44,14 +44,14 @@ function extract(source, label, pattern) {
   return new RegExp(m[1])
 }
 
-const account = read('src/pages/Account.tsx')
+const entryForm = read('src/components/SeasonEntryForm.tsx')
 const admin = read('src/pages/commissioner/Registrations.tsx')
 
 const layers = [
   {
     name: 'entry form',
-    name_re: extract(account, 'IRACING_FULL_NAME', /const IRACING_FULL_NAME = \/(.+?)\/\r?\n/),
-    cid_re: extract(account, 'IRACING_CUSTID', /const IRACING_CUSTID = \/(.+?)\/\r?\n/),
+    name_re: extract(entryForm, 'IRACING_FULL_NAME', /const IRACING_FULL_NAME = \/(.+?)\/\r?\n/),
+    cid_re: extract(entryForm, 'IRACING_CUSTID', /const IRACING_CUSTID = \/(.+?)\/\r?\n/),
   },
   {
     name: 'accept guard',

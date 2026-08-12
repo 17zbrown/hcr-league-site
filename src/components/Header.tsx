@@ -14,6 +14,10 @@ const NAV = [
   { to: '/results', label: 'Results' },
   { to: '/drivers', label: 'Drivers' },
   { to: '/reports', label: 'Reports' },
+  // The rulebook is 45 sections, every driver is told they are treated as having
+  // read it, and published stewards' rulings in Discord cite its section numbers
+  // by name (§27.3). It was reachable only from the footer.
+  { to: '/rulebook', label: 'Rulebook' },
 ]
 // NO TEAMS LINK, deliberately. The league has never had a team: every entry is one
 // driver in one car, and `teams` has zero rows. The page it led to was an empty
@@ -56,6 +60,35 @@ export default function Header() {
       <header className="sticky top-0 z-50 border-b border-[var(--color-line)] bg-[var(--color-paper)]">
         <div className="container-hcr flex h-[72px] items-center justify-between gap-4">
           <Wordmark />
+
+          {/*
+            THE NAV, ON SCREEN. For a long time this list existed only inside the
+            full-screen menu, so moving between four tables — the whole point of the
+            site — cost opening and dismissing a modal every time. Same NAV array,
+            one extra render site.
+
+            Hidden below lg because seven items plus the wordmark, search and a CTA
+            will not fit; the menu button remains the way in on small screens, which
+            is what it is good at.
+          */}
+          <nav aria-label="Main" className="hidden flex-1 items-center justify-center gap-1 lg:flex">
+            {NAV.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.to === '/'}
+                className={({ isActive }) =>
+                  `rounded-lg px-3 py-2 font-alt text-[13px] font-bold uppercase tracking-wide transition-colors ${
+                    isActive
+                      ? 'text-[var(--color-ink)]'
+                      : 'text-[var(--color-muted)] hover:text-[var(--color-ink)]'
+                  }`
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
 
           <div className="flex items-center gap-2">
             <GlobalSearch />

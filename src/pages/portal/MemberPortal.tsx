@@ -11,6 +11,7 @@ import { ChangeRequestForm, ChangeRequestList } from '../../components/ChangeReq
 import { LicenseBadge } from '../../components/LicenseBadge'
 import { EvidenceBox, type PendingEvidence } from '../../components/EvidenceBox'
 import { StatusPill } from '../../components/ProtestThread'
+import { SeasonEntryForm } from '../../components/SeasonEntryForm'
 
 const CATEGORIES = ['Contact', 'Unsafe rejoin', 'Track limits', 'Blocking', 'Unsporting conduct', 'Other']
 
@@ -29,7 +30,7 @@ const CATEGORIES = ['Contact', 'Unsafe rejoin', 'Track limits', 'Blocking', 'Uns
 type Tab = 'overview' | 'car' | 'actions'
 
 export default function MemberPortal() {
-  const { profile, session, isRaceControl, isAdmin, signOut } = useAuth()
+  const { profile, session, isRaceControl, isAdmin, isManager, signOut } = useAuth()
   const [tab, setTab] = useState<Tab>('overview')
   const [filedNote, setFiledNote] = useState(false)
   const { data: protests } = useProtests({ mine: true, userId: session?.user?.id })
@@ -38,9 +39,11 @@ export default function MemberPortal() {
   // WHERE IS THIS MEMBER IN THE JOURNEY? Everything below assumes they are on the
   // grid — three tabs about a car, a licence and a change request — and somebody who
   // signed in but never entered saw all of it with no idea what to do next. The one
-  // action they needed, /account, was a ghost button at the bottom of the first tab,
-  // and the Discord welcome guide called it "My Account", a label that appears
-  // nowhere on the site. That was the gap between joining and racing.
+  // action they needed, the season entry form, sat on a separate /account page that
+  // nothing linked to except a ghost button at the bottom of the first tab, and the
+  // Discord welcome guide called it "My Account", a label that appeared nowhere on
+  // the site. That was the gap between joining and racing, and it is why the entry
+  // form now lives in My car and /account only redirects here.
   //
   // THERE ARE THREE STATES, NOT TWO, and reading only `entries` collapses two of
   // them into the wrong answer. Entering the season writes season_registrations;
@@ -50,8 +53,24 @@ export default function MemberPortal() {
   // "you're entered" — that they were not on the grid, and offered them the same
   // button again. They would reasonably fill it in twice.
   const { data: season } = useCurrentSeason()
-  const { data: seasonEntries, isLoading: entriesLoading } = useEntries(season?.id)
-  const { data: myReg, isLoading: regLoading } = useMyRegistration(season?.id, session?.user?.id)
+  const { data: seasonEntries } = useEntries(season?.id)
+  const { data: myReg } = useMyRegistration(season?.id, session?.user?.id)
+
+  // DO NOT USE isLoading HERE. Both of these queries are `enabled`-gated on
+  // season?.id, and in TanStack Query v5 a DISABLED query reports isLoading FALSE —
+  // it is defined as `isPending && isFetching`, and a disabled query is pending but
+  // not fetching (verified in @tanstack/query-core 5.101.2, queryObserver.js:310).
+  //
+  // So during the season fetch — before season?.id exists — both reads look
+  // "finished" while holding no data, hasEntry is false, and an on-grid driver was
+  // shown "You are not on this season's grid yet" for the length of two sequential
+  // round trips. If `seasons.is_current` is ever empty, season?.id never arrives and
+  // that never clears at all.
+  //
+  // Presence of the data is the only signal that cannot lie: undefined means not
+  // known yet, null or [] means known and empty.
+  const gridStateKnown = !!season?.id && seasonEntries !== undefined && myReg !== undefined
+
   const hasEntry = useMemo(
     () =>
       !!profile?.driver_id &&
@@ -84,10 +103,14 @@ export default function MemberPortal() {
   return (
     <Section eyebrow={`Signed in as ${profile?.display_name ?? profile?.email ?? 'member'}`} title="Member Portal" titleTag="h1">
       {/* staff shortcuts */}
-      {(isRaceControl || isAdmin) && (
+      {(isRaceControl || isAdmin || isManager) && (
         <div className="mb-6 flex flex-wrap gap-2">
           {isRaceControl && <Link to="/control" className="hcr-btn hcr-btn-dark !text-xs">Race Control Portal →</Link>}
           {isAdmin && <Link to="/admin" className="hcr-btn hcr-btn-ghost !text-xs">Admin Portal →</Link>}
+          {/* Deleting /account took the team manager's only in-page route to their
+              portal with it. It survived in the full-screen menu, but a manager
+              landing here had no way through. */}
+          {isManager && <Link to="/manager" className="hcr-btn hcr-btn-ghost !text-xs">Team Manager Portal →</Link>}
         </div>
       )}
 
@@ -95,11 +118,11 @@ export default function MemberPortal() {
         The next step, for the one person who most needs it — and nothing at all for
         somebody already racing.
 
-        Held until BOTH reads have landed. Rendering mid-load would flash "you are
-        not on the grid" at a driver who is, and that sentence is alarming enough
-        that a flash of it is worse than a moment of nothing.
+        Held until we genuinely KNOW — see gridStateKnown above. Rendering early
+        would tell a driver who is on the grid that they are not, and that sentence
+        is alarming enough that showing it wrongly is worse than showing nothing.
       */}
-      {!entriesLoading && !regLoading && !hasEntry && (
+      {gridStateKnown && !hasEntry && (
         waitingOnRaceControl ? (
           <div className="mb-8 rounded-2xl border border-[var(--color-line)] bg-[var(--color-mist)] p-6">
             <h2 className="font-display text-2xl leading-tight">Your entry is in</h2>
@@ -108,9 +131,9 @@ export default function MemberPortal() {
               you need to accept that invite before you can join the race session. Nothing else to
               do here; your car appears on this page once the slot is confirmed.
             </p>
-            <Link to="/account" className="hcr-btn hcr-btn-ghost mt-4 inline-flex">
+            <button onClick={() => selectTab('car')} className="hcr-btn hcr-btn-ghost mt-4 inline-flex">
               Review what you sent
-            </Link>
+            </button>
           </div>
         ) : (
           <div className="mb-8 rounded-2xl border border-[var(--color-brand)] bg-[var(--color-brand)]/[0.08] p-6">
@@ -120,9 +143,9 @@ export default function MemberPortal() {
               iRacing details. Race control confirms the slot and sends your iRacing league invite
               from there.
             </p>
-            <Link to="/account" className="hcr-btn hcr-btn-primary mt-4 inline-flex">
+            <button onClick={() => selectTab('car')} className="hcr-btn hcr-btn-primary mt-4 inline-flex">
               Enter the season →
-            </Link>
+            </button>
           </div>
         )
       )}
@@ -143,8 +166,16 @@ export default function MemberPortal() {
         ))}
       </div>
 
-      {tab === 'overview' && <Overview onSignOut={signOut} />}
-      {tab === 'car' && <MyCar onRequestChange={() => selectTab('actions')} />}
+      {tab === 'overview' && <Overview onSignOut={signOut} onSeasonEntry={() => selectTab('car')} />}
+      {/*
+        The entry form belongs to whoever has no car yet — both the driver who has
+        never entered and the one waiting to be placed, who reopens it prefilled to
+        check what they sent. `hasEntry` is the same read the banner above uses, so
+        the two can never disagree about whether somebody is on the grid.
+      */}
+      {tab === 'car' && (
+        <MyCar onRequestChange={() => selectTab('actions')} showEntryForm={gridStateKnown && !hasEntry} />
+      )}
       {tab === 'actions' && (
         <ActionCentre
           filedNote={filedNote}
@@ -289,7 +320,7 @@ function RequestChangeCard() {
     return (
       <p className="rounded-xl border border-dashed border-[var(--color-line-2)] bg-[var(--color-paper)] p-5 text-sm text-[var(--color-muted)]">
         You need a car on this season's grid before there is anything to change. Enter the
-        season from your account page and race control will assign one.
+        season from the My car tab and race control will assign one.
       </p>
     )
   }
@@ -315,7 +346,10 @@ function RequestChangeCard() {
 
 /* ---------------- my car ---------------- */
 /**
- * A driver's own entry, and how to change it.
+ * A driver's own entry, and how to change it — or how to get one in the first place.
+ *
+ * The season entry form leads this tab for anybody without a grid slot, because
+ * "my car" is exactly where somebody goes to ask why they haven't got one.
  *
  * Nothing here is directly editable. A number, a car model or a class is what the
  * published grid and every scored result are keyed to, so each is a request Race
@@ -323,32 +357,45 @@ function RequestChangeCard() {
  * remember. A driver on a team sees their number as the TEAM's, because the team
  * owns it and their manager is the one who can change it.
  */
-function MyCar({ onRequestChange }: { onRequestChange: () => void }) {
+function MyCar({ onRequestChange, showEntryForm }: { onRequestChange: () => void; showEntryForm: boolean }) {
   const { profile } = useAuth()
   const { data: season } = useCurrentSeason()
-  const { data: entries, isLoading } = useEntries(season?.id)
+  const { data: entries } = useEntries(season?.id)
 
   const mine = useMemo(
     () => (entries ?? []).find((e) => (e.drivers ?? []).some((l) => l.driver?.id === profile?.driver_id)),
     [entries, profile?.driver_id],
   )
 
-  if (isLoading) return <Skeleton className="h-64 w-full" />
+  // Same trap as in the parent: a disabled query is not a loaded one, and isLoading
+  // does not distinguish them. Without this, `entries` is undefined during the
+  // season fetch, `mine` is undefined, and this component drops into its "no car"
+  // branch and offers the entry form to somebody who already has a seat.
+  if (!entries) return <Skeleton className="h-64 w-full" />
 
+  // The form goes above the explanation, not below it: somebody reading "you have
+  // no car" wants the thing that gets them one, and burying it under the sentence
+  // that describes the problem is how it ended up on a page nobody found.
   if (!profile?.driver_id) {
     return (
-      <p className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 text-sm text-[var(--color-muted)]">
-        Your account isn't linked to a driver on the roster yet, so there's no car to show.
-        Race control links these as results come in — ask them if it's been a while.
-      </p>
+      <div className="space-y-6">
+        {showEntryForm && <SeasonEntryForm />}
+        <p className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 text-sm text-[var(--color-muted)]">
+          Your account isn't linked to a driver on the roster yet, so there's no car to show.
+          Race control links these as results come in — ask them if it's been a while.
+        </p>
+      </div>
     )
   }
   if (!mine) {
     return (
-      <p className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 text-sm text-[var(--color-muted)]">
-        You're not on this season's grid yet. Enter the season from your account page and race
-        control will assign your car.
-      </p>
+      <div className="space-y-6">
+        {showEntryForm && <SeasonEntryForm />}
+        <p className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 text-sm text-[var(--color-muted)]">
+          You're not on this season's grid yet. Race control assigns your car once your entry
+          is confirmed.
+        </p>
+      </div>
     )
   }
 
@@ -399,7 +446,7 @@ function MyCar({ onRequestChange }: { onRequestChange: () => void }) {
 }
 
 /* ---------------- overview ---------------- */
-function Overview({ onSignOut }: { onSignOut: () => void }) {
+function Overview({ onSignOut, onSeasonEntry }: { onSignOut: () => void; onSeasonEntry: () => void }) {
   const { profile, role } = useAuth()
   const { data: drivers } = useDrivers()
   const { data: licenseResults } = useLicenseResults()
@@ -439,7 +486,7 @@ function Overview({ onSignOut }: { onSignOut: () => void }) {
       <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
         <h3 className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Account</h3>
         <div className="mt-4 space-y-2">
-          <Link to="/account" className="hcr-btn hcr-btn-ghost w-full">Season entry &amp; iRacing details</Link>
+          <button onClick={onSeasonEntry} className="hcr-btn hcr-btn-ghost w-full">Season entry &amp; iRacing details</button>
           <button onClick={onSignOut} className="hcr-btn hcr-btn-ghost w-full">Sign out</button>
         </div>
       </div>

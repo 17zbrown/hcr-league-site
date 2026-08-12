@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Header from './components/Header'
 import Footer from './components/Footer'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -23,7 +23,6 @@ const Reports = lazy(() => import('./pages/Reports'))
 const Rulebook = lazy(() => import('./pages/Rulebook'))
 const SignUp = lazy(() => import('./pages/SignUp'))
 const Login = lazy(() => import('./pages/Login'))
-const Account = lazy(() => import('./pages/Account'))
 const CommissionerPortal = lazy(() => import('./pages/commissioner/CommissionerPortal'))
 const ManagerPortal = lazy(() => import('./pages/manager/ManagerPortal'))
 const MemberPortal = lazy(() => import('./pages/portal/MemberPortal'))
@@ -72,8 +71,15 @@ export default function App() {
           <Route path="/news" element={<Reports />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/account" element={<RequireAuth><Account /></RequireAuth>} />
-            {/* Member portal — profile, protests */}
+            {/*
+              /account was the second member page: it held the season entry form and
+              nothing linked to it. The form now lives in the portal's My car tab, but
+              the path stays registered because the Discord welcome guide and every
+              message that ever pointed somebody at "My Account" still use it — a 404
+              there lands on the step people are most likely to be mid-way through.
+            */}
+            <Route path="/account" element={<Navigate to="/portal" replace />} />
+            {/* Member portal — profile, season entry, car, protests */}
             <Route path="/portal" element={<RequireAuth><MemberPortal /></RequireAuth>} />
             <Route path="/portal/protests/:id" element={<RequireAuth><ProtestDetail /></RequireAuth>} />
 

@@ -72,6 +72,10 @@ function ArticleCard({ article }: { article: NewsArticle }) {
   const paras = paragraphs(article.body_md)
   return (
     <article
+      // The anchor every Discord news ping now points at. Without an id on the
+      // article, a ping about round 5 dropped the reader at the top of the feed —
+      // sometimes on a different story entirely.
+      id={article.slug}
       className={
         feature
           ? 'on-navy relative overflow-hidden rounded-2xl bg-[var(--color-deep)] shadow-card'

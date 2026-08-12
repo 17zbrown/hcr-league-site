@@ -264,7 +264,12 @@ Deno.serve(async (req) => {
     let q = db.from('discord_outbox')
       .select('id, kind, channel_key, dedupe_key, payload, attempts, target_id')
       .eq('status', editSent ? 'sent' : 'pending')
+      // created_at is NOT a total order: rows enqueued by one trigger in one
+      // transaction share it to the microsecond, and the queue then drained in
+      // whatever order Postgres felt like. id breaks the tie by insertion, which is
+      // the order the trigger meant.
       .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
       .limit(limit)
     if (onlyKind) q = q.eq('kind', onlyKind)
     const { data: queued, error: qErr } = await q
@@ -419,6 +424,54 @@ Deno.serve(async (req) => {
 
         if (notes.length) fields.push({ name: 'Race notes', value: clip(notes.join('\n'), MAX_FIELD), inline: false })
 
+        // --- where that leaves the championship ---
+        //
+        // This used to be a SECOND queued post, delivered to #standings 1.3 seconds
+        // after this one and pinging @everyone again — two interruptions for what a
+        // member would call one piece of news. Worse, both rows carried the same
+        // created_at to the microsecond, so a single retried failure on the result
+        // was enough for the table to publish before the race it summarises.
+        //
+        // Folded in here instead, and it reads better for it: who won today, and
+        // what that did to the title. Top three rather than five, in one field, so
+        // the post stays scannable — the full table is a tap away on the site.
+        if (ev?.season_id) {
+          const { data: seasonEvents } = await db.from('events').select('id').eq('season_id', ev.season_id)
+          const eventIds = (seasonEvents ?? []).map((e) => String(e.id))
+          const { data: seasonRes } = await db
+            .from('results')
+            .select('class_id, number, drivers_text, cls_pos, points, quali_points, adjust, fill_in')
+            .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000'])
+
+          const champ = new Map<string, Map<string, { name: string; points: number; best: number | null }>>()
+          for (const r of ((seasonRes ?? []) as ResultRow[])) {
+            if (r.fill_in) continue
+            const cls = String(r.class_id ?? '')
+            if (!CLASS_ORDER.includes(cls)) continue
+            const nm = (r.drivers_text || '').trim() || `#${r.number ?? '?'}`
+            const key = crewKey(r.drivers_text, nm)
+            const bucket = champ.get(cls) ?? new Map()
+            const cur = bucket.get(key) ?? { name: nm, points: 0, best: null }
+            cur.points += rowPoints(r)
+            const p = r.cls_pos ?? null
+            cur.best = cur.best === null ? p : Math.min(cur.best, p ?? 99)
+            bucket.set(key, cur)
+            champ.set(cls, bucket)
+          }
+
+          const champLines = CLASS_ORDER.map((cls) => {
+            const bucket = champ.get(cls)
+            if (!bucket || bucket.size === 0) return null
+            const top = [...bucket.values()]
+              .sort((a, b) => b.points - a.points || (a.best ?? 99) - (b.best ?? 99)).slice(0, 3)
+            return `**${cls}** ${top.map((t) => `${t.name} ${Math.round(t.points * 100) / 100}`).join(' · ')}`
+          }).filter(Boolean) as string[]
+
+          if (champLines.length) {
+            fields.push({ name: 'Championship after this round', value: clip(champLines.join('\n'), MAX_FIELD), inline: false })
+          }
+        }
+
         embed = {
           title,
           url: ev?.id ? `${SITE}/schedule/${ev.id}` : `${SITE}/results`,
@@ -460,7 +513,11 @@ Deno.serve(async (req) => {
 
         embed = {
           title,
-          url: `${SITE}/news`,
+          // Anchored on the story's own slug. Without this every news ping dropped
+          // the reader at the top of the feed — so a ping about round 5 could land
+          // them on a round-4 story, which is exactly what happened when the Detroit
+          // report was unpublished after its ping went out.
+          url: `${SITE}/news#${article.slug}`,
           description: clip(String(article.dek ?? ''), MAX_DESC),
           color: HCR_YELLOW,
           ...(lead && /^https?:\/\//i.test(lead) ? { image: { url: lead } } : {}),
