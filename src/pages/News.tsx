@@ -127,8 +127,16 @@ function ArticleCard({ article }: { article: NewsArticle }) {
   )
 }
 
-/** League news feed — pinned stories first (the hook pre-sorts), then newest. */
-export default function Reports() {
+/**
+ * League news feed — pinned stories first (the hook pre-sorts), then newest.
+ *
+ * ONE NAME: "News", at /news. The feed used to answer to five of them — Reports in
+ * the nav, "News & Reports" here, "Paddock notes" above it, "Paddock news" on the
+ * homepage, "Story" in search — while everything outside the app (the #news channel,
+ * its topic, every Discord embed link) only ever said news. /reports still resolves,
+ * as a redirect, so the old links keep working.
+ */
+export default function News() {
   const { data: articles, isLoading, isError, refetch } = useNews()
   const list = articles ?? []
 
@@ -136,10 +144,10 @@ export default function Reports() {
     <Section
       eyebrow={
         list.length > 0
-          ? `Paddock notes · ${list.length} ${list.length === 1 ? 'story' : 'stories'}`
-          : 'Paddock notes'
+          ? `${list.length} ${list.length === 1 ? 'story' : 'stories'}`
+          : 'League news'
       }
-      title="News & Reports"
+      title="News"
       titleTag="h1"
     >
       {isLoading ? (
@@ -153,8 +161,8 @@ export default function Reports() {
       ) : list.length === 0 ? (
         <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-12 text-center">
           <p className="mx-auto max-w-md text-[var(--color-muted)]">
-            League news and race reports land here as they're published. Check back once the
-            next round is in the books.
+            League news lands here as it's published. Check back once the next round is
+            in the books.
           </p>
         </div>
       ) : (

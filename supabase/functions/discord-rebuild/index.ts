@@ -1,3 +1,19 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// RETIRED — THE DEPLOYMENT OF THIS FUNCTION IS A 410 STUB. DO NOT REDEPLOY THIS
+// FILE. Deploying it restores the capability described below, which was retired
+// deliberately.
+//
+// Retired 2026-08-11. 974 lines of server surgery — categories, channels, roles and
+// webhooks — sitting live behind an admin credential, with nothing calling it. It
+// had already done its job. It never deleted anything (old channels were moved to
+// a hidden ARCHIVE category), but the blast radius of an accidental run was the
+// whole server layout.
+//
+// The code is kept because it documents what was done to the server and how, and
+// because git is where that record belongs. If it ever genuinely needs to run
+// again, read it first, dry-run it first, and expect its assumptions about the
+// server to be months out of date.
+// ─────────────────────────────────────────────────────────────────────────────
 // discord-rebuild — rearranges the league's Discord server into the layout the
 // site expects: gated categories, the channels that belong in each, and a posting
 // webhook where the site needs one. Admin-only.

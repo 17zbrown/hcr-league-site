@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useCurrentSeason, useDrivers, useEvents, useNews, useTeams } from '../lib/queries'
+import { useCurrentSeason, useDrivers, useEvents, useNews } from '../lib/queries'
 import { flagFor } from '../lib/countries'
 import { matches } from '../lib/search'
 import { fmtDateLong } from '../lib/format'
 
 interface Hit {
   id: string
-  kind: 'Driver' | 'Team' | 'Race' | 'Story'
+  kind: 'Driver' | 'Race' | 'News'
   label: string
   detail: string
   to: string
@@ -15,9 +15,13 @@ interface Hit {
 }
 
 /**
- * One search across everything the site knows: drivers, teams, races, stories.
+ * One search across everything the site knows: drivers, races, news.
  *
- * All four lists are already in the query cache for other pages, so searching adds
+ * No teams. `teams` has zero rows and nothing references one, so the branch could
+ * only ever emit hits to an empty page — while the placeholder and the empty state
+ * went on advertising a fourth thing to search.
+ *
+ * All three lists are already in the query cache for other pages, so searching adds
  * no requests — it filters what is in memory. That is also why it can answer on the
  * keystroke rather than debouncing against the network.
  *
@@ -34,7 +38,6 @@ export function GlobalSearch() {
 
   const { data: season } = useCurrentSeason()
   const { data: drivers } = useDrivers()
-  const { data: teams } = useTeams()
   const { data: events } = useEvents(season?.id)
   const { data: news } = useNews(30)
 
@@ -66,15 +69,6 @@ export function GlobalSearch() {
         })
       }
     }
-    for (const t of teams ?? []) {
-      if (matches(q, t.name, t.car, t.class_id, t.number)) {
-        out.push({
-          id: `t-${t.id}`, kind: 'Team', label: t.name,
-          detail: [t.number ? `#${t.number}` : null, t.class_id, t.car].filter(Boolean).join(' · '),
-          to: `/teams/${t.id}`,
-        })
-      }
-    }
     for (const e of events ?? []) {
       if (matches(q, e.name, e.track?.name, e.track?.location, e.round)) {
         out.push({
@@ -86,11 +80,11 @@ export function GlobalSearch() {
     }
     for (const a of news ?? []) {
       if (matches(q, a.title, a.dek, a.category, a.author)) {
-        out.push({ id: `n-${a.id}`, kind: 'Story', label: a.title, detail: a.category, to: '/news' })
+        out.push({ id: `n-${a.id}`, kind: 'News', label: a.title, detail: a.category, to: '/news' })
       }
     }
     return out.slice(0, 12)
-  }, [q, drivers, teams, events, news])
+  }, [q, drivers, events, news])
 
   const go = (h: Hit) => { nav(h.to); setOpen(false) }
 
@@ -130,8 +124,8 @@ export function GlobalSearch() {
                 value={q}
                 onChange={(e) => { setQ(e.target.value); setActive(0) }}
                 onKeyDown={onKey}
-                placeholder="Drivers, teams, races, stories…"
-                aria-label="Search drivers, teams, races and stories"
+                placeholder="Drivers, races, news…"
+                aria-label="Search drivers, races and news"
                 className="w-full bg-transparent py-4 text-base outline-none placeholder:text-[var(--color-faint)]"
               />
               <button type="button" onClick={() => setOpen(false)} aria-label="Close search"
@@ -170,7 +164,7 @@ export function GlobalSearch() {
 
             {!q.trim() && (
               <p className="px-4 py-6 text-sm text-[var(--color-muted)]">
-                Search across drivers, teams, races and stories. ↑↓ to move, ↵ to open.
+                Search across drivers, races and news. ↑↓ to move, ↵ to open.
               </p>
             )}
           </div>

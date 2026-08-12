@@ -13,7 +13,9 @@ const NAV = [
   { to: '/standings', label: 'Standings' },
   { to: '/results', label: 'Results' },
   { to: '/drivers', label: 'Drivers' },
-  { to: '/reports', label: 'Reports' },
+  // "News", at /news — the same name and path the #news channel, its topic and every
+  // Discord embed already use. /reports redirects here for links already in the wild.
+  { to: '/news', label: 'News' },
   // The rulebook is 45 sections, every driver is told they are treated as having
   // read it, and published stewards' rulings in Discord cite its section numbers
   // by name (§27.3). It was reachable only from the footer.
@@ -44,7 +46,7 @@ function Wordmark() {
 export default function Header() {
   const [open, setOpen] = useState(false)
   const location = useLocation()
-  const { session, isAdmin, isManager, isRaceControl } = useAuth()
+  const { session, isAdmin, isRaceControl } = useAuth()
   const { data: settings } = useLeagueSettings()
 
   useEffect(() => setOpen(false), [location.pathname])
@@ -131,7 +133,6 @@ export default function Header() {
           onClose={() => setOpen(false)}
           session={!!session}
           isAdmin={isAdmin}
-          isManager={isManager}
           isRaceControl={isRaceControl}
           discord={settings?.discord_url ?? null}
         />
@@ -144,14 +145,12 @@ function FullMenu({
   onClose,
   session,
   isAdmin,
-  isManager,
   isRaceControl,
   discord,
 }: {
   onClose: () => void
   session: boolean
   isAdmin: boolean
-  isManager: boolean
   isRaceControl: boolean
   discord: string | null
 }) {
@@ -163,7 +162,8 @@ function FullMenu({
     { to: '/signup', label: 'Enter the Season' },
     ...(isRaceControl ? [{ to: '/control', label: 'Race Control Portal' }] : []),
     ...(isAdmin ? [{ to: '/admin', label: 'Admin Portal' }] : []),
-    ...(isManager ? [{ to: '/manager', label: 'Team Manager Portal' }] : []),
+    // No Team Manager Portal: /manager and the page behind it are gone with the rest
+    // of the teams feature.
   ]
 
   const reduceMotion = useReducedMotion() ?? false

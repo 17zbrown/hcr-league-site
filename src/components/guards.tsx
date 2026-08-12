@@ -37,14 +37,6 @@ export function RequireRaceControl({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
-export function RequireManager({ children }: { children: ReactNode }) {
-  const { session, isAdmin, isManager, loading } = useAuth()
-  const location = useLocation()
-  if (loading) return <Loading />
-  if (!session) return <Navigate to="/login" state={{ from: location.pathname }} replace />
-  if (!isManager && !isAdmin) return <Denied title="Team managers only" />
-  return <>{children}</>
-}
 
 function Denied({ title }: { title: string }) {
   return (

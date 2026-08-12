@@ -49,9 +49,19 @@ export default function HeroCarousel() {
                 {next.track?.name}
                 {next.track?.location ? ` · ${next.track.location}` : ''} · {fmtDateLong(next.date)}
               </p>
+              {/*
+                The primary button goes to the round this slide is about, not to
+                /signup. The season is underway and the grid is full: to the forty
+                people who already entered, the brightest button on the site was an
+                invitation to do the thing they have done. What they want from a
+                slide headlined "Next Round" is the round.
+
+                The brand/intro slide keeps its Enter the Season CTA — that one is
+                addressed to a stranger, and there the ask is the right one.
+              */}
               <div className="mt-8 flex flex-wrap gap-3">
-                <Link to="/signup" className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1">Enter the Season</Link>
-                <Link to="/schedule" className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Schedule</Link>
+                <Link to={`/schedule/${next.id}`} className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1">Race Details</Link>
+                <Link to="/schedule" className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Full Schedule</Link>
               </div>
             </div>
             <Link to={`/schedule/${next.id}`} className="block rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 shadow-card transition-transform hover:-translate-y-0.5">

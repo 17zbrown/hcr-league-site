@@ -68,7 +68,7 @@ export default function Home() {
       <Ticker />
 
       {/* ---------- PADDOCK NEWS — first thing under the hero ---------- */}
-      <PaddockNews />
+      <LeagueNews />
 
       {/* ---------- LEAGUE PULSE ---------- */}
       <Section eyebrow="The season so far" title="League pulse">
@@ -321,18 +321,18 @@ function Champions() {
 
 /** News strip — up to three published articles. Hidden entirely until it has
  * something real to show (no skeletons on the homepage for optional content). */
-function PaddockNews() {
+function LeagueNews() {
   const { data: news, isLoading, isError } = useNews(3)
   if (isLoading || isError || !news?.length) return null
 
   return (
     <div className="bg-[var(--color-cloud)]">
       <Section
-        eyebrow="From the pit wall · League bulletin"
-        title="Paddock news"
+        eyebrow="From the pit wall"
+        title="News"
         action={
-          <Link to="/reports" className="font-body text-sm font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-blue)]">
-            All reports →
+          <Link to="/news" className="font-body text-sm font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-blue)]">
+            All news →
           </Link>
         }
       >
@@ -340,7 +340,7 @@ function PaddockNews() {
           {news.slice(0, 3).map((a, i) => (
             <Reveal key={a.id} delay={i * 0.06} className="h-full">
               <Link
-                to="/reports"
+                to="/news"
                 className="group flex h-full flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] transition-transform hover:-translate-y-0.5 hover:shadow-card"
               >
                 <div className="flex flex-1 flex-col p-5">
@@ -363,7 +363,7 @@ function PaddockNews() {
                 <div
                   className={`${ACTION_BAR} bg-[var(--color-mist)] text-[var(--color-ink)] group-hover:bg-[var(--color-deep)] group-hover:text-white group-focus-visible:bg-[var(--color-deep)] group-focus-visible:text-white`}
                 >
-                  Read the report <span aria-hidden>→</span>
+                  Read the story <span aria-hidden>→</span>
                 </div>
               </Link>
             </Reveal>

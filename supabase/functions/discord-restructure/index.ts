@@ -1,3 +1,20 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// RETIRED — THE DEPLOYMENT OF THIS FUNCTION IS A 410 STUB. DO NOT REDEPLOY THIS
+// FILE. Deploying it restores the capability described below, which was retired
+// deliberately.
+//
+// Retired 2026-08-12. It was a ONE-SHOT MIGRATION that collapsed the server from two
+// leagues (League + Endurance) into one, and it finished. Phases C, D and E are now
+// self-neutering — Spectator exists, and the ENDURANCE category and both membership
+// roles are gone. PHASE B is the one that would still act: it re-asserts an
+// August-4 opinion of the LEAGUE category's @everyone permissions, which predates
+// the class-first role rebuild, and would quietly undo later permission work.
+//
+// The code is kept because it documents what was done to the server and how, and
+// because git is where that record belongs. If it ever genuinely needs to run
+// again, read it first, dry-run it first, and expect its assumptions about the
+// server to be months out of date.
+// ─────────────────────────────────────────────────────────────────────────────
 // discord-restructure — collapses the server from two leagues into one.
 //
 // HCR ran a league and an endurance team in the same server, and almost every

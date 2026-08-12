@@ -30,7 +30,7 @@ const CATEGORIES = ['Contact', 'Unsafe rejoin', 'Track limits', 'Blocking', 'Uns
 type Tab = 'overview' | 'car' | 'actions'
 
 export default function MemberPortal() {
-  const { profile, session, isRaceControl, isAdmin, isManager, signOut } = useAuth()
+  const { profile, session, isRaceControl, isAdmin, signOut } = useAuth()
   const [tab, setTab] = useState<Tab>('overview')
   const [filedNote, setFiledNote] = useState(false)
   const { data: protests } = useProtests({ mine: true, userId: session?.user?.id })
@@ -103,14 +103,11 @@ export default function MemberPortal() {
   return (
     <Section eyebrow={`Signed in as ${profile?.display_name ?? profile?.email ?? 'member'}`} title="Member Portal" titleTag="h1">
       {/* staff shortcuts */}
-      {(isRaceControl || isAdmin || isManager) && (
+      {(isRaceControl || isAdmin) && (
         <div className="mb-6 flex flex-wrap gap-2">
           {isRaceControl && <Link to="/control" className="hcr-btn hcr-btn-dark !text-xs">Race Control Portal →</Link>}
           {isAdmin && <Link to="/admin" className="hcr-btn hcr-btn-ghost !text-xs">Admin Portal →</Link>}
-          {/* Deleting /account took the team manager's only in-page route to their
-              portal with it. It survived in the full-screen menu, but a manager
-              landing here had no way through. */}
-          {isManager && <Link to="/manager" className="hcr-btn hcr-btn-ghost !text-xs">Team Manager Portal →</Link>}
+          {/* No team manager shortcut: /manager and the portal behind it are gone. */}
         </div>
       )}
 

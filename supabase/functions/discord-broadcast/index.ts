@@ -253,11 +253,13 @@ Deno.serve(async (req) => {
     const channelFor: Record<string, string> = {
       results: String(cfg.channel_results ?? '').trim(),
       standings: String(cfg.channel_standings ?? '').trim(),
+      // No producer emits 'announcements' any more — but rows that predate the split
+      // into results/standings/news still sit in the outbox carrying it, and dropping
+      // this key would strand them. Keep it until those rows are gone.
       announcements: String(cfg.channel_announcements ?? '').trim(),
       // News has its own channel; until the reorg has created it and saved the id,
       // fall back to announcements so a published story is never stranded unsent.
       news: String(cfg.channel_news ?? '').trim() || String(cfg.channel_announcements ?? '').trim(),
-      license_ups: String(cfg.channel_license_ups ?? '').trim(),
       race_control: String(cfg.channel_race_control ?? '').trim(),
     }
 
