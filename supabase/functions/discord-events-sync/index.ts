@@ -1,5 +1,14 @@
 // discord-events-sync — mirrors the race calendar into the Discord server's
-// Events tab, so members can hit "Interested" and get a reminder before lights out.
+// Events tab, so a round shows up in Discord's own calendar and members can set
+// themselves a reminder before lights out.
+//
+// THIS IS A CALENDAR, NOT AN ATTENDANCE MECHANISM. Discord's "Interested" button
+// is read by NOTHING — not this function, not discord-attendance, not race
+// control. Attendance has exactly one source of truth: the buttons on the
+// attendance post, recorded in public.race_attendance and shown in the private
+// race-control tally. Every event blurb written below says so in as many words,
+// because an RSVP that looks like it counts and does not is worse than no RSVP
+// at all. Do not add RSVP reading here — fix the attendance post instead.
 //
 // Reads the current season's upcoming rounds and creates one EXTERNAL scheduled
 // event per round. Matches by exact name, so running it twice never duplicates —
@@ -259,7 +268,20 @@ Deno.serve(async (req) => {
     const end = new Date(endMs).toISOString()
 
     const place = [track?.name?.trim(), track?.location?.trim()].filter(Boolean).join(' · ')
-    const description = clamp([place, `HCR League — ${seasonName}`].filter(Boolean).join('\n'), 1000)
+    // "Interested" ON THIS EVENT IS NOT ATTENDANCE, and the blurb has to say so.
+    //
+    // Nothing reads a Discord event's RSVP list — not this function, not the
+    // attendance drive, not race control. The one signal that counts is the button
+    // on the attendance post. A member who taps Interested here and assumes they
+    // have told somebody is invisible on race day, which is precisely how a grid
+    // ends up short. The reminder is worth keeping; the ambiguity is not.
+    const description = clamp([
+      place,
+      `HCR League — ${seasonName}`,
+      '',
+      'Interested only sets a reminder — it does NOT tell race control you are racing.',
+      'Answer the attendance post in the announcements channel; that button is the only one counted.',
+    ].filter((l) => l !== null).join('\n'), 1000)
     const location = clamp(track?.location?.trim() || track?.name?.trim() || 'iRacing', 100)
 
     const existing = existingByName.get(name)

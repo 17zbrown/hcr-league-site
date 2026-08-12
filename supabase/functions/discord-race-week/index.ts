@@ -1,3 +1,24 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// RETIRED — DO NOT REDEPLOY OR RE-ENABLE THIS FILE.
+//
+// Retired 2026-08-12, by the league owner's instruction: attendance is collected
+// by ONE mechanism, the buttons on the attendance post, and nothing else.
+//
+// This function posted a second @everyone about the same race on the same day as
+// the attendance ask (0 16 * * 3 against 0 17 * * *, both into #announcements),
+// carrying the same facts and asking the same question a second way — via the
+// Discord event's "Interested", which is read by NOTHING. Members answered the
+// one that did not count and were invisible on race day.
+//
+// Both switches are already off: cron job hcr-discord-race-week is active=false
+// and the discord_automations row is enabled=false. This banner is the third
+// lock, because the other two are a database row each and this file is what a
+// deploy would read.
+//
+// The schedule lines it built (practice / qualifying / race times) are the one
+// thing here worth keeping — port them into the attendance ask rather than
+// reviving this.
+// ─────────────────────────────────────────────────────────────────────────────
 // discord-race-week — on Wednesday of a race week, posts the round's scheduled
 // event into #announcements so members can hit "Interested".
 //

@@ -226,6 +226,12 @@ const replyEmbed = (embed: Record<string, unknown>) =>
   json({ type: CHANNEL_MESSAGE_WITH_SOURCE, data: { embeds: [embed], flags: EPHEMERAL } })
 
 const SITE = 'https://hcrleague.com'
+/**
+ * The iRacing league id, quoted when somebody is turned away from the attendance
+ * buttons. It is the league's public identifier — printed in iRacing's own league
+ * directory — so it belongs in the copy rather than in config.
+ */
+const IRACING_LEAGUE_ID = '14470'
 const HCR_YELLOW = 0xf2e114
 const CLASS_ORDER = ['GTP', 'LMP2', 'GTD']
 const MAX_FIELD = 1024
@@ -656,24 +662,47 @@ Deno.serve(async (req) => {
         return reply(`Round ${ev.round} has already been run — that post is history now.`)
       }
 
-      // Record the answer and look up the seat TOGETHER. Discord abandons an
-      // interaction that goes unanswered for three seconds, so every avoidable
-      // round trip here is spent from a budget the member sees as a red failure.
+      // THE SEAT IS CHECKED FIRST, AND IT IS A GATE.
       //
-      // The seat is scoped to THIS event's season: a driver who raced last year and
-      // not this one holds an entry row, and an unscoped check would cheerfully tell
-      // them they are on a grid they are not on.
-      const [{ error }, { data: seats }] = await Promise.all([
-        db.rpc('race_attendance_set', {
-          p_event: eventId, p_discord_user_id: clicker, p_planned: planned,
-        }),
-        db
-          .from('entry_drivers')
-          .select('entry_id, drivers!inner(discord_user_id), entries!inner(season_id)')
-          .eq('drivers.discord_user_id', clicker)
-          .eq('entries.season_id', ev.season_id)
-          .limit(1),
-      ])
+      // Only a driver on this season's grid may answer. An answer from anybody else
+      // is not recorded at all — earlier this endpoint saved it and then admitted it
+      // had not counted, which is a strange thing to do to somebody: it produced a
+      // row nobody acted on and a member who believed they had told us something.
+      // Either the answer counts or it is refused, and refusing is the honest half.
+      //
+      // Scoped to THIS event's season. A driver who raced last year and not this one
+      // still holds an entry row, and an unscoped check would wave them through onto
+      // a grid they are not on.
+      const { data: seats } = await db
+        .from('entry_drivers')
+        .select('entry_id, drivers!inner(discord_user_id), entries!inner(season_id)')
+        .eq('drivers.discord_user_id', clicker)
+        .eq('entries.season_id', ev.season_id)
+        .limit(1)
+
+      if (!seats?.length) {
+        // Nothing is written. The reply is the whole response, so it carries the way
+        // out rather than just the refusal — a door with no handle is what makes
+        // somebody give up and say nothing to anyone.
+        return reply([
+          `You are not on the Round ${ev.round} entry list yet, so attendance is not open to you — ` +
+          'nothing has been recorded.',
+          '',
+          '**Getting on the grid takes about two minutes:**',
+          `**1.** Go to ${SITE} and hit **Enter Season** — sign in with this same Discord account.`,
+          '**2.** In **My Portal**, press **Enter the season**. Pick your class, your car and two car ' +
+          'numbers, and have your iRacing name and customer ID to hand.',
+          `**3.** Race control confirms your slot and sends your **iRacing** league invite — accept it, ` +
+          `or find us in the Leagues directory as **HCR League**, league ID **${IRACING_LEAGUE_ID}**. ` +
+          'You cannot join the race session without it.',
+          '',
+          'Once you are on the grid these buttons start working, and this post is where you answer.',
+        ].join('\n'))
+      }
+
+      const { error } = await db.rpc('race_attendance_set', {
+        p_event: eventId, p_discord_user_id: clicker, p_planned: planned,
+      })
       if (error) {
         console.error(`discord-interactions: could not record attendance — ${error.message}`)
         return reply(ASK_A_COMMISSIONER)
@@ -699,22 +728,6 @@ Deno.serve(async (req) => {
       // Deliberately does NOT edit the public post. Every name lives in the private
       // race-control channel; a public running list turns "who has not replied" into
       // a scoreboard of who is ignoring the commissioner, and that was not the ask.
-      //
-      // Their answer was saved either way — refusing it would be the wrong response
-      // to somebody trying to take part — but telling them "you are down as racing"
-      // when they hold no entry is a lie that hides a roster gap: they get thanked,
-      // counted nowhere, and nobody finds out until the grid is short on race day.
-      if (!seats?.length) {
-        return reply([
-          planned
-            ? `Thanks — but you are not on the Round ${ev.round} entry list, so this has not been counted yet.`
-            : `Noted — though you are not on the Round ${ev.round} entry list, so there was nothing to count.`,
-          '',
-          'Race control has been shown your answer. If you think you should be on the grid, message a ' +
-          'commissioner or enter the season at https://hcrleague.com — it takes about two minutes.',
-        ].join('\n'))
-      }
-
       return reply(planned
         ? `You are down as racing at Round ${ev.round} — ${ev.name} 🏁\n\nChanged your mind? Press "Can't make it" on the same post.`
         : `Noted — you are not racing at Round ${ev.round} — ${ev.name}.\n\nIf that changes, press "I'm racing" on the same post.`)
