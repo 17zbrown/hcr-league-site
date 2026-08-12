@@ -254,10 +254,18 @@ async function refreshTally(
     : { data: null }
 
   const { data: rows } = await db.rpc('race_attendance_tally', { p_event: eventId })
-  const tally = (rows ?? []) as {
-    driver_name: string; class_id: string; car_number: string | null
-    car: string | null; answer: boolean | null
+  const all = (rows ?? []) as {
+    driver_name: string; class_id: string | null; car_number: string | null
+    car: string | null; discord_user_id: string | null; answer: boolean | null
+    off_grid: boolean
   }[]
+
+  // Split the grid from the strays BEFORE counting. An off-grid answer has no class,
+  // no car and no number, so folding it into "Racing" would both inflate the count
+  // and print a row reading `null` where a class code belongs.
+  const tally = all.filter((r) => !r.off_grid)
+  const offGrid = all.filter((r) => r.off_grid)
+
   const list = (rs: typeof tally) => rs.length === 0 ? '—' : rs.map((r) =>
     `\`${r.class_id}${r.car_number ? ` #${r.car_number}` : ''}\` **${r.driver_name}** — ${r.car?.trim() || NO_CAR}`
   ).join('\n').slice(0, 1024)
@@ -267,16 +275,29 @@ async function refreshTally(
   const silent = tally.filter((r) => r.answer === null)
   const at = Math.floor(new Date(String(ev.date)).getTime() / 1000)
 
+  const fields: Record<string, unknown>[] = [
+    { name: `Racing (${yes.length})`, value: list(yes), inline: false },
+    { name: `Cannot make it (${no.length})`, value: list(no), inline: false },
+    { name: `No answer (${silent.length})`, value: list(silent), inline: false },
+  ]
+  // Somebody who answered while holding no entry. Worth its own heading rather than
+  // being hidden: it is a roster gap that only shows up as a short grid on race day.
+  if (offGrid.length) {
+    fields.push({
+      name: `⚠️ Answered but not on the grid (${offGrid.length})`,
+      value: offGrid.map((o) =>
+        `**${o.driver_name}**${o.discord_user_id ? ` (<@${o.discord_user_id}>)` : ''} — said ` +
+        `${o.answer ? '**racing**' : 'they cannot make it'}`).join('\n').slice(0, 1024),
+      inline: false,
+    })
+  }
+
   await discord(`/channels/${channelId}/messages/${messageId}`, 'PATCH', token, {
     embeds: [{
       title: `Attendance — Round ${ev.round} — ${ev.name}`,
       description: `${[track?.name, track?.config].filter(Boolean).join(' · ')}\n<t:${at}:F> (<t:${at}:R>)`,
       color: 0xf2e114,
-      fields: [
-        { name: `Racing (${yes.length})`, value: list(yes), inline: false },
-        { name: `Cannot make it (${no.length})`, value: list(no), inline: false },
-        { name: `No answer (${silent.length})`, value: list(silent), inline: false },
-      ],
+      fields,
       footer: { text: `HCR League · staff only · ${tally.length} on the grid · updates as people answer` },
     }],
   })
@@ -364,15 +385,30 @@ Deno.serve(async (req) => {
 
       // The race is named so the confirmation is checkable — pressing a button and
       // being told "noted" gives no way to tell you answered the wrong week.
-      const { data: ev } = await db.from('events').select('round, name, status').eq('id', eventId).maybeSingle()
+      const { data: ev } = await db.from('events').select('round, name, status, season_id').eq('id', eventId).maybeSingle()
       if (!ev) return reply('That race is no longer on the calendar.')
       if (ev.status === 'complete') {
         return reply(`Round ${ev.round} has already been run — that post is history now.`)
       }
 
-      const { error } = await db.rpc('race_attendance_set', {
-        p_event: eventId, p_discord_user_id: clicker, p_planned: planned,
-      })
+      // Record the answer and look up the seat TOGETHER. Discord abandons an
+      // interaction that goes unanswered for three seconds, so every avoidable
+      // round trip here is spent from a budget the member sees as a red failure.
+      //
+      // The seat is scoped to THIS event's season: a driver who raced last year and
+      // not this one holds an entry row, and an unscoped check would cheerfully tell
+      // them they are on a grid they are not on.
+      const [{ error }, { data: seats }] = await Promise.all([
+        db.rpc('race_attendance_set', {
+          p_event: eventId, p_discord_user_id: clicker, p_planned: planned,
+        }),
+        db
+          .from('entry_drivers')
+          .select('entry_id, drivers!inner(discord_user_id), entries!inner(season_id)')
+          .eq('drivers.discord_user_id', clicker)
+          .eq('entries.season_id', ev.season_id)
+          .limit(1),
+      ])
       if (error) {
         console.error(`discord-interactions: could not record attendance — ${error.message}`)
         return reply(ASK_A_COMMISSIONER)
@@ -398,6 +434,22 @@ Deno.serve(async (req) => {
       // Deliberately does NOT edit the public post. Every name lives in the private
       // race-control channel; a public running list turns "who has not replied" into
       // a scoreboard of who is ignoring the commissioner, and that was not the ask.
+      //
+      // Their answer was saved either way — refusing it would be the wrong response
+      // to somebody trying to take part — but telling them "you are down as racing"
+      // when they hold no entry is a lie that hides a roster gap: they get thanked,
+      // counted nowhere, and nobody finds out until the grid is short on race day.
+      if (!seats?.length) {
+        return reply([
+          planned
+            ? `Thanks — but you are not on the Round ${ev.round} entry list, so this has not been counted yet.`
+            : `Noted — though you are not on the Round ${ev.round} entry list, so there was nothing to count.`,
+          '',
+          'Race control has been shown your answer. If you think you should be on the grid, message a ' +
+          'commissioner or enter the season at https://hcrleague.com — it takes about two minutes.',
+        ].join('\n'))
+      }
+
       return reply(planned
         ? `You are down as racing at Round ${ev.round} — ${ev.name} 🏁\n\nChanged your mind? Press "Can't make it" on the same post.`
         : `Noted — you are not racing at Round ${ev.round} — ${ev.name}.\n\nIf that changes, press "I'm racing" on the same post.`)

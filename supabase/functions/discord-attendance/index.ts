@@ -1,16 +1,20 @@
-// discord-attendance — asks the grid who is racing, nags them daily until the
-// flag, and tells race control what to expect.
+// discord-attendance — asks the grid who is racing, chases the ones who have not
+// answered, and tells race control what to expect.
 //
 // THREE THINGS, ONE DAILY RUN. A single cron ticks this once a day and the
 // function works out which of them is due:
 //
 //   THE ASK        On the Wednesday before a race, one post in #announcements
 //                  with @everyone and two buttons. Posted once, ever, per race.
-//   THE REMINDER   Every day after that until race day, one @everyone nudge
-//                  naming how many people still have not answered. One a day, no
-//                  matter how many times this runs.
-//   THE REVIEW     After the race, a private post in race control comparing what
-//                  people said against who actually appeared.
+//                  This is the ONLY mass ping this function makes.
+//   THE NUDGE      Up to MAX_NUDGES afterwards, at most one a day, MENTIONING THE
+//                  PEOPLE WHO HAVE NOT ANSWERED rather than @everyone. A chase is
+//                  not an announcement: waking sixty-one people because six have
+//                  not filled in a form is how a server learns to mute, and a
+//                  muted server misses the results post too. Recycled, so the
+//                  channel carries one live reminder rather than a pile.
+//   THE RECAP      After the race, a private post in race control comparing what
+//                  people pressed against the imported classification.
 //
 // WHO SEES WHAT. The public post is only ever the question — a bare ask and two
 // buttons. Every name lives in the private attendance channel inside RACE
@@ -64,6 +68,21 @@ const ATTEND_NO = 'hcr_attend_no'
 const MAX_FIELD = 1024
 const clip = (s: string, n = MAX_FIELD) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
+/**
+ * How many nudges one race may send, ever.
+ *
+ * A hard ceiling, deliberately separate from the "has everybody answered" check.
+ * That check alone was not a stop condition at all: it counted the whole GRID, and
+ * nine of the thirty-nine drivers have no Discord account and physically cannot
+ * press a button — so it could never reach zero, and the reminder would have fired
+ * every day of every race week for ever. Two belts now: only chase people who CAN
+ * answer, and stop after this many regardless.
+ *
+ * Two is the number because a third ask does not produce answers, it produces
+ * mutes — and a muted server misses the results post as well.
+ */
+const MAX_NUDGES = 2
+
 interface TallyRow {
   driver_id: string
   driver_name: string
@@ -72,6 +91,8 @@ interface TallyRow {
   car: string | null
   discord_user_id: string | null
   answer: boolean | null
+  /** True for an answer from somebody holding no entry in this event's season. */
+  off_grid: boolean
 }
 interface ReviewRow {
   driver_name: string
@@ -384,20 +405,55 @@ Deno.serve(async (req) => {
 
     // --- the tally, rebuilt from live data every run ----------------------------
     const { data: tallyRows } = await db.rpc('race_attendance_tally', { p_event: String(next.id) })
-    const tally = (tallyRows ?? []) as TallyRow[]
+    const all = (tallyRows ?? []) as TallyRow[]
+
+    // Split the grid from the strays BEFORE counting anything. An off-grid answer
+    // has no class, no car and no number, so folding it into "Racing" would both
+    // inflate the count and print a row reading `null` where a class code belongs.
+    const tally = all.filter((r) => !r.off_grid)
+    const offGrid = all.filter((r) => r.off_grid)
+
     const yes = tally.filter((r) => r.answer === true)
     const no = tally.filter((r) => r.answer === false)
     const silent = tally.filter((r) => r.answer === null)
+
+    // THE DISTINCTION THAT MAKES THE NUDGE STOPPABLE. A driver with no Discord
+    // account has not ignored anybody — they have no button. Chasing them is not
+    // just futile, it is what made the reminder unstoppable: the old stop condition
+    // counted the whole grid, so it could never reach zero.
+    const chaseable = silent.filter((r) => !!r.discord_user_id)
+    const unreachable = silent.filter((r) => !r.discord_user_id)
+
+    const controlFields: Record<string, unknown>[] = [
+      { name: `Racing (${yes.length})`, value: nameList(yes), inline: false },
+      { name: `Cannot make it (${no.length})`, value: nameList(no), inline: false },
+      { name: `No answer (${chaseable.length})`, value: nameList(chaseable), inline: false },
+    ]
+    if (unreachable.length) {
+      controlFields.push({
+        name: `⚠️ Cannot answer — no Discord account linked (${unreachable.length})`,
+        value: nameList(unreachable), inline: false,
+      })
+    }
+    // People who pressed a button but hold no entry this season. They used to be
+    // told "you are down as racing" and then appear nowhere — which is how a roster
+    // gap stays invisible right up until the grid is short on race day. Named AND
+    // mentioned: the name is who they are, the mention is how you reach them.
+    if (offGrid.length) {
+      controlFields.push({
+        name: `⚠️ Answered but not on the grid (${offGrid.length})`,
+        value: clip(offGrid.map((o) =>
+          `**${o.driver_name}**${o.discord_user_id ? ` (<@${o.discord_user_id}>)` : ''} — said ` +
+          `${o.answer ? '**racing**' : 'they cannot make it'}`).join('\n')),
+        inline: false,
+      })
+    }
 
     const controlEmbed = {
       title: `Attendance — ${label}`,
       description: `${where}\n${when}`,
       color: HCR_YELLOW,
-      fields: [
-        { name: `Racing (${yes.length})`, value: nameList(yes), inline: false },
-        { name: `Cannot make it (${no.length})`, value: nameList(no), inline: false },
-        { name: `No answer (${silent.length})`, value: nameList(silent), inline: false },
-      ],
+      fields: controlFields,
       footer: { text: `HCR League · staff only · ${tally.length} on the grid · updates as people answer` },
     }
 
@@ -455,30 +511,49 @@ Deno.serve(async (req) => {
       if (!up.ok) warnings.push(`Could not refresh the race-control tally — ${up.message}`)
     }
 
-    // One nudge a day, and only while people are still missing.
+    const sentSoFar = Number(post.reminders_sent ?? 0)
+    const stats = { yes: yes.length, no: no.length, silent: chaseable.length, unreachable: unreachable.length }
+
+    // Three ways to stay quiet, and the order matters for the reported reason.
     if (post.last_reminded_on === today.ymd) {
-      notes.push(`Already reminded the server today about ${label}.`)
-      return json({ ok: true, dryRun, next: label, yes: yes.length, no: no.length, silent: silent.length, applied, notes, warnings })
+      notes.push(`Already nudged today about ${label}.`)
+      return json({ ok: true, dryRun, next: label, ...stats, applied, notes, warnings })
     }
-    if (silent.length === 0) {
-      notes.push(`Everybody on the grid has answered for ${label}, so no reminder was sent.`)
-      return json({ ok: true, dryRun, next: label, yes: yes.length, no: no.length, silent: 0, applied, notes, warnings })
+    if (sentSoFar >= MAX_NUDGES) {
+      notes.push(
+        `${label} has had its ${MAX_NUDGES} nudges. ${chaseable.length} still silent — chase them by hand ` +
+        `if it matters; a third mass ping buys mutes, not answers.`)
+      return json({ ok: true, dryRun, next: label, ...stats, nudges_used: sentSoFar, applied, notes, warnings })
+    }
+    if (chaseable.length === 0) {
+      notes.push(unreachable.length
+        ? `Everybody who CAN answer has, for ${label}. ${unreachable.length} more have no Discord account linked and were not chased.`
+        : `Everybody on the grid has answered for ${label}.`)
+      return json({ ok: true, dryRun, next: label, ...stats, applied, notes, warnings })
     }
     if (dryRun) {
-      return json({ ok: true, dryRun, next: label, wouldRemind: `${silent.length} still silent`, applied, notes, warnings })
+      return json({ ok: true, dryRun, next: label, wouldRemind: `${chaseable.length} chaseable`, ...stats, applied, notes, warnings })
     }
 
     const jump = post.message_id
       ? `https://discord.com/channels/${guildId}/${post.channel_id}/${post.message_id}`
       : ''
+    // MENTIONS THE PEOPLE WHO HAVE NOT ANSWERED, NOT @everyone.
+    //
+    // A nudge is a chase, not an announcement. @everyone here woke all sixty-one
+    // members — including the twenty-two who are not on the grid at all — to tell
+    // them somebody else had not filled in a form. The people who need it get a
+    // real notification; everybody else gets nothing. allowed_mentions lists the
+    // ids explicitly, so this cannot widen into a mass ping by accident even if
+    // the copy above it ever changes.
+    const chase = chaseable.map((r) => String(r.discord_user_id))
     const rem = await discord(`/channels/${askChannel}/messages`, 'POST', botToken, {
       content: [
-        '@everyone',
         `**${label}** — ${when}`,
-        `${silent.length} of ${tally.length} on the grid still have not said whether they are racing.`,
-        jump ? `Answer here: ${jump}` : 'Answer on the attendance post above.',
+        `Still need an answer from ${chase.length}: ${chase.map((id) => `<@${id}>`).join(' ')}`,
+        jump ? `One tap here: ${jump}` : 'Answer on the attendance post above.',
       ].join('\n'),
-      allowed_mentions: { parse: ['everyone'] },
+      allowed_mentions: { users: chase },
     })
     if (!rem.ok) return json({ error: `Could not post the reminder — ${rem.message}`, applied, warnings }, 502)
     const remId = String((rem.data as { id?: string } | null)?.id ?? '')
@@ -504,11 +579,11 @@ Deno.serve(async (req) => {
       reminder_message_id: remId || null,
     }).eq('event_id', String(next.id))
 
-    applied.push(`reminded the server about ${label} (${silent.length} still silent)`)
-    return json({
-      ok: warnings.length === 0, next: label, reminded: true,
-      yes: yes.length, no: no.length, silent: silent.length, applied, notes, warnings,
-    })
+    // Reports the same numbers as every other exit above — `stats`, which counts
+    // only the people who can actually be chased. Reporting raw `silent` here
+    // instead was how the unstoppable-nudge bug read as normal in the logs.
+    applied.push(`reminded the server about ${label} (${chaseable.length} still silent)`)
+    return json({ ok: warnings.length === 0, next: label, reminded: true, ...stats, applied, notes, warnings })
   } catch (e) {
     return json({ error: `Attendance run failed — ${String((e as Error)?.message ?? e)}` }, 500)
   }
