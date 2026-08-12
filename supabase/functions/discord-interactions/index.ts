@@ -1,9 +1,28 @@
-// discord-interactions — the endpoint Discord POSTs a button click to, and the only
-// thing standing between a newcomer and the rest of the server.
+// discord-interactions — the single endpoint Discord POSTs every interaction to.
 //
-// One button, in #welcome. Pressing it grants discord_config.gate_role_id, which is
-// the role every other channel is gated behind. Nothing else in this file does
-// anything: no commands, no modals, no state.
+// THREE THINGS ARRIVE HERE, and they are told apart by interaction.type:
+//
+//   THE GATE BUTTON      One button, in #welcome. Pressing it grants
+//                        discord_config.gate_role_id, the role every other channel
+//                        is gated behind.
+//   ATTENDANCE BUTTONS   "I'm racing" / "Can't make it", posted by
+//                        discord-attendance, carrying the event id in custom_id.
+//   SLASH COMMANDS       /next and /standings. The NAMES are registered separately
+//                        by discord-commands; the handlers are here. Those two
+//                        deployments are one unit — a name registered there with no
+//                        handler here is a command that appears, is pressable, and
+//                        shrugs.
+//
+// EVERY REPLY IS EPHEMERAL. Nothing this endpoint says is visible to anybody but
+// the person who acted, which is what keeps a channel from filling with other
+// people's confirmations and lookups.
+//
+// THE THREE-SECOND RULE governs everything below. Discord abandons an interaction
+// that goes unanswered for three seconds and shows the member a red "This
+// interaction failed" — which, on the attendance path, would be an outright lie,
+// because the answer is already committed by then. Every handler here keeps its
+// database work to a few small indexed reads, runs independent reads with
+// Promise.all rather than in sequence, and bounds anything that talks to Discord.
 //
 // EXISTING MEMBERS NEVER SEE THIS. They are granted the gate role in bulk, so nobody
 // who already races has to prove anything. The gate is for arrivals only, and it is
@@ -62,6 +81,7 @@ const json = (b: unknown, s = 200) =>
 
 // Interaction types we answer. https://discord.com/developers/docs/interactions
 const PING = 1
+const APPLICATION_COMMAND = 2
 const MESSAGE_COMPONENT = 3
 // Response types we send.
 const PONG = 1
@@ -196,6 +216,90 @@ async function signatureIsValid(keyHex: string, signatureHex: string, timestamp:
 const reply = (content: string) =>
   json({ type: CHANNEL_MESSAGE_WITH_SOURCE, data: { content, flags: EPHEMERAL } })
 
+/**
+ * The same, with an embed. Also ephemeral, and that is the point of slash commands
+ * here: somebody running /standings is looking something up, not announcing it. A
+ * channel that fills with other people's lookups is a channel people mute, and a
+ * muted channel misses the results post too.
+ */
+const replyEmbed = (embed: Record<string, unknown>) =>
+  json({ type: CHANNEL_MESSAGE_WITH_SOURCE, data: { embeds: [embed], flags: EPHEMERAL } })
+
+const SITE = 'https://hcrleague.com'
+const HCR_YELLOW = 0xf2e114
+const CLASS_ORDER = ['GTP', 'LMP2', 'GTD']
+const MAX_FIELD = 1024
+const clip = (s: string, n = MAX_FIELD) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
+
+// ── championship scoring ────────────────────────────────────────────────────────
+//
+// A PORT, NOT AN INVENTION — and now the THIRD copy of it. The others are
+// src/lib/standings.ts (the website, via src/lib/attribution.ts) and the
+// 'standings' branch of discord-broadcast. All three must agree, because a member
+// who runs /standings and then reads the standings post has been told two things
+// by the same league.
+//
+// The rules: crew names normalised and sorted so "A / B" and "B, A" are one entry,
+// points = points + quali_points + adjust, fill_in rows excluded because they score
+// the Fill-In Cup instead, ties broken by best class finish. If any of that changes
+// in src/lib/standings.ts, it must change here and in discord-broadcast too.
+//
+// The diacritics range is written as an escape rather than as literal combining
+// characters, because the literal form is invisible in most editors and does not
+// survive being copied between files — which is exactly how three copies drift.
+function normalizeName(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim()
+}
+function crewKey(driversText?: string | null, fallback = ''): string {
+  const names = (driversText ?? '')
+    .split(/\s*(?:\/|,|;|&|\+|\band\b)\s*/i)
+    .map((s) => normalizeName(s.trim()))
+    .filter(Boolean)
+  return names.length ? names.sort().join('|') : fallback.toLowerCase()
+}
+interface ScoreRow {
+  class_id?: string | null
+  number?: string | null
+  drivers_text?: string | null
+  cls_pos?: number | null
+  points?: number | null
+  quali_points?: number | null
+  adjust?: number | null
+  fill_in?: boolean | null
+}
+const rowPoints = (r: ScoreRow) => (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)
+
+/** Top `n` per class, keyed by crew, in CLASS_ORDER. */
+function standingsByClass(rows: ScoreRow[], n = 5) {
+  const perClass = new Map<string, Map<string, { name: string; points: number; best: number | null; starts: number }>>()
+  for (const r of rows) {
+    if (r.fill_in) continue
+    const cls = String(r.class_id ?? '')
+    if (!CLASS_ORDER.includes(cls)) continue
+    const name = (r.drivers_text || '').trim() || `#${r.number ?? '?'}`
+    const key = crewKey(r.drivers_text, name)
+    const bucket = perClass.get(cls) ?? new Map()
+    const cur = bucket.get(key) ?? { name, points: 0, best: null, starts: 0 }
+    cur.points += rowPoints(r)
+    cur.starts += 1
+    const p = r.cls_pos ?? null
+    cur.best = cur.best === null ? p : Math.min(cur.best, p ?? 99)
+    bucket.set(key, cur)
+    perClass.set(cls, bucket)
+  }
+  return CLASS_ORDER.map((cls) => {
+    const bucket = perClass.get(cls)
+    if (!bucket || bucket.size === 0) return null
+    const top = [...bucket.values()]
+      .sort((a, b) => b.points - a.points || (a.best ?? 99) - (b.best ?? 99))
+      .slice(0, n)
+    return { cls, top, leader: top[0]?.points ?? 0 }
+  }).filter(Boolean) as { cls: string; top: { name: string; points: number }[]; leader: number }[]
+}
+
+const round2 = (v: number) => Math.round(v * 100) / 100
+
 /** What a member is told when we cannot finish the job. Detail goes to the log, not to them. */
 const ASK_A_COMMISSIONER =
   'Something went wrong opening the server up for you — nothing you did. Ask a commissioner and they will sort it out.'
@@ -203,7 +307,13 @@ const ASK_A_COMMISSIONER =
 interface Interaction {
   type?: number
   guild_id?: string | null
-  data?: { custom_id?: string | null } | null
+  data?: {
+    /** Present on MESSAGE_COMPONENT. */
+    custom_id?: string | null
+    /** Present on APPLICATION_COMMAND — the command name, e.g. "standings". */
+    name?: string | null
+    options?: { name?: string | null; value?: unknown }[] | null
+  } | null
   member?: { user?: { id?: string | null } | null; roles?: string[] | null } | null
   user?: { id?: string | null } | null
 }
@@ -303,6 +413,133 @@ async function refreshTally(
   })
 }
 
+/**
+ * /next — the next race, and whether the caller is down as racing.
+ *
+ * Answers the two questions people actually ask in the server the week of a race,
+ * and answers the second one HONESTLY: somebody with no entry is told that, rather
+ * than being told they have not answered yet, which would send them looking for a
+ * button that will not count them.
+ *
+ * Every query here is a single indexed row or a tiny set, because the whole reply
+ * has to be back inside Discord's three-second interaction budget.
+ */
+async function handleNext(
+  db: ReturnType<typeof createClient>, clicker: string,
+): Promise<Response> {
+  // 'next' is the curated flag race control sets. Falling back to the earliest
+  // unfinished race means the command still answers during the window after a race
+  // completes and before the next one is promoted, instead of saying "no races".
+  let { data: ev } = await db.from('events')
+    .select('id, round, name, date, track_id, season_id, duration_h, duration_min, broadcast_url')
+    .eq('status', 'next').limit(1).maybeSingle()
+  if (!ev) {
+    const { data: soon } = await db.from('events')
+      .select('id, round, name, date, track_id, season_id, duration_h, duration_min, broadcast_url')
+      .neq('status', 'complete').order('date', { ascending: true }).limit(1).maybeSingle()
+    ev = soon ?? null
+  }
+  if (!ev) {
+    return reply('There is no race on the calendar right now. The schedule lives at ' + `${SITE}/schedule`)
+  }
+
+  const [{ data: track }, { data: answer }, { data: seats }] = await Promise.all([
+    ev.track_id
+      ? db.from('tracks').select('name, config').eq('id', ev.track_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    db.from('race_attendance').select('planned')
+      .eq('event_id', ev.id).eq('discord_user_id', clicker).maybeSingle(),
+    db.from('entry_drivers')
+      .select('entry_id, drivers!inner(discord_user_id), entries!inner(season_id, class_id, number, car)')
+      .eq('drivers.discord_user_id', clicker)
+      .eq('entries.season_id', ev.season_id)
+      .limit(1),
+  ])
+
+  const at = Math.floor(new Date(String(ev.date)).getTime() / 1000)
+  const where = [track?.name, track?.config].filter(Boolean).join(' · ')
+  const length = ev.duration_h ? `${ev.duration_h} hours` : ev.duration_min ? `${ev.duration_min} minutes` : null
+
+  const seat = (seats ?? [])[0] as { entries?: { class_id?: string; number?: string; car?: string } } | undefined
+  const yours = seat?.entries
+    ? `\`${seat.entries.class_id}${seat.entries.number ? ` #${seat.entries.number}` : ''}\` ${seat.entries.car ?? ''}`.trim()
+    : null
+
+  const you = !seat
+    ? 'You are **not on this season\'s entry list**, so nothing has been counted for you. ' +
+      `Two minutes to fix: ${SITE}/signup`
+    : answer == null
+      ? 'You have **not answered yet** — the attendance post in the announcements channel has the buttons.'
+      : answer.planned
+        ? 'You are down as **racing**. 🏁'
+        : 'You are down as **not racing**. Press "I\'m racing" on the attendance post if that changes.'
+
+  const fields: Record<string, unknown>[] = [
+    { name: 'When', value: `<t:${at}:F>\n<t:${at}:R>`, inline: true },
+  ]
+  if (where) fields.push({ name: 'Where', value: clip(where), inline: true })
+  if (length) fields.push({ name: 'Length', value: length, inline: true })
+  if (yours) fields.push({ name: 'Your car', value: clip(yours), inline: false })
+  fields.push({ name: 'You', value: clip(you), inline: false })
+
+  return replyEmbed({
+    title: `Round ${ev.round} — ${ev.name}`,
+    url: `${SITE}/schedule`,
+    color: HCR_YELLOW,
+    fields,
+    footer: { text: 'HCR League · only you can see this' },
+  })
+}
+
+/**
+ * /standings — top five per class, or one class if asked.
+ *
+ * Reads the season from `seasons.is_current` rather than from whatever race happens
+ * to be next, so the answer does not change shape in the gap between seasons.
+ */
+async function handleStandings(
+  db: ReturnType<typeof createClient>, only: string,
+): Promise<Response> {
+  const { data: season } = await db.from('seasons')
+    .select('id, name').eq('is_current', true).maybeSingle()
+  if (!season?.id) return reply(`No season is marked current. The table is at ${SITE}/standings`)
+
+  const { data: evs } = await db.from('events').select('id, round, status').eq('season_id', season.id)
+  const ids = (evs ?? []).map((e) => String(e.id))
+  if (!ids.length) return reply(`No races in this season yet. ${SITE}/standings`)
+
+  const { data: res } = await db.from('results')
+    .select('class_id, number, drivers_text, cls_pos, points, quali_points, adjust, fill_in')
+    .in('event_id', ids)
+
+  const table = standingsByClass((res ?? []) as ScoreRow[])
+  const wanted = only ? table.filter((t) => t.cls === only) : table
+  if (!wanted.length) {
+    return reply(only
+      ? `Nothing scored in ${only} yet this season.`
+      : `No championship points scored yet this season. ${SITE}/standings`)
+  }
+
+  const fields = wanted.map((t) => ({
+    name: t.cls,
+    value: clip(t.top.map((d, i) => {
+      const behind = i === 0 ? 'leader' : `−${round2(t.leader - d.points)}`
+      return `\`${String(i + 1).padStart(2)}\` ${d.name} — **${round2(d.points)}** · ${behind}`
+    }).join('\n')),
+    inline: false,
+  }))
+
+  const done = (evs ?? []).filter((e) => e.status === 'complete').length
+  return replyEmbed({
+    title: only ? `${only} championship` : 'Championship standings',
+    url: `${SITE}/standings`,
+    color: HCR_YELLOW,
+    description: `${season.name ?? 'This season'} · ${done} of ${ids.length} rounds scored`,
+    fields,
+    footer: { text: 'HCR League · top five per class · full table on the site · only you can see this' },
+  })
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
@@ -359,6 +596,34 @@ Deno.serve(async (req) => {
   // them nothing and cannot be acted on; a sentence they can read is always better,
   // and the real reason belongs in the function log either way.
   try {
+    // --- slash commands -------------------------------------------------------
+    // Registered by discord-commands, which sends Discord the list of names. THE
+    // TWO ARE ONE UNIT: a name registered there and not handled here produces a
+    // command that appears in the client, is pressable, and shrugs.
+    if (interaction.type === APPLICATION_COMMAND) {
+      const command = String(interaction.data?.name ?? '')
+      const caller = String(interaction.member?.user?.id ?? interaction.user?.id ?? '').trim()
+      const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+
+      if (command === 'next') {
+        if (!caller) return reply('Run this in the HCR League server rather than in a DM.')
+        return await handleNext(db, caller)
+      }
+      if (command === 'standings') {
+        const opt = (interaction.data?.options ?? []).find((o) => o?.name === 'class')
+        const only = String(opt?.value ?? '').trim().toUpperCase()
+        // Guarded even though the command declares fixed choices: the choices are
+        // enforced by Discord's client, and this endpoint is reachable by anyone
+        // holding a valid signature. An unrecognised value is treated as "all".
+        return await handleStandings(db, CLASS_ORDER.includes(only) ? only : '')
+      }
+
+      console.error(`discord-interactions: no handler for /${command}`)
+      return reply(
+        `\`/${command}\` is registered but this bot has no handler for it — that is a deploy that ` +
+        'went out half-done, not something you did. Tell a commissioner.')
+    }
+
     if (interaction.type !== MESSAGE_COMPONENT) {
       console.error(`discord-interactions: ignoring interaction type ${interaction.type}`)
       return reply('This bot only handles the button in #welcome.')
