@@ -640,6 +640,63 @@ Deno.serve(async (req) => {
           fields,
           footer: { text: 'HCR League · race control · decisions are final once published' },
         }
+      } else if (row.kind === 'registration') {
+        // Somebody has entered the season. This goes to RACE CONTROL, never to a
+        // public channel: it carries a person's iRacing name and customer ID, and a
+        // signup is not an announcement. The welcome already happens — Discord posts
+        // its own join message, and discord-membership follows it with the guide.
+        //
+        // It exists because the step after this one is a step only race control can
+        // take. iRacing keeps its own league membership, so a driver who has done
+        // everything on the website still cannot join the session until somebody
+        // sends them an invite. Nothing used to say there was one to send.
+        const regId = String(row.payload?.registration_id ?? '')
+        const { data: reg } = await db.from('season_registrations')
+          .select('id, display_name, preferred_class, preferred_car, preferred_number, preferred_number_alt, iracing_name, iracing_custid, nationality, notes, status')
+          .eq('id', regId).maybeSingle()
+        if (!reg) {
+          skipped.push({ key: row.dedupe_key, reason: 'That registration no longer exists.' })
+          if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'registration deleted' }).eq('id', row.id)
+          continue
+        }
+        // Already dealt with between queueing and sending — a fast commissioner, or
+        // a backlog drain. Telling staff to action something they have already
+        // actioned trains them to ignore the channel.
+        if (reg.status && reg.status !== 'pending') {
+          skipped.push({ key: row.dedupe_key, reason: `That registration was already ${reg.status}.` })
+          if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: `already ${reg.status}` }).eq('id', row.id)
+          continue
+        }
+
+        const name = String(reg.display_name ?? reg.iracing_name ?? 'A new driver').trim()
+        title = clip(`Season entry — ${name}`, MAX_TITLE)
+
+        const numbers = [reg.preferred_number, reg.preferred_number_alt]
+          .map((n) => String(n ?? '').trim()).filter(Boolean).map((n) => `#${n}`).join(' or ')
+
+        const fields: Record<string, unknown>[] = []
+        if (reg.iracing_name) fields.push({ name: 'iRacing name', value: clip(String(reg.iracing_name), MAX_FIELD), inline: true })
+        // The custid is what an iRacing league invite is actually addressed to, so
+        // it is the single most useful thing in this message.
+        if (reg.iracing_custid) fields.push({ name: 'Customer ID', value: clip(String(reg.iracing_custid), MAX_FIELD), inline: true })
+        if (reg.nationality) fields.push({ name: 'Nationality', value: clip(String(reg.nationality), MAX_FIELD), inline: true })
+        if (reg.preferred_class) fields.push({ name: 'Class', value: clip(String(reg.preferred_class), MAX_FIELD), inline: true })
+        if (reg.preferred_car) fields.push({ name: 'Car', value: clip(String(reg.preferred_car), MAX_FIELD), inline: true })
+        if (numbers) fields.push({ name: 'Number', value: clip(numbers, MAX_FIELD), inline: true })
+        if (reg.notes) fields.push({ name: 'Notes', value: clip(String(reg.notes), MAX_FIELD), inline: false })
+        fields.push({
+          name: 'Next step',
+          value: 'Approve the entry on the site, then send them the iRacing league invite — they cannot join the session without it.',
+          inline: false,
+        })
+
+        embed = {
+          title,
+          url: `${SITE}/admin`,
+          color: HCR_YELLOW,
+          fields,
+          footer: { text: 'HCR League · race control · nobody is on the grid until this is actioned' },
+        }
       } else {
         skipped.push({ key: row.dedupe_key, reason: `Unknown announcement kind "${row.kind}".` })
         if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: `unknown kind ${row.kind}` }).eq('id', row.id)
