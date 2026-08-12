@@ -13,9 +13,16 @@ const NAV = [
   { to: '/standings', label: 'Standings' },
   { to: '/results', label: 'Results' },
   { to: '/drivers', label: 'Drivers' },
-  { to: '/teams', label: 'Teams' },
   { to: '/reports', label: 'Reports' },
 ]
+// NO TEAMS LINK, deliberately. The league has never had a team: every entry is one
+// driver in one car, and `teams` has zero rows. The page it led to was an empty
+// state, and the standings tab beside it silently keyed on CAR NUMBER instead —
+// ranking "#49" and "#29" as if they were constructors. A nav item that promises a
+// championship the league does not run is worse than no nav item.
+//
+// The /teams route and the commissioner's Teams admin are both still there, so the
+// day an entry gets a second driver this is one line to put back.
 
 function Wordmark() {
   return (

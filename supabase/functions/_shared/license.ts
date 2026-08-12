@@ -4,7 +4,12 @@
 
 export type License = 'Bronze' | 'Silver' | 'Gold' | 'Platinum'
 export const LICENSE_ORDER: License[] = ['Bronze', 'Silver', 'Gold', 'Platinum']
-export const LICENSE_THRESHOLDS: Record<License, number> = { Bronze: 0, Silver: 75, Gold: 155, Platinum: 320 }
+// KEEP IN LOCKSTEP WITH src/lib/license.ts. Deno cannot import across that
+// boundary, so this is a copy — and if the two drift, a driver's badge on the
+// website and their role in Discord disagree about what they have earned, which
+// looks like a bug in whichever one the reader happens to trust less.
+// See that file for how these numbers were measured.
+export const LICENSE_THRESHOLDS: Record<License, number> = { Bronze: 0, Silver: 40, Gold: 100, Platinum: 170 }
 
 export interface LicenseRow {
   drivers_text?: string | null

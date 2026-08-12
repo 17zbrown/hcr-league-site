@@ -35,6 +35,21 @@ export default function MemberPortal() {
   const { data: protests } = useProtests({ mine: true, userId: session?.user?.id })
   const { data: myRequests } = useMyChangeRequests()
 
+  // IS THIS MEMBER ACTUALLY ON THE GRID? Everything below assumes they are — three
+  // tabs about a car, a licence and a change request — and somebody who has signed
+  // in but never entered the season saw all of it with no idea what to do next. The
+  // one action they needed, /account, was a ghost button at the bottom of the first
+  // tab, and the Discord welcome guide called it "My Account", a label that appears
+  // nowhere on the site. That was the whole gap between joining and racing.
+  const { data: season } = useCurrentSeason()
+  const { data: seasonEntries, isLoading: entriesLoading } = useEntries(season?.id)
+  const hasEntry = useMemo(
+    () =>
+      !!profile?.driver_id &&
+      (seasonEntries ?? []).some((e) => (e.drivers ?? []).some((l) => l.driver?.id === profile.driver_id)),
+    [seasonEntries, profile?.driver_id],
+  )
+
   // The badge counts what the member is WAITING ON, not everything they have ever
   // filed. A resolved protest from March is not an outstanding action, and putting it
   // in the count would make the number meaningless within a season.
@@ -60,6 +75,26 @@ export default function MemberPortal() {
         <div className="mb-6 flex flex-wrap gap-2">
           {isRaceControl && <Link to="/control" className="hcr-btn hcr-btn-dark !text-xs">Race Control Portal →</Link>}
           {isAdmin && <Link to="/admin" className="hcr-btn hcr-btn-ghost !text-xs">Admin Portal →</Link>}
+        </div>
+      )}
+
+      {/*
+        The next step, for the one person who most needs it.
+        Only while we KNOW there is no entry — rendering this during the load would
+        flash "you are not on the grid" at drivers who are, which is worse than
+        showing nothing for a moment.
+      */}
+      {!entriesLoading && !hasEntry && (
+        <div className="mb-8 rounded-2xl border border-[var(--color-brand)] bg-[var(--color-brand)]/[0.08] p-6">
+          <h2 className="font-display text-2xl leading-tight">You are not on this season's grid yet</h2>
+          <p className="mt-2 max-w-2xl text-sm text-[var(--color-muted)]">
+            Entering takes about two minutes — your class, your car, two car numbers and your
+            iRacing details. Race control confirms the slot and sends your iRacing league invite
+            from there.
+          </p>
+          <Link to="/account" className="hcr-btn hcr-btn-primary mt-4 inline-flex">
+            Enter the season →
+          </Link>
         </div>
       )}
 

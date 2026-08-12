@@ -18,17 +18,49 @@
 // race, reaching GOLD in about one full season (~11 rounds) and PLATINUM after a
 // second full season (~22 rounds). Slower or messier drivers climb more slowly.
 // Tune the weights and thresholds below to adjust that pace.
+//
+// ── CHECK THE ARITHMETIC BEFORE CHANGING A THRESHOLD ────────────────────────────
+//
+// The ceiling is 17 credits in a single race (finish 5 + pace 5 + qualifying 3 +
+// safety 4), and only for a pole-to-win with the class's fastest lap and zero
+// incidents. Over an eleven-round season that is 187 credits TOTAL, for a driver
+// who wins every round perfectly.
+//
+// The first version of this ladder asked 320 for Platinum, which no season could
+// produce, and 155 for Gold — 14.1 every single round, above what the actual
+// championship leader averages (12.4). Four Discord roles, a promotions channel
+// and an hourly job all existed to announce promotions that were arithmetically
+// impossible. A threshold nobody can reach is not "aspirational", it is a ladder
+// with no rungs, and the whole feature reads as broken.
+//
+// These numbers are set against real season-five output: Silver lands mid-first-
+// season for anyone racing regularly, Gold is a strong full season, Platinum is a
+// strong season and a bit. Recompute against `credits` on /drivers before moving
+// them again.
 
 export type License = 'Bronze' | 'Silver' | 'Gold' | 'Platinum'
 
 export const LICENSE_ORDER: License[] = ['Bronze', 'Silver', 'Gold', 'Platinum']
 
-/** Career credits required to hold each tier. */
+/**
+ * Career credits required to hold each tier.
+ *
+ * Measured, not guessed. Across the five rounds scored so far the fastest driver
+ * in the league averages 12.4 credits a race, the median scorer 9.0, and the best
+ * single race anyone has produced is 13.3 — against a theoretical per-race ceiling
+ * of 17. Over an eleven-round season that puts a front-runner near 136 and a
+ * steady regular near 99.
+ *
+ *   Silver    a regular reaches it around the middle of their first season
+ *   Gold      a strong full season
+ *   Platinum  a front-runner's season and a bit — the intended two-season climb,
+ *             and just inside the 187 a flawless single season could produce
+ */
 export const LICENSE_THRESHOLDS: Record<License, number> = {
   Bronze: 0,
-  Silver: 75,
-  Gold: 155,
-  Platinum: 320,
+  Silver: 40,
+  Gold: 100,
+  Platinum: 170,
 }
 
 /** Classes each license makes a driver eligible for (informational ladder). */

@@ -44,6 +44,15 @@ const SUPPRESS_JOIN_NOTIFICATIONS = 1 << 0
 
 const VIEW_CHANNEL = 1n << 10n
 const SITE = 'https://hcrleague.com'
+/**
+ * The iRacing league id, quoted in the welcome guide.
+ *
+ * Signing up on the website does not make anybody a member of the league on
+ * iRacing, and that is the one gap that stops a driver actually racing. It is the
+ * league's public identifier, not a secret — it is printed in iRacing's own league
+ * directory — so it belongs in the copy rather than in config.
+ */
+const IRACING_LEAGUE_ID = '14470'
 
 /**
  * A member who joined longer ago than this is never greeted.
@@ -111,16 +120,26 @@ function welcomeMessage(userIds: string[], ref: (name: string) => string | null)
     'Three-class endurance racing — GTP, LMP2 and GTD share the track and score three separate championships.',
     '',
     '**Getting on the grid**',
-    `**1.** Go to ${SITE} and hit **Sign in** — use this same Discord account, it takes one click.`,
+    // EVERY LABEL HERE IS THE ONE ACTUALLY ON THE SCREEN. This guide used to say
+    // "hit Sign in" and "open My Account", and neither string appears anywhere on
+    // the site — the buttons read "Enter Season" and "My Portal". Sending a newcomer
+    // to look for words that are not there is a worse failure than saying nothing,
+    // because they assume the fault is theirs. If the site's copy changes, change
+    // these with it.
+    `**1.** Go to ${SITE} and hit **Enter Season** — sign in with this same Discord account, it takes one click.`,
     // Mentioned as something to have ready, not as a rule. Everyone signing up for an
     // iRacing league knows they will be asked for their iRacing details; spelling out
     // that the entry is refused without them reads as a warning to people who have
     // done nothing wrong. The form itself enforces it and says so at the point it
     // matters, which is where a rule belongs.
-    '**2.** Open **My Account** and enter the season — have your iRacing name and customer ID to hand.',
-    '**3.** Pick your class, your car, and two car numbers. Numbers are league-wide and first come, first served — your second choice is there for when the first is already gone.',
+    '**2.** In **My Portal**, press **Enter the season**. Pick your class, your car and two car numbers — numbers are league-wide and first come, first served, so the second is there for when your first is taken. Have your iRacing name and customer ID to hand.',
+    // THE STEP THAT WAS MISSING. Everything above happens on our website, and none
+    // of it puts anybody in the race session — iRacing keeps its own league
+    // membership. A driver could complete every step here, be on the published grid,
+    // and still be unable to join on race night. That is exactly what happened.
+    `**3.** Join the league on **iRacing** — separate from the website. Race control sends you an invite once you have entered; accept it from your iRacing account, or find us in the Leagues directory as **HCR League**, league ID **${IRACING_LEAGUE_ID}**.`,
     '',
-    'Race Control confirms your grid slot from there. Once you are entered, your nickname in this server updates itself to your iRacing name and car number.',
+    'Race Control confirms your grid slot from there. Once you are entered, your nickname in this server updates itself to your iRacing name and car number, and before each round you will get a post asking whether you are racing — one button.',
     ...(tour.length ? ['', '**Where things are**', ...tour] : []),
   ].join('\n')
 }
@@ -346,7 +365,7 @@ Deno.serve(async (req) => {
             `## HCR League`, '',
             `**${SITE}**`, '',
             'Schedule, standings, results, the roster and season sign-up all live here.',
-            'Sign in with the same Discord account you are reading this on.',
+            'Hit **Enter Season** and sign in with the same Discord account you are reading this on.',
           ].join('\n'),
         })
         const msgId = (post.data as { id?: string } | null)?.id
