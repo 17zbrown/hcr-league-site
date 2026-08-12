@@ -356,7 +356,16 @@ Deno.serve(async (req) => {
     const opensOn = wednesdayBefore(raceAt)
     const label = `Round ${next.round} — ${next.name}`
 
-    if (today.ymd < opensOn && !force) {
+    // Read the drive's state BEFORE the calendar gate, because the gate answers
+    // "is it time to OPEN a drive" and must not be allowed to answer "should I
+    // service one that is already open". Getting that backwards meant a drive
+    // started early (with force) went unserviced until its nominal Wednesday — no
+    // tally refresh, no nudge — which is exactly the window where somebody has
+    // just been asked and is most likely to answer.
+    const { data: post } = await db.from('race_attendance_posts')
+      .select('*').eq('event_id', String(next.id)).maybeSingle()
+
+    if (!post && today.ymd < opensOn && !force) {
       notes.push(`${label} opens for attendance on ${opensOn} (${today.ymd} today).`)
       return json({ ok: true, dryRun, next: label, opensOn, applied, notes, warnings })
     }
@@ -372,9 +381,6 @@ Deno.serve(async (req) => {
     // Discord renders <t:unix:F> in every reader's own timezone, which beats
     // writing a time that is wrong for half the grid.
     const when = `<t:${Math.floor(raceAt.getTime() / 1000)}:F> (<t:${Math.floor(raceAt.getTime() / 1000)}:R>)`
-
-    const { data: post } = await db.from('race_attendance_posts')
-      .select('*').eq('event_id', String(next.id)).maybeSingle()
 
     // --- the tally, rebuilt from live data every run ----------------------------
     const { data: tallyRows } = await db.rpc('race_attendance_tally', { p_event: String(next.id) })
