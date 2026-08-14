@@ -698,8 +698,12 @@ Deno.serve(async (req) => {
       } else {
         const { data: entryRows, error: edErr } = await db
           .from('entry_drivers')
-          .select('driver_id, entries!inner(season_id)')
+          .select('driver_id, withdrawn_at, entries!inner(season_id, status)')
           .eq('entries.season_id', season.id)
+          // Withdrawn drivers go back to Spectator: they are no longer racing this
+          // season, even though the crew link survives to keep their results honest.
+          .is('withdrawn_at', null)
+          .neq('entries.status', 'withdrawn')
         if (edErr) entryErr = edErr
         else for (const r of (entryRows ?? []) as { driver_id?: string | null }[]) {
           const id = String(r?.driver_id ?? '').trim()

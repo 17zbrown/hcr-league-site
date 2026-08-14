@@ -223,8 +223,13 @@ Deno.serve(async (req) => {
     {
       const { data: seatRows, error } = await db
         .from('entry_drivers')
-        .select('driver_id, entries!inner(season_id, class_id, number)')
+        .select('driver_id, withdrawn_at, entries!inner(season_id, class_id, number, status)')
         .eq('entries.season_id', season.id)
+        // A withdrawn driver gives their class role back. The crew link is kept so
+        // their finished races still read true, so presence alone no longer means
+        // "races this season".
+        .is('withdrawn_at', null)
+        .neq('entries.status', 'withdrawn')
       if (error) return json({ error: `Could not read the entry list — ${error.message}. Nothing was changed.` }, 500)
       for (const r of (seatRows ?? []) as { driver_id?: string | null; entries?: { class_id?: string | null; number?: string | null } | null }[]) {
         const did = String(r?.driver_id ?? '').trim()

@@ -321,12 +321,23 @@ export function useEntries(seasonId?: string) {
     queryFn: async (): Promise<Entry[]> => {
       const { data, error } = await supabase
         .from('entries')
-        .select('*, team:teams(*), drivers:entry_drivers(driver:drivers(*))')
+        .select('*, team:teams(*), drivers:entry_drivers(withdrawn_at, driver:drivers(*))')
         .eq('season_id', seasonId!)
+        // A withdrawn car is off future grids but its row stays, because
+        // results.entry_id is ON DELETE SET NULL and deleting it would orphan every
+        // finish the crew already scored. Standings read results and never entries,
+        // so hiding the car here costs nobody a point.
+        .neq('status', 'withdrawn')
         .order('class_id')
         .order('number')
       if (error) throw error
-      return (data ?? []) as Entry[]
+      // A car can outlive one of its drivers leaving — an endurance crew shares an
+      // entry. Drop the departed crew links so "who races this?" answers truthfully
+      // while the car itself stays on the grid for whoever is left.
+      return ((data ?? []) as Entry[]).map((e) => ({
+        ...e,
+        drivers: (e.drivers ?? []).filter((l) => !l.withdrawn_at),
+      }))
     },
   })
 }

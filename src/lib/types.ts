@@ -103,9 +103,16 @@ export interface Entry {
   class_id: ClassId
   car: string | null
   team_id: string | null
+  /** 'withdrawn' means the crew is gone; the row survives so past results stay linked. */
+  status?: 'active' | 'pending' | 'withdrawn'
   // joined
   team?: Team
-  drivers?: { driver: Driver }[]
+  /**
+   * A crew link. `withdrawn_at` is non-null once that driver stopped racing this
+   * season — the link is kept rather than deleted so the car's history reads true,
+   * so anything asking "who races this?" must skip the withdrawn ones.
+   */
+  drivers?: { withdrawn_at?: string | null; driver: Driver }[]
 }
 
 export interface Driver {

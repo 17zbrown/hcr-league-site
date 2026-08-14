@@ -42,3 +42,19 @@ public/og/
 # The gateway bot's shared secret. Only its SHA-256 goes in the database; the
 # plaintext belongs here and on the VM, and nowhere a commit can carry it.
 oracle-gateway/.gateway-secret
+
+# ruflo/claude-flow local state
+.swarm/
+.claude-flow/
+ruvector.db
+agentdb.rvf
+agentdb.rvf.lock
+.claude/proven-config.json
+.claude/.proven-config-version
+
+# Ruflo local secrets and runtime data
+.env.local
+.env.*.local
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/

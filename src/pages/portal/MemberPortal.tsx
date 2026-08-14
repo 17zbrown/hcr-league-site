@@ -354,15 +354,101 @@ function RequestChangeCard() {
  * remember. A driver on a team sees their number as the TEAM's, because the team
  * owns it and their manager is the one who can change it.
  */
+/**
+ * Leaving the season, without erasing having been in it.
+ *
+ * Deliberately two clicks. Withdrawing is not undoable from this page — race control
+ * has to seat somebody again — so a single mis-tap on a phone must not end a season.
+ *
+ * What it does NOT do is delete anything. `withdraw_from_season` marks the sign-up
+ * withdrawn, stamps the crew link, and retires the car only once no driver is left on
+ * it. Every result already scored keeps its points and its place in the standings,
+ * which is the whole reason the rows survive rather than being removed.
+ */
+function WithdrawFromSeason({ seasonId, seasonName, seated }: { seasonId: string; seasonName: string; seated: boolean }) {
+  const qc = useQueryClient()
+  const [arming, setArming] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
+
+  if (done) {
+    return (
+      <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-mist)] p-6">
+        <h3 className="font-display text-xl leading-tight">You've withdrawn from {seasonName}</h3>
+        <p className="mt-2 text-sm text-[var(--color-muted)]">
+          You're off the grid for the remaining rounds. Anything you already raced keeps its
+          points and stays in the standings. Change your mind? Message race control — they can
+          put you back on.
+        </p>
+      </div>
+    )
+  }
+
+  const withdraw = async () => {
+    setBusy(true)
+    setError(null)
+    const { error } = await supabase.rpc('withdraw_from_season', { p_season: seasonId })
+    if (error) {
+      setError(error.message)
+      setBusy(false)
+      return
+    }
+    // The grid, the number map and the member's own sign-up all just changed.
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ['entries'] }),
+      qc.invalidateQueries({ queryKey: ['my-registration'] }),
+      qc.invalidateQueries({ queryKey: ['taken-numbers'] }),
+    ])
+    setBusy(false)
+    setDone(true)
+  }
+
+  return (
+    <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
+      <h3 className="font-display text-xl leading-tight">Withdraw from {seasonName}</h3>
+      <p className="mt-2 max-w-2xl text-sm text-[var(--color-muted)]">
+        {seated
+          ? 'Takes your car off the grid for the rounds still to come. Races you have already run keep their points and stay in the championship standings.'
+          : 'Cancels your entry. Nothing has been assigned to you yet, so there is nothing else to undo.'}
+      </p>
+      {error && <p className="mt-3 text-sm text-[var(--color-brand)]">{error}</p>}
+      {arming ? (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <span className="text-sm font-semibold">Withdraw for the rest of the season?</span>
+          <button onClick={withdraw} disabled={busy} className="hcr-btn hcr-btn-primary !text-xs disabled:opacity-60">
+            {busy ? 'Withdrawing…' : 'Yes, withdraw me'}
+          </button>
+          <button onClick={() => setArming(false)} disabled={busy} className="hcr-btn hcr-btn-ghost !text-xs">
+            Keep my entry
+          </button>
+        </div>
+      ) : (
+        <button onClick={() => setArming(true)} className="hcr-btn hcr-btn-ghost mt-4 inline-flex !text-xs">
+          Withdraw from the season
+        </button>
+      )}
+    </div>
+  )
+}
+
 function MyCar({ onRequestChange, showEntryForm }: { onRequestChange: () => void; showEntryForm: boolean }) {
   const { profile } = useAuth()
   const { data: season } = useCurrentSeason()
   const { data: entries } = useEntries(season?.id)
+  // Every hook stays above the early returns below — a conditional hook took the
+  // newsroom page down once and `npm run lint` fails the build for it.
+  const { data: myReg } = useMyRegistration(season?.id, profile?.id)
 
   const mine = useMemo(
     () => (entries ?? []).find((e) => (e.drivers ?? []).some((l) => l.driver?.id === profile?.driver_id)),
     [entries, profile?.driver_id],
   )
+
+  // Only offer it when there is something to withdraw FROM. A member with neither a
+  // sign-up nor a seat would otherwise be shown a way out of a season they never
+  // entered, which reads as though they had.
+  const canWithdraw = !!season?.id && (!!mine || (!!myReg && myReg.status !== 'withdrawn' && myReg.status !== 'rejected'))
 
   // Same trap as in the parent: a disabled query is not a loaded one, and isLoading
   // does not distinguish them. Without this, `entries` is undefined during the
@@ -392,6 +478,9 @@ function MyCar({ onRequestChange, showEntryForm }: { onRequestChange: () => void
           You're not on this season's grid yet. Race control assigns your car once your entry
           is confirmed.
         </p>
+        {canWithdraw && season?.id && (
+          <WithdrawFromSeason seasonId={season.id} seasonName={season.name} seated={false} />
+        )}
       </div>
     )
   }
@@ -438,6 +527,13 @@ function MyCar({ onRequestChange, showEntryForm }: { onRequestChange: () => void
       >
         Request a change →
       </button>
+
+      {/* Last, and quiet. Leaving is a real thing a member may need to do, but it is
+          not what this page is for, so it sits below everything they came here to
+          read rather than competing with it. */}
+      {canWithdraw && season?.id && (
+        <WithdrawFromSeason seasonId={season.id} seasonName={season.name} seated />
+      )}
     </div>
   )
 }

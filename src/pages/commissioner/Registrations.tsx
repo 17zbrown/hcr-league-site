@@ -6,7 +6,17 @@ import { classColor } from '../../lib/format'
 import { Skeleton } from '../../components/ui'
 import { ColumnFilterRow, ColumnFilterToggle, SearchBox, useColumnFilters, useSearch } from '../../components/SearchBox'
 
-const STATUS = ['pending', 'approved', 'rostered', 'declined']
+// 'withdrawn' is written by withdraw_from_season — either the driver pressing
+// withdraw in their portal, or the membership run noticing they left the Discord. It
+// is listed here so the row renders its real status instead of a blank select, which
+// would have overwritten it on the next change.
+//
+// PUTTING SOMEBODY BACK NEEDS A DIFFERENT NUMBER, for now. Their withdrawn entry keeps
+// its row so their finished races stay linked, and number_holder() does not filter on
+// status — so the old car still holds the old number and re-seating on it fails with
+// 'Number N is already taken'. Seat them on another number, or free the old one by
+// clearing it on the withdrawn entry first.
+const STATUS = ['pending', 'approved', 'rostered', 'declined', 'withdrawn']
 
 /**
  * The statuses that mean "we have accepted this sign-up". Declining needs no data.

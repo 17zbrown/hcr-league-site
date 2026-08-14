@@ -542,10 +542,70 @@ Deno.serve(async (req) => {
                     message: 'First run — the roll was seeded and nothing was announced.' })
     }
 
+    // LEAVING THE SERVER TAKES YOU OFF THE GRID.
+    //
+    // Deliberately here rather than in the gateway bot: the bot reports that the member
+    // list changed and is trusted for nothing else, and this function already re-reads
+    // the whole roll. So a leave noticed instantly by the VM and one noticed two minutes
+    // later by the cron withdraw the driver identically, and neither can be spoofed by
+    // whatever the bot happened to send.
+    //
+    // NOTHING IS DELETED. withdraw_from_season marks the sign-up, stamps the crew link
+    // and retires the car only once no driver is left on it — results.entry_id is
+    // ON DELETE SET NULL, so removing the row would orphan every finish the driver had
+    // already scored. Standings compute from results and never read entries, so a
+    // withdrawn driver keeps every point they won and simply stops appearing on future
+    // grids, which is the whole point.
+    //
+    // Past the firstRun guard on purpose. `gone` is empty on a seeded first run anyway,
+    // but a future change that made it non-empty would otherwise withdraw the entire
+    // league in one pass.
+    const withdrawn: string[] = []
+    if (gone.length) {
+      const { data: current } = await db.from('seasons').select('id, name').eq('is_current', true).maybeSingle()
+      if (current?.id) {
+        // Only a member who linked their site account to Discord can be matched, which
+        // is the same link the rest of the league logic runs on.
+        const { data: profs } = await db
+          .from('profiles')
+          .select('id, display_name, discord_user_id')
+          .in('discord_user_id', gone.map((g) => g.user_id))
+
+        for (const p of (profs ?? []) as { id: string; display_name: string | null }[]) {
+          const { data: out, error: wErr } = await db.rpc('withdraw_from_season', {
+            p_season: current.id,
+            p_user: p.id,
+            p_reason: 'left the Discord server',
+          })
+          if (wErr) {
+            warnings.push(`Could not withdraw ${p.display_name ?? p.id} after they left — ${wErr.message}`)
+            continue
+          }
+          const o = (out ?? {}) as { registrations_withdrawn?: number; seats_withdrawn?: number; cars_retired?: number }
+          // Only worth reporting when something actually changed. Most people who leave
+          // never entered, and announcing "withdrew 0 things" for each of them is noise.
+          if ((o.registrations_withdrawn ?? 0) + (o.seats_withdrawn ?? 0) > 0) {
+            withdrawn.push(p.display_name ?? p.id)
+            applied.push(`withdrew ${p.display_name ?? p.id} from ${current.name}`)
+          }
+        }
+      }
+    }
+
     const departuresChannel = String(departures?.id ?? '')
     let announced = 0
     if (gone.length && departuresChannel) {
       const lines = gone.map((g) => `• **${g.nickname || g.username || g.user_id}** (\`${g.user_id}\`)`)
+      // Race control needs to know the grid just got shorter, in the same message that
+      // says somebody left — otherwise the two facts live in different places.
+      if (withdrawn.length) {
+        lines.push(
+          '',
+          withdrawn.length === 1
+            ? `**${withdrawn[0]}** was entered this season and has been withdrawn. Their results so far still stand.`
+            : `**${withdrawn.length} of them were entered** this season and have been withdrawn: ${withdrawn.join(', ')}. Their results so far still stand.`,
+        )
+      }
       const res = await discord(`/channels/${departuresChannel}/messages`, 'POST', botToken, {
         embeds: [{
           title: gone.length === 1 ? 'A member left the server' : `${gone.length} members left the server`,

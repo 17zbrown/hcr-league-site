@@ -456,9 +456,14 @@ async function handleNext(
     db.from('race_attendance').select('planned')
       .eq('event_id', ev.id).eq('discord_user_id', clicker).maybeSingle(),
     db.from('entry_drivers')
-      .select('entry_id, drivers!inner(discord_user_id), entries!inner(season_id, class_id, number, car)')
+      .select('entry_id, drivers!inner(discord_user_id), entries!inner(season_id, class_id, number, car, status)')
       .eq('drivers.discord_user_id', clicker)
       .eq('entries.season_id', ev.season_id)
+      // A withdrawn driver is not on the grid for what is still to come. The crew link
+      // survives so their finished races keep reading true, so "are you racing?" has to
+      // ask whether the link is still live rather than merely whether it exists.
+      .is('withdrawn_at', null)
+      .neq('entries.status', 'withdrawn')
       .limit(1),
   ])
 
@@ -673,11 +678,17 @@ Deno.serve(async (req) => {
       // Scoped to THIS event's season. A driver who raced last year and not this one
       // still holds an entry row, and an unscoped check would wave them through onto
       // a grid they are not on.
+      //
+      // A WITHDRAWN driver is refused here too. The crew link is kept rather than
+      // deleted so their completed races still read true, which means its mere
+      // existence no longer answers "are they racing this?" — withdrawn_at does.
       const { data: seats } = await db
         .from('entry_drivers')
-        .select('entry_id, drivers!inner(discord_user_id), entries!inner(season_id)')
+        .select('entry_id, drivers!inner(discord_user_id), entries!inner(season_id, status)')
         .eq('drivers.discord_user_id', clicker)
         .eq('entries.season_id', ev.season_id)
+        .is('withdrawn_at', null)
+        .neq('entries.status', 'withdrawn')
         .limit(1)
 
       if (!seats?.length) {
