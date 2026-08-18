@@ -52,6 +52,21 @@ const LEAGUE_CATEGORY = 'LEAGUE'
 const RACE_CONTROL_CATEGORY = 'RACE CONTROL'
 // Named apart from the staff #race-control so the two are never confused.
 const RC_ANNOUNCE_NAME = 'race-control-announcements'
+// The one room in RACE CONTROL that members WRITE in. See section 6.
+const RECS_NAME = 'league-recommendations'
+const WELCOME_NAME = 'welcome'
+
+/**
+ * Discord's own join spam, switched off at the guild level. These are the grey
+ * "X joined the server" lines and their sticker replies — system messages, not
+ * anything the bot posts, so no permission can suppress them and deleting them one
+ * by one is the chore this replaces.
+ *
+ *   1 = SUPPRESS_JOIN_NOTIFICATIONS
+ *   4 = SUPPRESS_GUILD_REMINDER_NOTIFICATIONS  (the "set up your server" tips)
+ *   8 = SUPPRESS_JOIN_NOTIFICATION_REPLIES     (the sticker/wave replies)
+ */
+const SYSTEM_SUPPRESS_JOIN = 1 | 4 | 8
 const OVERWRITE_ROLE = 0
 
 // Discord permission bits. Named rather than inlined because a wrong bit here is a
@@ -84,9 +99,33 @@ const FORUM_MEMBER_DENY = P.SEND_MESSAGES | P.CREATE_PUBLIC_THREADS
 const READ_ONLY_ALLOW = P.VIEW_CHANNEL | P.READ_MESSAGE_HISTORY | P.ADD_REACTIONS | P.USE_EXTERNAL_EMOJIS
 const READ_ONLY_DENY = P.SEND_MESSAGES | P.SEND_MESSAGES_IN_THREADS | P.CREATE_PUBLIC_THREADS
 
+/**
+ * #welcome is READ-ONLY for everyone but the bot.
+ *
+ * It is the one channel a brand-new arrival is guaranteed to see, so it must stay
+ * VIEWABLE — discord-gate-setup deliberately forces it open for exactly that reason,
+ * and a deny of VIEW_CHANNEL here would fight it every run. What changes is that
+ * nobody can type in it: the welcome post is the only thing in the room.
+ */
+const WELCOME_MEMBER_ALLOW = P.VIEW_CHANNEL | P.READ_MESSAGE_HISTORY | P.ADD_REACTIONS | P.USE_EXTERNAL_EMOJIS
+const WELCOME_MEMBER_DENY =
+  P.SEND_MESSAGES | P.SEND_MESSAGES_IN_THREADS | P.CREATE_PUBLIC_THREADS | P.ATTACH_FILES | P.EMBED_LINKS
+
 /** Staff and the bot keep the ability to open posts. */
 const FORUM_STAFF_ALLOW = P.VIEW_CHANNEL | P.READ_MESSAGE_HISTORY | P.SEND_MESSAGES |
   P.SEND_MESSAGES_IN_THREADS | P.CREATE_PUBLIC_THREADS | P.EMBED_LINKS | P.ATTACH_FILES
+
+/**
+ * The recommendations forum is the EXACT OPPOSITE of the results forum.
+ *
+ * There, members reply and may not open posts. Here, opening a post IS the feature —
+ * a suggestion nobody can start is not a suggestion box. So SEND_MESSAGES ("Create
+ * Posts" in a forum) is allowed rather than denied, and that one bit is the whole
+ * difference between the two rooms.
+ */
+const RECS_MEMBER_ALLOW =
+  P.VIEW_CHANNEL | P.READ_MESSAGE_HISTORY | P.SEND_MESSAGES | P.SEND_MESSAGES_IN_THREADS |
+  P.ADD_REACTIONS | P.EMBED_LINKS | P.ATTACH_FILES | P.USE_EXTERNAL_EMOJIS
 
 interface Overwrite { id: string; type: number; allow: string; deny: string }
 interface Channel {
@@ -192,11 +231,30 @@ Deno.serve(async (req) => {
     const adminRole = String(cfg.role_site_admin ?? '').trim()
     const rcRole = String(cfg.role_site_race_control ?? '').trim()
     const forumId = String(cfg.channel_results ?? '').trim()
-    if (!SNOWFLAKE.test(memberRole)) {
-      return json({ error: 'No League Member role is configured, so there is nobody to grant this to.' }, 400)
-    }
 
     const warnings: string[] = []
+
+    /**
+     * A MISSING League Member role SKIPS sections 1-5; it no longer kills the run.
+     *
+     * There is no such role in this server any more — the reorg left Admin,
+     * RaceControl, the three class roles, the licence roles and Spectator, and
+     * discord_config.role_league_member has been empty ever since. This function
+     * therefore returned 400 and did nothing at all, silently, for every job it owns.
+     *
+     * Sections 1-5 genuinely cannot run without knowing who "a member" is, so they
+     * are skipped rather than guessed at — nothing dormant is re-enabled by this
+     * change. Section 6 does not need the role: a suggestion box open to "all
+     * members" is @everyone, whose role id is the guild id.
+     */
+    const hasMemberRole = SNOWFLAKE.test(memberRole)
+    if (!hasMemberRole) {
+      warnings.push(
+        'No League Member role is configured, so every member-facing rule in sections 1-5 was skipped — ' +
+        'LEAGUE visibility, the results forum, #license-ups and ' + `#${RC_ANNOUNCE_NAME}. ` +
+        `Only the staff re-allows ran there. #${RECS_NAME} does not depend on that role and was applied in full.`,
+      )
+    }
 
     // The bot's own managed role, so the automation keeps its ability to open forum
     // posts once Administrator is taken away.
@@ -374,12 +432,129 @@ Deno.serve(async (req) => {
       }
     }
 
+    // --- 6. #league-recommendations: the one room in RACE CONTROL members write in ---
+    //
+    // Members submit suggestions to race control and admins here. It sits in RACE
+    // CONTROL because that is who answers it, not because it is private — and it is
+    // the only channel in that category members can reach, by the same mechanism
+    // #race-control-announcements uses: a channel-level League Member allow beating
+    // the category-level deny. Every other channel in RACE CONTROL is untouched by
+    // this block and stays staff-only.
+    //
+    // A FORUM rather than a text channel, so each suggestion is its own thread that
+    // can be replied to and resolved without three conversations interleaving.
+    //
+    // Created with parent_id and no overwrites of its own, so Discord copies RACE
+    // CONTROL's deny of @everyone onto it at birth. That is deliberate twice over: it
+    // is never briefly public between creation and the allow below, and because it
+    // then DENIES @everyone, discord-gate-setup leaves it completely alone on every
+    // future run instead of re-deciding who may see it.
+    let recsChannel = channels.find((c) => String(c.id) === String(cfg.channel_recommendations ?? '').trim())
+      ?? channels.find((c) => String(c.name ?? '') === RECS_NAME && c.type !== CHAN_CATEGORY)
+
+    if (!recsChannel && !dryRun && raceControlCat) {
+      const made = await discord<Channel>(`/guilds/${guildId}/channels`, 'POST', botToken, {
+        name: RECS_NAME,
+        type: CHAN_FORUM,
+        parent_id: raceControlCat.id,
+        topic: 'Suggestions for race control and the admins. Open a post for each idea — format, schedule, rules, the site, anything. Every post is read; not every idea can be adopted, and you will get an answer either way.',
+      })
+      if (made.ok && made.data?.id) { recsChannel = made.data; created.push(RECS_NAME) }
+      else if (!made.ok) warnings.push(`Could not create #${RECS_NAME} — ${made.message}`)
+    } else if (!recsChannel && dryRun) {
+      planned.push({ channel: RECS_NAME, target: '(channel)', add: [`CREATE forum in ${RACE_CONTROL_CATEGORY}`], remove: [] })
+    } else if (!recsChannel && !raceControlCat) {
+      warnings.push(`No ${RACE_CONTROL_CATEGORY} category exists, so #${RECS_NAME} could not be created.`)
+    }
+
+    // Same move-without-lock_permissions rule as above: resyncing to the parent would
+    // wipe the League Member allow and make the suggestion box vanish for everyone
+    // meant to use it.
+    if (recsChannel && raceControlCat && String(recsChannel.parent_id ?? '') !== String(raceControlCat.id)) {
+      planned.push({ channel: RECS_NAME, target: '(category)', add: [`MOVE to ${RACE_CONTROL_CATEGORY}`], remove: [] })
+      if (!dryRun) {
+        const moved = await discord(`/channels/${recsChannel.id}`, 'PATCH', botToken, { parent_id: raceControlCat.id })
+        if (moved.ok) applied.push(`${RECS_NAME} · moved to ${RACE_CONTROL_CATEGORY}`)
+        else warnings.push(`Could not move #${RECS_NAME} — ${moved.message}`)
+      }
+    }
+
+    if (recsChannel) {
+      if (recsChannel.type !== CHAN_FORUM) {
+        warnings.push(`#${recsChannel.name} exists but is not a forum channel, so suggestions will not thread. Permissions were still applied.`)
+      }
+      // @EVERYONE, NOT League Member — that role does not exist in this server, and
+      // "open to all members" is literally what @everyone means. Its role id IS the
+      // guild id, which is a Discord invariant rather than a lucky coincidence.
+      //
+      // This is the one channel in RACE CONTROL where the category's @everyone deny is
+      // overridden. A channel-level allow beats a category-level deny, so the forum is
+      // visible and postable to the whole server while every sibling stays staff-only.
+      //
+      // CAVEAT worth knowing: discord-gate-setup leaves alone any channel that DENIES
+      // @everyone and re-gates the rest. This one now allows @everyone, so a future
+      // gate-setup run would try to deny it and grant a "Verified" role that no longer
+      // exists — which would hide this forum from everybody. Re-run this function
+      // afterwards, or teach gate-setup to skip it, before running that one again.
+      await setPerms(recsChannel, guildId, '@everyone', RECS_MEMBER_ALLOW, 0n)
+      for (const [rid, label] of [[adminRole, 'Admin'], [rcRole, 'Race Control'], [botRole, 'HCR Bot']] as const) {
+        if (SNOWFLAKE.test(rid)) await setPerms(recsChannel, rid, label, FORUM_STAFF_ALLOW, 0n)
+      }
+      if (!dryRun && String(cfg.channel_recommendations ?? '') !== String(recsChannel.id)) {
+        const { error } = await db.from('discord_config')
+          .update({ channel_recommendations: String(recsChannel.id), updated_at: new Date().toISOString() }).eq('id', 1)
+        if (error) warnings.push(`Created #${RECS_NAME} but could not save its id — ${error.message}`)
+      }
+    }
+
+    // --- 7. #welcome: our announcement only, and nobody types in it ---
+    //
+    // Two different silences, and they need two different mechanisms.
+    //
+    // MEMBERS are silenced with a channel overwrite: view and read yes, post no. That
+    // is an ordinary permission and merges like every other one here.
+    //
+    // DISCORD ITSELF is silenced at the guild level. The grey "X joined the server"
+    // lines are SYSTEM messages generated by Discord, not posts by anybody, so no
+    // channel permission touches them — the only switch is system_channel_flags on
+    // the guild. Without this the channel still fills with join spam no matter how
+    // locked down it is, which is the half people usually miss.
+    const welcome = channels.find((c) => c.type !== CHAN_CATEGORY && String(c.name ?? '') === WELCOME_NAME)
+    if (!welcome) {
+      warnings.push(`No #${WELCOME_NAME} channel was found, so the read-only rule and the join-spam switch were skipped.`)
+    } else {
+      await setPerms(welcome, guildId, '@everyone', WELCOME_MEMBER_ALLOW, WELCOME_MEMBER_DENY)
+      // The bot and staff keep the ability to post the welcome itself.
+      for (const [rid, label] of [[adminRole, 'Admin'], [rcRole, 'Race Control'], [botRole, 'HCR Bot']] as const) {
+        if (SNOWFLAKE.test(rid)) await setPerms(welcome, rid, label, FORUM_STAFF_ALLOW, 0n)
+      }
+
+      const g = await discord<{ system_channel_id?: string | null; system_channel_flags?: number }>(
+        `/guilds/${guildId}`, 'GET', botToken)
+      if (!g.ok) {
+        warnings.push(`Could not read the server settings, so Discord's own join messages were left on — ${g.message}`)
+      } else {
+        const curFlags = Number(g.data?.system_channel_flags ?? 0)
+        const nextFlags = curFlags | SYSTEM_SUPPRESS_JOIN
+        if (nextFlags !== curFlags) {
+          planned.push({ channel: '(server settings)', target: 'system_channel_flags',
+                         add: [`SUPPRESS_JOIN_NOTIFICATIONS (${curFlags} -> ${nextFlags})`], remove: [] })
+          if (!dryRun) {
+            const patched = await discord(`/guilds/${guildId}`, 'PATCH', botToken, { system_channel_flags: nextFlags })
+            if (patched.ok) applied.push("server \u00b7 Discord's join messages suppressed")
+            else warnings.push(`Could not suppress Discord's join messages — ${patched.message}`)
+          }
+        }
+      }
+    }
+
     return json({
       ok: warnings.length === 0,
       dryRun,
       created,
       license_ups: licenseUps?.name ?? null,
       race_control_announcements: rcChannel?.name ?? null,
+      league_recommendations: recsChannel?.name ?? null,
       league_category: league.name,
       channels_in_league: children.map((c) => c.name),
       forum: forum?.name ?? null,

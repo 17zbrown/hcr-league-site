@@ -480,7 +480,7 @@ Deno.serve(async (req) => {
           description: clip(where ? `Provisional classification — ${where}` : 'Provisional classification', MAX_DESC),
           color: HCR_YELLOW,
           fields,
-          footer: { text: 'HCR League · 🅿️ pole · full classification and lap times on the site' },
+          footer: { text: 'HCR League · 🅿️ pole · full classification, lap times and championship tables at hcrleague.com' },
         }
       // -------------------------------------------------------------- news ----
       } else if (row.kind === 'news') {
@@ -523,7 +523,7 @@ Deno.serve(async (req) => {
           description: clip(String(article.dek ?? ''), MAX_DESC),
           color: HCR_YELLOW,
           ...(lead && /^https?:\/\//i.test(lead) ? { image: { url: lead } } : {}),
-          footer: { text: article.author ? `HCR League · ${article.author}` : 'HCR League' },
+          footer: { text: article.author ? `HCR League · ${article.author} · read it all at hcrleague.com` : 'HCR League · read it all at hcrleague.com' },
         }
       // --------------------------------------------------------- standings ----
       } else if (row.kind === 'standings') {
@@ -582,7 +582,7 @@ Deno.serve(async (req) => {
         title = clip(ev?.round != null ? `Championship after Round ${ev.round}` : 'Championship standings', MAX_TITLE)
         embed = {
           title, url: `${SITE}/standings`, color: HCR_YELLOW, fields,
-          footer: { text: 'HCR League · top five per class · full table on the site' },
+          footer: { text: 'HCR League · top five per class · every driver and every round at hcrleague.com' },
         }
       // ----------------------------------------------------------- penalty ----
       } else if (row.kind === 'penalty') {
@@ -783,7 +783,23 @@ Deno.serve(async (req) => {
         // A pinged kind re-sends its ping line so an edit does not strip it back off
         // the post. It notifies nobody either way: Discord fires mention
         // notifications on message creation only, never on edit.
-        const patch = await discord(`/channels/${targetId}/messages/${targetId}`, 'PATCH', botToken,
+        //
+        // THE EDIT PATH DEPENDS ON THE CHANNEL TYPE, and getting it wrong is a silent
+        // 404. In a FORUM the post is a thread whose id doubles as its starter message
+        // id, so both segments are the same value. In a normal TEXT channel they are
+        // different things — the message lives in the channel — and addressing
+        // /channels/<message id> asks Discord for a channel that does not exist.
+        //
+        // This used to send the forum form for everything, so #race-results edited
+        // cleanly (it is a forum) while every #news, #standings and #announcements
+        // edit failed with "Unknown Channel". That is why a corrected article or an
+        // amended points table never reached Discord: the post was only ever written
+        // once and could never be updated again.
+        const editType = await typeOf(channelId)
+        const editPath = editType === CHAN_FORUM
+          ? `/channels/${targetId}/messages/${targetId}`
+          : `/channels/${channelId}/messages/${targetId}`
+        const patch = await discord(editPath, 'PATCH', botToken,
           { ...mentionFor(row.kind), embeds: [embed] })
         if (patch.ok) {
           sent.push(`edited: ${title}`)

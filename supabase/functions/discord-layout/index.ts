@@ -66,7 +66,9 @@ const ARCHIVE_NAME = 'ARCHIVE'
 const CHANNEL_ORDER: Record<string, string[]> = {
   LEAGUE: ['welcome', 'rules', 'announcements', 'news', 'standings', 'race-results', 'season-signups', 'rulebook'],
   PADDOCK: ['general-chat', 'gravel-trap', 'promotions', 'Race Channel', 'Voice Chat'],
-  'RACE CONTROL': ['race-control', 'incident-protests', 'license-ups', 'race-control-announcements', 'Steward Radio'],
+  // league-recommendations is the only member-writable room in here, so it sits at the
+  // bottom of the text channels — staff rooms first, then the one members open.
+  'RACE CONTROL': ['race-control', 'incident-protests', 'license-ups', 'race-control-announcements', 'league-recommendations', 'Steward Radio'],
   ADMIN: ['admin-chat', 'bot-log', 'safety-alerts', 'community-updates', 'iracing-names'],
 }
 
