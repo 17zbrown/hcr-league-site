@@ -824,7 +824,18 @@ After review, staff may keep the original penalty, reduce the penalty, increase 
 
 ## 31. Championship Points
 
-*Drivers/teams must cross the checkered flag upon the conclusion of the race in order to receive championship points.
+Championship points are awarded on classified finishing position within class.
+
+A driver's result in a race is one of three outcomes, decided by how many laps they completed after the first green flag:
+- Finisher — took the checkered flag at the end of the race, and scores normally.
+- DNF (Did Not Finish) — completed at least one full lap after the first green flag, but retired before the end. A DNF still scores championship points on classified finishing position. Retiring from a race you took part in is not the same as not taking part.
+- DNS (Did Not Start) — did not complete a full lap after the first green flag, however the timing sheet describes it. A DNS scores no championship points from that race.
+
+Laps run under the rolling start procedure in Section 10.1, before the green flag, do not count towards this.
+
+Qualifying points are not affected by a DNS. Qualifying is a separate session, and a driver who set a qualifying time keeps the points it earned even if they take no part in the race.
+
+A disqualification is a stewards' decision rather than a retirement. It is issued and recorded under Section 29 and carries its own consequences.
 
 ### 31.1 Suggested Points System
 
