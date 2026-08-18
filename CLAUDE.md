@@ -42,6 +42,17 @@ ones look finished while holding no data. Gate UI on **presence of data**, never
 rows excluded; ties broken by best class finish. Change one, change all three, and
 verify by running both over the same rows rather than reading them side by side.
 
+**A DNS scores nothing, and the database enforces it, not the importer.**
+`trg_results_lap_rule` on `results` zeroes `points` and stamps `status='DNS'` for any row
+with `laps < 1`. A DNF is a driver who STARTED — one racing lap or more — and keeps every
+point; under a lap you did not start, whatever the timing sheet calls it. **Qualifying
+points always survive**: qualifying is a different session and was actually contested. A
+deliberate `DSQ` keeps its own label rather than being rewritten to DNS. It lives in a
+trigger because results arrive by three routes — the paste importer, the commissioner
+grid and hand-written SQL — and a rule enforced in one is a rule the other two break.
+Rulebook §31 still says drivers must "cross the checkered flag" to score; read literally
+that strips every DNF too, so the wording trails the practice.
+
 **Never delete a Discord channel, category, role or message history.** Archive instead —
 move it out of its category and hide it. This holds even with explicit authorisation.
 The bot token is a Supabase secret and is never handled directly.
