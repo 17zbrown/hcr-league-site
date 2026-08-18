@@ -42,16 +42,28 @@ ones look finished while holding no data. Gate UI on **presence of data**, never
 rows excluded; ties broken by best class finish. Change one, change all three, and
 verify by running both over the same rows rather than reading them side by side.
 
-**A DNS scores nothing, and the database enforces it, not the importer.**
-`trg_results_lap_rule` on `results` zeroes `points` and stamps `status='DNS'` for any row
-with `laps < 1`. A DNF is a driver who STARTED — one racing lap or more — and keeps every
-point; under a lap you did not start, whatever the timing sheet calls it. **Qualifying
-points always survive**: qualifying is a different session and was actually contested. A
-deliberate `DSQ` keeps its own label rather than being rewritten to DNS. It lives in a
-trigger because results arrive by three routes — the paste importer, the commissioner
-grid and hand-written SQL — and a rule enforced in one is a rule the other two break.
-Rulebook §31 still says drivers must "cross the checkered flag" to score; read literally
-that strips every DNF too, so the wording trails the practice.
+**Three race outcomes, and the DATABASE decides which — not the importer.**
+`trg_results_lap_rule` on `results` normalises every row into exactly one of:
+
+| outcome | test | points |
+|---|---|---|
+| `Running` | crossed the flag | scores normally |
+| `DNF` | started, did not finish (≥1 lap) | **still scores on finishing position** |
+| `DNS` | under one racing lap | `points` forced to 0 |
+
+Not finishing is not the same as not taking part, so a DNF keeps everything its class
+position earns — the classification already puts it behind the finishers, so the points
+table does the demotion by itself. **Qualifying points always survive**, even a DNS:
+qualifying is a different session and was actually contested.
+
+Timing sheets disagree on vocabulary — iRacing writes `Disco`, others `Towed`/`Off`/
+`Retired` — so anything that is not a recognised finish becomes `DNF`. A deliberate
+`DSQ` is NEVER rewritten: a disqualification is a verdict, not a retirement.
+
+It lives in a trigger because results arrive by three routes — the paste importer, the
+commissioner grid and hand-written SQL — and a rule enforced in one is a rule the other
+two break. Rulebook §31 still says drivers must "cross the checkered flag" to score;
+read literally that strips every DNF, so the wording trails the practice.
 
 **Never delete a Discord channel, category, role or message history.** Archive instead —
 move it out of its category and hide it. This holds even with explicit authorisation.
