@@ -273,17 +273,25 @@ export default function RaceDetail() {
               </div>
             )}
 
-            {/* In-sim race-day forecast */}
+            {/* In-sim race-day forecast — mirrors the iRacing session editor, which is
+                the weather drivers will actually get. The real-world blocks above are
+                context; this one is the truth for setup decisions, so it carries every
+                field the editor shows: temp, skies, rain, wind, humidity, cloud cover. */}
             {!!simWeather?.length && (
               <div className="mt-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-5">
-                <div className={`${MICRO} mb-3`}>Sim race-day forecast</div>
+                <div className={`${MICRO} mb-3`}>In-sim forecast (from iRacing)</div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {simWeather.map((w) => (
                     <div key={w.id} className="tabular">
                       {w.air_f != null && <div className="font-display text-2xl">{Math.round(w.air_f)}°F</div>}
                       <div className="text-xs text-[var(--color-muted)]">
                         {w.sky ?? '—'}{w.precip != null ? ` · ${w.precip}% rain` : ''}
-                        {w.wind_mph != null ? ` · ${w.wind_mph} mph` : ''}
+                        {w.wind_mph != null ? ` · ${w.wind_mph} mph wind` : ''}
+                      </div>
+                      <div className="text-xs text-[var(--color-faint)]">
+                        {w.humidity != null ? `${w.humidity}% humidity` : ''}
+                        {w.humidity != null && w.clouds != null ? ' · ' : ''}
+                        {w.clouds != null ? `${w.clouds}% cloud` : ''}
                       </div>
                     </div>
                   ))}
