@@ -94,6 +94,20 @@ instructions and nothing is recorded. Discord scheduled events are a CALENDAR �
 Penalties and rulings deliberately stay quiet. The mention must sit in `content` —
 an `@everyone` inside an embed renders as text and notifies nobody.
 
+**Races complete themselves at midnight, and the in-sim forecast is iRacing's, not
+the sky's.** `advance_completed_events()` (cron `hcr-advance-events`, 04:00 UTC daily
+= midnight ET race night) marks any current-season race complete three hours after its
+green flag — `events.date` IS the green-flag timestamp — which fires the trigger below
+exactly as a manual completion would. Results imported by hand-written SQL never
+flipped the status, so every countdown and the attendance drive once pointed at a
+finished race for three days. Separately, the race page's "In-sim forecast" block
+reads `public.weather`, which mirrors the iRacing session editor: these sessions run a
+different in-sim date under Realistic Weather, so the real-world Open-Meteo blocks on
+the same page will NOT match it and are not supposed to. `iracing-weather-sync`
+(cron `hcr-iracing-weather`, 09:00 UTC daily) refreshes that table during race week,
+and stays dormant, saying so plainly, until IRACING_EMAIL and IRACING_PASSWORD exist
+as Edge Function secrets.
+
 **Completing a race triggers two things** (`trg_event_completed`): the next round is
 promoted to `status='next'`, and that race's auto-preview is unpublished. Before this
 existed both were manual, and forgetting the first silently stopped the attendance drive.
