@@ -49,11 +49,39 @@ interface SessionRow {
   track?: { track_name?: string }
 }
 
+/** Legacy service-role JWT check, same as every sibling function carries. */
+function isServiceRoleJwt(token: string): boolean {
+  const parts = token.split('.')
+  if (parts.length !== 3) return false
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const payload = JSON.parse(atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4)))
+    return (payload as { role?: unknown })?.role === 'service_role'
+  } catch { return false }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
 
   try {
+    // CRON OR ADMIN ONLY. The platform gate lets the site's PUBLIC key through as a
+    // bearer credential, and this function logs into iRacing with the league owner's
+    // account — repeated forced logins from strangers could lock it. Same block every
+    // sibling function carries, for the same reason.
+    const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const authz = req.headers.get('Authorization') ?? ''
+    const bearer = authz.replace(/^Bearer\s+/i, '').trim()
+    const viaCron = bearer.length > 0 && (bearer === service || isServiceRoleJwt(bearer))
+    if (!viaCron) {
+      const userClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!,
+        { global: { headers: { Authorization: authz } } })
+      const { data: userData } = await userClient.auth.getUser()
+      if (!userData?.user) return json({ error: 'Not authenticated' }, 401)
+      const { data: prof } = await userClient.from('profiles').select('is_admin').eq('id', userData.user.id).maybeSingle()
+      if (!prof?.is_admin) return json({ error: 'Admins only' }, 403)
+    }
+
     const email = (Deno.env.get('IRACING_EMAIL') ?? '').trim()
     const password = Deno.env.get('IRACING_PASSWORD') ?? ''
     if (!email || !password) {
@@ -125,7 +153,8 @@ Deno.serve(async (req) => {
       if (typeof w.temp_value === 'number') patch.air_f = w.temp_units === 1 ? Math.round((w.temp_value as number) * 9 / 5 + 32) : w.temp_value
       if (typeof w.skies === 'number' && SKIES[w.skies as number]) patch.sky = SKIES[w.skies as number]
       if (typeof w.rel_humidity === 'number') patch.humidity = w.rel_humidity
-      if (typeof w.wind_value === 'number') patch.wind_mph = w.wind_value
+      // wind_units 1 = km/h; convert so the site's mph column stays honest.
+      if (typeof w.wind_value === 'number') patch.wind_mph = w.wind_units === 1 ? Math.round((w.wind_value as number) * 0.621371) : w.wind_value
       if (typeof w.precip_option === 'number') patch.precip = w.precip_option
       if (Object.keys(patch).length === 0) { skipped.push(`R${ev.round}: weather payload had no recognisable fields`); continue }
 

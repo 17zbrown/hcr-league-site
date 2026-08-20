@@ -3,10 +3,10 @@
 //
 // TWO DIFFERENT MECHANISMS, because Discord treats the two events very differently:
 //
-//   JOINS are native. Discord posts "X joined the server" into whichever channel is
-//   set as the guild's system channel, instantly, with no bot listening. That stays
-//   on — it is free and immediate. On top of it this function posts its OWN welcome,
-//   because a join notice cannot carry instructions and a newcomer needs them.
+//   JOINS: Discord's own "X joined the server" lines are SUPPRESSED league-wide
+//   (system_channel_flags, one owner shared with discord-permissions) — #welcome
+//   carries only the bot's guide. This function posts that welcome itself, because a
+//   grey join notice could never carry instructions anyway and a newcomer needs them.
 //
 //   DEPARTURES are not announced by Discord at all, to any channel, ever. Seeing one
 //   as it happens needs a gateway connection, which an edge function cannot hold. So
@@ -38,8 +38,8 @@ const json = (b: unknown, s = 200) =>
 
 const MEMBER_PAGE = 1000
 const MAX_PAGES = 5
-// Discord's system_channel_flags: bit 0 suppresses the join message. Clearing it is
-// what turns "X joined the server" back on.
+// Discord's system_channel_flags: bit 0 suppresses the join message. The league keeps
+// it SET, together with bits 2 and 3 (sticker replies, setup tips).
 const SUPPRESS_JOIN_NOTIFICATIONS = 1 << 0
 
 const VIEW_CHANNEL = 1n << 10n
@@ -260,16 +260,25 @@ Deno.serve(async (req) => {
     if (!g.ok) return json({ error: `Could not read the guild — ${g.message}` }, 502)
     const guild = g.data as { system_channel_id?: string | null; system_channel_flags?: number }
     const flags = Number(guild.system_channel_flags ?? 0)
-    const joinsSuppressed = (flags & SUPPRESS_JOIN_NOTIFICATIONS) !== 0
     const wrongChannel = welcome && String(guild.system_channel_id ?? '') !== String(welcome.id)
 
-    if (welcome && (wrongChannel || joinsSuppressed)) {
+    // POLICY REVERSED 2026-08-20, deliberately: Discord's own grey join lines are now
+    // SUPPRESSED, league-wide. #welcome carries only our pinned welcome post, and the
+    // bot's guide reaches new members by DM/mention flows instead. This block used to
+    // clear the suppress bit — which silently undid discord-permissions' suppression
+    // within ten minutes, every ten minutes, while both functions reported success.
+    // One owner now: the flags here are asserted to the SAME value discord-permissions
+    // sets (join notifications, sticker replies and setup tips all off), and the
+    // system channel still points at #welcome so boost messages have a home.
+    const WANT_SUPPRESSED = 1 | 4 | 8
+    const wantFlags = flags | WANT_SUPPRESSED
+    if (welcome && (wrongChannel || wantFlags !== flags)) {
       const patch = await discord(`/guilds/${guildId}`, 'PATCH', botToken, {
         system_channel_id: welcome.id,
-        system_channel_flags: flags & ~SUPPRESS_JOIN_NOTIFICATIONS,
+        system_channel_flags: wantFlags,
       })
-      if (patch.ok) applied.push('#welcome now receives Discord’s join messages')
-      else warnings.push(`Could not point join messages at #welcome — ${patch.message}`)
+      if (patch.ok) applied.push("#welcome kept quiet — Discord's own join messages stay suppressed")
+      else warnings.push(`Could not update the system channel — ${patch.message}`)
     } else if (!welcome) {
       warnings.push('No #welcome channel found, so join messages were not configured.')
     }
