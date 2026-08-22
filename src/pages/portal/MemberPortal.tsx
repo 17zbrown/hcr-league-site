@@ -724,7 +724,7 @@ function Overview({ onSignOut, onSeasonEntry }: { onSignOut: () => void; onSeaso
                   <li
                     key={`${f.round}-${i}`}
                     title={`${f.label} — ${f.dnf ? 'DNF' : f.clsPos != null ? `P${f.clsPos}` : '—'} · ${f.points} pts`}
-                    className="relative min-w-[88px] flex-1 rounded-2xl border p-4"
+                    className="relative min-w-[88px] max-w-[150px] flex-1 rounded-2xl border p-4"
                     style={{
                       borderColor: win ? color : 'var(--color-line)',
                       background: win ? `${color}1a` : 'var(--color-paper)',
