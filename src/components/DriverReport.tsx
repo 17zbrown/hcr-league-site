@@ -64,8 +64,16 @@ export function DriverReportBody({
         ]}
       />
 
+      {/*
+        min-w-0 ON BOTH COLUMNS, and it is load-bearing. A grid item defaults to
+        min-width:auto, so it refuses to shrink below its widest content -- and the
+        round-by-round table carries min-w-[680px]. That forced this column to 706px
+        inside a 375px phone and scrolled the WHOLE page sideways by 331px, rather
+        than the table scrolling inside its own overflow-x-auto wrapper as intended.
+        Measured on a phone viewport before and after.
+      */}
       <div className="mt-10 grid gap-10 lg:grid-cols-[1.55fr_1fr]">
-        <div className="space-y-10">
+        <div className="min-w-0 space-y-10">
           <section>
             <h2 className="text-3xl">Season form</h2>
             <p className="mt-2 max-w-prose font-body text-[var(--color-muted)]">
@@ -142,7 +150,7 @@ export function DriverReportBody({
           <ResultsTable rows={rows} classes={classes} emptyLabel={emptyLabel} />
         </div>
 
-        <aside className="space-y-6">
+        <aside className="min-w-0 space-y-6">
           <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
             <h3 className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
               Strike rate
