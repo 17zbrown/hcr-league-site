@@ -12,6 +12,7 @@ import { LicenseBadge } from '../../components/LicenseBadge'
 import { EvidenceBox, type PendingEvidence } from '../../components/EvidenceBox'
 import { StatusPill } from '../../components/ProtestThread'
 import { SeasonEntryForm } from '../../components/SeasonEntryForm'
+import type { Driver, Profile } from '../../lib/types'
 
 const CATEGORIES = ['Contact', 'Unsafe rejoin', 'Track limits', 'Blocking', 'Unsporting conduct', 'Other']
 
@@ -29,12 +30,45 @@ const CATEGORIES = ['Contact', 'Unsafe rejoin', 'Track limits', 'Blocking', 'Uns
  */
 type Tab = 'overview' | 'car' | 'actions'
 
+/**
+ * THE TWO NAMES A MEMBER ACTUALLY ANSWERS TO.
+ *
+ * `profiles.display_name` is whatever Supabase auth held at sign-up, which for most
+ * accounts is the local part of an email address — "zackdbrown03" is nobody's name,
+ * and neither is the email underneath it. The names a driver recognises are the one
+ * on their car in the results (`drivers.name`, which is their iRacing name) and their
+ * Discord handle, and the league already stores both.
+ *
+ * This changes DISPLAY ONLY. `display_name` stays exactly as it is in the database
+ * because it is still load-bearing as a fallback join key: the driver lookup below
+ * matches `d.name === profile.display_name` for accounts race control has not yet
+ * linked by id, and rewriting the stored value would silently unlink them.
+ */
+function memberIdentity(profile: Profile | null | undefined, drivers: Driver[] | undefined) {
+  const driver = (drivers ?? []).find((d) => d.id === profile?.driver_id || d.name === profile?.display_name)
+  const iracing = driver?.name ?? null
+  const discord = profile?.discord_username ?? null
+  return {
+    driver,
+    iracing,
+    discord,
+    // Falls back through the names in the order a member would recognise them. The
+    // last two rungs are for an account with no seat and no Discord link — no live
+    // profile is in that state, but a half-finished sign-up could be.
+    primary: iracing ?? discord ?? profile?.display_name ?? 'Member',
+  }
+}
+
 export default function MemberPortal() {
   const { profile, session, isRaceControl, isAdmin, signOut } = useAuth()
   const [tab, setTab] = useState<Tab>('overview')
   const [filedNote, setFiledNote] = useState(false)
   const { data: protests } = useProtests({ mine: true, userId: session?.user?.id })
   const { data: myRequests } = useMyChangeRequests()
+  // Same query key the profile card uses, so this shares one cached fetch rather
+  // than adding a round trip just to greet somebody by name.
+  const { data: allDrivers } = useDrivers()
+  const identity = useMemo(() => memberIdentity(profile, allDrivers), [profile, allDrivers])
 
   // WHERE IS THIS MEMBER IN THE JOURNEY? Everything below assumes they are on the
   // grid — three tabs about a car, a licence and a change request — and somebody who
@@ -101,7 +135,7 @@ export default function MemberPortal() {
   ]
 
   return (
-    <Section eyebrow={`Signed in as ${profile?.display_name ?? profile?.email ?? 'member'}`} title="Member Portal" titleTag="h1">
+    <Section eyebrow={`Signed in as ${identity.primary}`} title="Member Portal" titleTag="h1">
       {/* staff shortcuts */}
       {(isRaceControl || isAdmin) && (
         <div className="mb-6 flex flex-wrap gap-2">
@@ -544,10 +578,8 @@ function Overview({ onSignOut, onSeasonEntry }: { onSignOut: () => void; onSeaso
   const { data: drivers } = useDrivers()
   const { data: licenseResults } = useLicenseResults()
 
-  const driver = useMemo(
-    () => (drivers ?? []).find((d) => d.id === profile?.driver_id || d.name === profile?.display_name),
-    [drivers, profile],
-  )
+  const identity = useMemo(() => memberIdentity(profile, drivers), [profile, drivers])
+  const driver = identity.driver
   const license = useMemo(() => {
     if (!driver) return null
     const idx = buildPaceIndex(licenseResults ?? [])
@@ -557,8 +589,13 @@ function Overview({ onSignOut, onSeasonEntry }: { onSignOut: () => void; onSeaso
   return (
     <div className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
       <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
-        <div className="font-display text-3xl">{profile?.display_name ?? 'Member'}</div>
-        <div className="mt-1 text-sm text-[var(--color-muted)]">{profile?.email}</div>
+        <div className="font-display text-3xl">{identity.primary}</div>
+        {/* Only when it says something the heading did not — for the members whose
+            iRacing name and Discord handle are the same string, one line is honest
+            and two would look like a bug. */}
+        {identity.discord && identity.discord !== identity.primary && (
+          <div className="mt-1 text-sm text-[var(--color-muted)]">@{identity.discord} on Discord</div>
+        )}
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="rounded-full bg-[var(--color-mist)] px-3 py-1 font-alt text-[11px] font-bold uppercase tracking-wide text-[var(--color-ink-2)]">
             {role === 'race_control' ? 'Race Control' : role === 'admin' ? 'Admin' : 'Member'}
