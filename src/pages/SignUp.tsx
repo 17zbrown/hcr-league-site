@@ -3,6 +3,7 @@ import { useLeagueSettings } from '../lib/queries'
 import { useAuth } from '../lib/auth'
 import { Section } from '../components/ui'
 import { Reveal } from '../components/motion'
+import { DiscordButton } from '../components/DiscordButton'
 
 /**
  * The iRacing league this site is the front end for.
@@ -39,8 +40,8 @@ const LADDER = [
 const STEPS = [
   {
     n: '01',
-    title: 'Create your member account',
-    body: 'One click with Discord — the same account you use in the server. It links your results, your licence and your entry to one profile.',
+    title: 'Sign in with Discord',
+    body: 'The same account you use in the server — there is nothing to create and no password to pick. It links your results, your licence and your entry to one profile.',
   },
   {
     n: '02',
@@ -77,9 +78,16 @@ export default function SignUp() {
             minutes between them.
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
-            <Link to={session ? '/portal' : '/login'} className="hcr-btn hcr-btn-primary px-7">
-              {session ? 'Enter the Season' : 'Create Account & Enter'}
-            </Link>
+            {/* Signed in, there is a season to enter; signed out, the only step is
+                Discord — so offer that directly instead of routing through /login
+                to press the same button there. */}
+            {session ? (
+              <Link to="/portal" className="hcr-btn hcr-btn-primary px-7">
+                Enter the Season
+              </Link>
+            ) : (
+              <DiscordButton />
+            )}
             {settings?.discord_url && (
               <a
                 href={settings.discord_url}

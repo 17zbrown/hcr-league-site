@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { DiscordButton } from '../components/DiscordButton'
 
 /**
  * Discord is the only advertised way in — server roles decide which portal you
@@ -12,7 +13,7 @@ import { useAuth } from '../lib/auth'
  * otherwise have no way back into the admin portal that fixes it.
  */
 export default function Login() {
-  const { signIn, signInWithDiscord } = useAuth()
+  const { signIn } = useAuth()
   const [params] = useSearchParams()
   const recovery = params.get('recovery') === '1'
 
@@ -20,18 +21,6 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  const discord = async () => {
-    setError(null)
-    setBusy(true)
-    try {
-      // Sends the browser to Discord; nothing after this runs on success.
-      await signInWithDiscord()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not reach Discord.')
-      setBusy(false)
-    }
-  }
 
   const submitRecovery = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -58,17 +47,7 @@ export default function Login() {
           decide which portal you land in.
         </p>
 
-        <button
-          type="button"
-          onClick={discord}
-          disabled={busy}
-          className="mt-8 flex min-h-11 w-full items-center justify-center gap-2.5 rounded-xl bg-[#5865f2] py-3.5 font-alt text-sm font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5 disabled:opacity-60"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M19.3 5.4A17.6 17.6 0 0015 4l-.2.5c1.6.4 2.9 1 4.1 1.9A13.9 13.9 0 003 6.4 16 16 0 019.2 4.5L9 4a17.6 17.6 0 00-4.3 1.4C2 9.5 1.3 13.5 1.6 17.4a17.7 17.7 0 005.4 2.7l1.1-1.7c-.6-.2-1.2-.5-1.7-.9l.4-.3a12.6 12.6 0 0010.4 0l.4.3c-.5.4-1.1.7-1.7.9l1.1 1.7a17.7 17.7 0 005.4-2.7c.4-4.5-.6-8.5-2.9-12zM8.6 15c-1 0-1.9-1-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1S9.6 15 8.6 15zm6.8 0c-1 0-1.9-1-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1z" />
-          </svg>
-          {busy && !recovery ? 'Opening Discord…' : 'Continue with Discord'}
-        </button>
+        <DiscordButton className="mt-8 w-full" onError={(m) => setError(m || null)} />
 
         {error && (
           <p role="alert" className="mt-4 rounded-lg bg-[var(--color-red)]/10 px-4 py-3 text-sm text-[var(--color-red)]">
