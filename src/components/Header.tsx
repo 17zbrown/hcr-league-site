@@ -69,18 +69,24 @@ export default function Header() {
             site — cost opening and dismissing a modal every time. Same NAV array,
             one extra render site.
 
-            Hidden below lg because seven items plus the wordmark, search and a CTA
-            will not fit; the menu button remains the way in on small screens, which
-            is what it is good at.
+            THE BREAKPOINT IS MEASURED, NOT GUESSED. This sat at `lg` (1024px) while
+            the row actually needed 1239px signed in, so every window between those
+            two scrolled sideways -- 13" laptops, half-screen windows, iPad landscape.
+            Trimming the link padding, the nav gap and the word "Menu" beside the
+            hamburger brought the requirement down to ~1127px; 1140 is that number
+            plus a margin for fonts that render a little wider.
+
+            Below it the menu button remains the way in, which is what it is good at.
+            If a nav item is ever added, re-measure -- do not assume this still holds.
           */}
-          <nav aria-label="Main" className="hidden flex-1 items-center justify-center gap-1 lg:flex">
+          <nav aria-label="Main" className="hidden flex-1 items-center justify-center gap-0.5 min-[1140px]:flex">
             {NAV.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 end={item.to === '/'}
                 className={({ isActive }) =>
-                  `rounded-lg px-3 py-2 font-alt text-[13px] font-bold uppercase tracking-wide transition-colors ${
+                  `rounded-lg px-2 py-2 font-alt text-[13px] font-bold uppercase tracking-wide transition-colors ${
                     isActive
                       ? 'text-[var(--color-ink)]'
                       : 'text-[var(--color-muted)] hover:text-[var(--color-ink)]'
@@ -112,7 +118,7 @@ export default function Header() {
               aria-expanded={open}
               className="flex h-11 items-center gap-2.5 rounded-lg border border-[var(--color-line-2)] px-3.5 transition-colors hover:border-[var(--color-ink)]"
             >
-              <span className="hidden font-mono text-xs font-semibold uppercase tracking-widest sm:inline">Menu</span>
+              <span className="hidden font-mono text-xs font-semibold uppercase tracking-widest xl:inline">Menu</span>
               <span className="flex flex-col gap-[5px]">
                 <span className="h-0.5 w-5 bg-current" />
                 <span className="h-0.5 w-5 bg-current" />
