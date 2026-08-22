@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
-import { useCurrentSeason, useDrivers, useEntries, useEvents, useLicenseResults, useMyChangeRequests, useMyRegistration, useProtests, useSeasonResultsFull } from '../../lib/queries'
+import { useCurrentSeason, useDrivers, useEntries, useEvents, useLicenseResults, useMyChangeRequests, useMyRegistration, useProtests, useSeasonResultsFull, useClasses } from '../../lib/queries'
 import { buildPaceIndex, computeLicense, resultsForDriver } from '../../lib/license'
 import { buildDriverReport, type FullRow } from '../../lib/driverReport'
-import { StatBand } from '../../components/editorial'
+import { computeAchievements } from '../../lib/achievements'
+import { DriverReportBody } from '../../components/DriverReport'
 import { classColor, fmtDateLong } from '../../lib/format'
 import { Section, Skeleton } from '../../components/ui'
 import { ChangeRequestForm, ChangeRequestList } from '../../components/ChangeRequest'
@@ -595,6 +596,7 @@ function Overview({ onSignOut, onSeasonEntry }: { onSignOut: () => void; onSeaso
   const { data: season } = useCurrentSeason()
   const { data: entries } = useEntries(season?.id)
   const { data: results } = useSeasonResultsFull(season?.id)
+  const { data: classes } = useClasses()
 
   const identity = useMemo(() => memberIdentity(profile, drivers), [profile, drivers])
   const driver = identity.driver
@@ -618,6 +620,10 @@ function Overview({ onSignOut, onSeasonEntry }: { onSignOut: () => void; onSeaso
     ) as FullRow[]
   }, [driver, results])
   const report = useMemo(() => buildDriverReport(rows, (results ?? []) as FullRow[]), [rows, results])
+  const achievements = useMemo(
+    () => computeAchievements(rows, (results ?? []) as FullRow[]),
+    [rows, results],
+  )
 
   // PRESENCE, NOT isLoading. `useSeasonResultsFull` is gated on season?.id, and a
   // disabled query reports isLoading false while holding nothing — the trap this
@@ -625,7 +631,7 @@ function Overview({ onSignOut, onSeasonEntry }: { onSignOut: () => void; onSeaso
   // `[]` means it answered and the member has no results.
   const reportKnown = results !== undefined
   const raced = report.starts > 0
-  const color = entry?.class_id ? classColor(entry.class_id) : 'var(--color-brand)'
+  const color = entry?.class_id ? classColor(entry.class_id, classes) : 'var(--color-brand)'
 
   return (
     <div className="space-y-6">
@@ -690,68 +696,16 @@ function Overview({ onSignOut, onSeasonEntry }: { onSignOut: () => void; onSeaso
           take a start.
         </p>
       ) : (
-        <>
-          <StatBand
-            stats={[
-              { label: 'Championship Points', value: report.points },
-              { label: 'Starts', value: report.starts },
-              { label: 'Wins', value: report.wins },
-              { label: 'Podiums', value: report.podiums },
-              { label: 'Poles', value: report.poles },
-              { label: 'Best Finish', value: report.bestFinish, prefix: 'P' },
-            ]}
-          />
-
-          <section className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
-            <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <h3 className="font-display text-2xl">Season form</h3>
-              <Link
-                to={`/drivers/${driver.id}`}
-                className="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--color-muted)] underline-offset-4 hover:underline"
-              >
-                Full report →
-              </Link>
-            </div>
-            <p className="mt-1.5 text-sm text-[var(--color-muted)]">
-              Every round you have started this season, in order — class finish, places made up on
-              the road, and points banked.
-            </p>
-            <ol className="mt-5 flex flex-wrap gap-2.5">
-              {report.form.map((f, i) => {
-                const win = f.clsPos === 1
-                const pod = f.clsPos != null && f.clsPos <= 3
-                return (
-                  <li
-                    key={`${f.round}-${i}`}
-                    title={`${f.label} — ${f.dnf ? 'DNF' : f.clsPos != null ? `P${f.clsPos}` : '—'} · ${f.points} pts`}
-                    className="relative min-w-[88px] max-w-[150px] flex-1 rounded-2xl border p-4"
-                    style={{
-                      borderColor: win ? color : 'var(--color-line)',
-                      background: win ? `${color}1a` : 'var(--color-paper)',
-                    }}
-                  >
-                    <span className="sr-only">{f.label}</span>
-                    <div className="font-body text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
-                      R{f.round}
-                    </div>
-                    <div className="mt-1 font-display text-3xl leading-none">
-                      {f.dnf ? <span className="text-[var(--color-red)]">DNF</span> : f.clsPos != null ? `P${f.clsPos}` : '—'}
-                    </div>
-                    <div className="mt-1.5 flex items-center gap-2 font-mono text-[11px]">
-                      {f.gained != null && f.gained !== 0 && (
-                        <span className={f.gained > 0 ? 'text-[var(--color-green)]' : 'text-[var(--color-red)]'}>
-                          {f.gained > 0 ? `▲${f.gained}` : `▼${-f.gained}`}
-                        </span>
-                      )}
-                      <span className="text-[var(--color-faint)]">{f.points}</span>
-                    </div>
-                    {pod && !win && <span className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full" style={{ background: color }} />}
-                  </li>
-                )
-              })}
-            </ol>
-          </section>
-        </>
+        <DriverReportBody
+          driver={driver}
+          rows={rows}
+          report={report}
+          achievements={achievements}
+          license={license}
+          classes={classes}
+          color={color}
+          voice="first"
+        />
       )}
 
       {/* ---------- account ---------- */}
@@ -759,6 +713,11 @@ function Overview({ onSignOut, onSeasonEntry }: { onSignOut: () => void; onSeaso
         <h3 className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Account</h3>
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <button onClick={onSeasonEntry} className="hcr-btn hcr-btn-ghost w-full">Season entry &amp; iRacing details</button>
+          {driver && (
+            <Link to={`/drivers/${driver.id}`} className="hcr-btn hcr-btn-ghost w-full">
+              View my public profile
+            </Link>
+          )}
           <button onClick={onSignOut} className="hcr-btn hcr-btn-ghost w-full">Sign out</button>
         </div>
       </div>

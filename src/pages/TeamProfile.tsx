@@ -7,7 +7,7 @@ import { classColor } from '../lib/format'
 import { Skeleton } from '../components/ui'
 import { AnimatedStat, MeterRow, StatBand } from '../components/editorial'
 import { Reveal } from '../components/motion'
-import { ResultsTable } from './DriverProfile'
+import { ResultsTable } from '../components/DriverReport'
 import type { Driver } from '../lib/types'
 
 export default function TeamProfile() {
