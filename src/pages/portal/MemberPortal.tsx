@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
-import { useCurrentSeason, useDrivers, useEntries, useEvents, useLicenseResults, useMyChangeRequests, useMyRegistration, useProtests } from '../../lib/queries'
+import { useCurrentSeason, useDrivers, useEntries, useEvents, useLicenseResults, useMyChangeRequests, useMyRegistration, useProtests, useSeasonResultsFull } from '../../lib/queries'
 import { buildPaceIndex, computeLicense, resultsForDriver } from '../../lib/license'
+import { buildDriverReport, type FullRow } from '../../lib/driverReport'
+import { StatBand } from '../../components/editorial'
 import { classColor, fmtDateLong } from '../../lib/format'
 import { Section, Skeleton } from '../../components/ui'
 import { ChangeRequestForm, ChangeRequestList } from '../../components/ChangeRequest'
@@ -24,7 +26,7 @@ const CATEGORIES = ['Contact', 'Unsafe rejoin', 'Track limits', 'Blocking', 'Uns
  * were buried inside My car, filing a protest and tracking it were separate places,
  * and nothing showed a member what they were currently waiting on.
  *
- * Action centre is the answer to that question: everything you can ask for, plus the
+ * Action center is the answer to that question: everything you can ask for, plus the
  * state of everything you already asked for, in one place. My car goes back to being
  * what it says — the facts about your entry.
  */
@@ -131,7 +133,7 @@ export default function MemberPortal() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'overview', label: 'My profile' },
     { id: 'car', label: 'My car' },
-    { id: 'actions', label: `Action centre${openCount ? ` (${openCount})` : ''}` },
+    { id: 'actions', label: `Action center${openCount ? ` (${openCount})` : ''}` },
   ]
 
   return (
@@ -208,7 +210,7 @@ export default function MemberPortal() {
         <MyCar onRequestChange={() => selectTab('actions')} showEntryForm={gridStateKnown && !hasEntry} />
       )}
       {tab === 'actions' && (
-        <ActionCentre
+        <ActionCenter
           filedNote={filedNote}
           onFiled={() => setFiledNote(true)}
           onDismissNote={() => setFiledNote(false)}
@@ -218,7 +220,7 @@ export default function MemberPortal() {
   )
 }
 
-/* ---------------- action centre ---------------- */
+/* ---------------- action center ---------------- */
 /**
  * Everything a member can ask for, and the state of everything they already asked.
  *
@@ -232,7 +234,7 @@ export default function MemberPortal() {
  * there is nothing outstanding that block disappears rather than showing an empty
  * shell, and the forms move up to fill the space.
  */
-function ActionCentre({
+function ActionCenter({
   filedNote, onFiled, onDismissNote,
 }: {
   filedNote: boolean
@@ -330,7 +332,7 @@ function ActionCentre({
 /**
  * The change-request form, plus the two states where there is nothing to request.
  *
- * Split out of MyCar so the Action centre and the car page can both show it without
+ * Split out of MyCar so the Action center and the car page can both show it without
  * one importing the other's layout. The kinds offered differ by situation: a driver
  * on a team cannot ask for a number, because the team owns it and their manager sets
  * it directly through set_entry_number.
@@ -550,9 +552,9 @@ function MyCar({ onRequestChange, showEntryForm }: { onRequestChange: () => void
         )}
       </div>
 
-      {/* Neither the form nor the request list is repeated here. The Action centre
+      {/* Neither the form nor the request list is repeated here. The Action center
           owns both, so there is exactly one place to look for what is pending.
-          The form itself lives in the Action centre. Two copies of it would mean two
+          The form itself lives in the Action center. Two copies of it would mean two
           places to look when something is pending, which is the confusion this
           reorganisation exists to remove. */}
       <button
@@ -573,10 +575,26 @@ function MyCar({ onRequestChange, showEntryForm }: { onRequestChange: () => void
 }
 
 /* ---------------- overview ---------------- */
+/**
+ * A member's own report, on their own front page.
+ *
+ * This used to be a name, a chip and a link reading "View my driver profile" — so
+ * the one thing a driver actually opens the portal to see, their season, was always
+ * one click away on a page built for STRANGERS to read about them. The numbers were
+ * public the whole time; only the member had to go looking.
+ *
+ * So the same report renders here: the car panel, the headline band and the round
+ * chips. /drivers/:id keeps the long tail — round-by-round table, trophy cabinet,
+ * pace and discipline — and is still linked, because duplicating all of it would
+ * mean two places to change every time the report grows.
+ */
 function Overview({ onSignOut, onSeasonEntry }: { onSignOut: () => void; onSeasonEntry: () => void }) {
   const { profile, role } = useAuth()
   const { data: drivers } = useDrivers()
   const { data: licenseResults } = useLicenseResults()
+  const { data: season } = useCurrentSeason()
+  const { data: entries } = useEntries(season?.id)
+  const { data: results } = useSeasonResultsFull(season?.id)
 
   const identity = useMemo(() => memberIdentity(profile, drivers), [profile, drivers])
   const driver = identity.driver
@@ -586,36 +604,160 @@ function Overview({ onSignOut, onSeasonEntry }: { onSignOut: () => void; onSeaso
     return computeLicense(resultsForDriver(licenseResults ?? [], driver.name), idx, driver.license_override)
   }, [driver, licenseResults])
 
-  return (
-    <div className="grid gap-5 md:grid-cols-[1.2fr_1fr]">
-      <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
-        <div className="font-display text-3xl">{identity.primary}</div>
-        {/* Only when it says something the heading did not — for the members whose
-            iRacing name and Discord handle are the same string, one line is honest
-            and two would look like a bug. */}
-        {identity.discord && identity.discord !== identity.primary && (
-          <div className="mt-1 text-sm text-[var(--color-muted)]">@{identity.discord} on Discord</div>
-        )}
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-[var(--color-mist)] px-3 py-1 font-alt text-[11px] font-bold uppercase tracking-wide text-[var(--color-ink-2)]">
-            {role === 'race_control' ? 'Race Control' : role === 'admin' ? 'Admin' : 'Member'}
-          </span>
-          {license && <LicenseBadge tier={license.effective} />}
-        </div>
-        {driver ? (
-          <Link to={`/drivers/${driver.id}`} className="mt-5 inline-block text-sm font-semibold text-[var(--color-blue)]">
-            View my driver profile →
-          </Link>
-        ) : (
-          <p className="mt-5 text-sm text-[var(--color-muted)]">
-            No driver profile linked yet — the commissioner links your account once your entry is approved.
-          </p>
-        )}
-      </div>
+  // The seat, for the number and the class colour. Absent for a member who has
+  // registered but not yet been given a car — the panel simply loses its number.
+  const entry = useMemo(
+    () => (entries ?? []).find((e) => (e.drivers ?? []).some((l) => l.driver?.id === profile?.driver_id)),
+    [entries, profile?.driver_id],
+  )
 
+  const rows = useMemo<FullRow[]>(() => {
+    if (!driver || !results) return []
+    return resultsForDriver(results, driver.name).sort(
+      (a, b) => (a.event?.round ?? 0) - (b.event?.round ?? 0),
+    ) as FullRow[]
+  }, [driver, results])
+  const report = useMemo(() => buildDriverReport(rows, (results ?? []) as FullRow[]), [rows, results])
+
+  // PRESENCE, NOT isLoading. `useSeasonResultsFull` is gated on season?.id, and a
+  // disabled query reports isLoading false while holding nothing — the trap this
+  // file documents at the top. `undefined` means the fetch has not answered yet;
+  // `[]` means it answered and the member has no results.
+  const reportKnown = results !== undefined
+  const raced = report.starts > 0
+  const color = entry?.class_id ? classColor(entry.class_id) : 'var(--color-brand)'
+
+  return (
+    <div className="space-y-6">
+      {/* ---------- feature panel ---------- */}
+      <section className="on-navy relative overflow-hidden rounded-3xl bg-[var(--color-deep)]">
+        <div className="hero-grid pointer-events-none absolute inset-0" aria-hidden="true" />
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{ background: `radial-gradient(58% 70% at 88% 0%, ${color}22, transparent 62%)` }}
+        />
+        <div className="relative grid gap-6 p-6 sm:grid-cols-[auto_1fr] sm:items-center md:p-9">
+          {entry?.number != null && (
+            <div
+              className="tabular flex h-20 w-24 shrink-0 items-center justify-center rounded-2xl bg-[var(--color-deep-2)] font-display text-4xl text-[var(--color-ink)] md:h-24 md:w-28 md:text-5xl"
+              style={{ borderBottom: `4px solid ${color}` }}
+            >
+              {entry.number}
+            </div>
+          )}
+          <div className="min-w-0">
+            <h2 className="text-4xl leading-[1.05] md:text-6xl">{identity.primary}</h2>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+              <span className="rounded-full bg-[var(--color-mist)] px-3 py-1 font-alt text-[11px] font-bold uppercase tracking-wide text-[var(--color-ink-2)]">
+                {role === 'race_control' ? 'Race Control' : role === 'admin' ? 'Admin' : 'Member'}
+              </span>
+              {entry?.class_id && (
+                <span className="inline-flex items-center gap-2 font-body text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
+                  {entry.class_id}
+                </span>
+              )}
+              {license && <LicenseBadge tier={license.effective} />}
+              {driver?.irating != null && (
+                <span className="tabular text-sm text-[var(--color-muted)]">iR {driver.irating}</span>
+              )}
+            </div>
+            {/* Only when it says something the heading did not — for the members whose
+                iRacing name and Discord handle are the same string, one line is honest
+                and two would look like a bug. */}
+            {(identity.discord && identity.discord !== identity.primary) || entry?.car ? (
+              <div className="mt-2.5 font-body text-sm text-[var(--color-muted)]">
+                {entry?.car}
+                {entry?.car && identity.discord && identity.discord !== identity.primary ? ' · ' : ''}
+                {identity.discord && identity.discord !== identity.primary ? `@${identity.discord} on Discord` : ''}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </section>
+
+      {/* ---------- the season so far ---------- */}
+      {!driver ? (
+        <p className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 text-sm text-[var(--color-muted)]">
+          No driver profile linked yet — the commissioner links your account once your entry is
+          approved, and your season report starts building itself from there.
+        </p>
+      ) : !reportKnown ? (
+        <Skeleton className="h-40 w-full" />
+      ) : !raced ? (
+        <p className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6 text-sm text-[var(--color-muted)]">
+          No scored results yet this season — your report fills in automatically the first time you
+          take a start.
+        </p>
+      ) : (
+        <>
+          <StatBand
+            stats={[
+              { label: 'Championship Points', value: report.points },
+              { label: 'Starts', value: report.starts },
+              { label: 'Wins', value: report.wins },
+              { label: 'Podiums', value: report.podiums },
+              { label: 'Poles', value: report.poles },
+              { label: 'Best Finish', value: report.bestFinish, prefix: 'P' },
+            ]}
+          />
+
+          <section className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <h3 className="font-display text-2xl">Season form</h3>
+              <Link
+                to={`/drivers/${driver.id}`}
+                className="font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--color-muted)] underline-offset-4 hover:underline"
+              >
+                Full report →
+              </Link>
+            </div>
+            <p className="mt-1.5 text-sm text-[var(--color-muted)]">
+              Every round you have started this season, in order — class finish, places made up on
+              the road, and points banked.
+            </p>
+            <ol className="mt-5 flex flex-wrap gap-2.5">
+              {report.form.map((f, i) => {
+                const win = f.clsPos === 1
+                const pod = f.clsPos != null && f.clsPos <= 3
+                return (
+                  <li
+                    key={`${f.round}-${i}`}
+                    title={`${f.label} — ${f.dnf ? 'DNF' : f.clsPos != null ? `P${f.clsPos}` : '—'} · ${f.points} pts`}
+                    className="relative min-w-[88px] flex-1 rounded-2xl border p-4"
+                    style={{
+                      borderColor: win ? color : 'var(--color-line)',
+                      background: win ? `${color}1a` : 'var(--color-paper)',
+                    }}
+                  >
+                    <span className="sr-only">{f.label}</span>
+                    <div className="font-body text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
+                      R{f.round}
+                    </div>
+                    <div className="mt-1 font-display text-3xl leading-none">
+                      {f.dnf ? <span className="text-[var(--color-red)]">DNF</span> : f.clsPos != null ? `P${f.clsPos}` : '—'}
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-2 font-mono text-[11px]">
+                      {f.gained != null && f.gained !== 0 && (
+                        <span className={f.gained > 0 ? 'text-[var(--color-green)]' : 'text-[var(--color-red)]'}>
+                          {f.gained > 0 ? `▲${f.gained}` : `▼${-f.gained}`}
+                        </span>
+                      )}
+                      <span className="text-[var(--color-faint)]">{f.points}</span>
+                    </div>
+                    {pod && !win && <span className="absolute right-3 top-3 h-1.5 w-1.5 rounded-full" style={{ background: color }} />}
+                  </li>
+                )
+              })}
+            </ol>
+          </section>
+        </>
+      )}
+
+      {/* ---------- account ---------- */}
       <div className="rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] p-6">
         <h3 className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Account</h3>
-        <div className="mt-4 space-y-2">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
           <button onClick={onSeasonEntry} className="hcr-btn hcr-btn-ghost w-full">Season entry &amp; iRacing details</button>
           <button onClick={onSignOut} className="hcr-btn hcr-btn-ghost w-full">Sign out</button>
         </div>
