@@ -10,7 +10,7 @@ import {
   useTrackWinners,
   useWeather,
 } from '../lib/queries'
-import { CLASS_ORDER, classColor, dateKey, fmtDateLong, wmo } from '../lib/format'
+import { CLASS_ORDER, classColor, fmtDate, fmtDateLong, fmtTime, raceDateKey, wmo } from '../lib/format'
 import { ClassChip, Skeleton } from '../components/ui'
 import { FeaturePanel, StatBand, type Stat } from '../components/editorial'
 import { DriverName } from '../components/links'
@@ -45,10 +45,11 @@ export default function RaceDetail() {
   const done = event?.status === 'complete'
   const upcoming = !!event && !done
 
-  // Race-day forecast window, centered on the in-sim start hour.
-  // Use the stored calendar day directly — converting through a local Date
-  // shifted the forecast a day early for every viewer west of UTC.
-  const dateStr = event ? dateKey(event.date) : undefined
+  // Race-day forecast window, centered on the in-sim start hour. The key is the
+  // race day AT THE TRACK (see raceDateKey) because the query sends timezone=auto;
+  // it used to be the UTC day, which for a midnight-UTC green flag is the day AFTER
+  // the race and fetched the wrong forecast entirely.
+  const dateStr = event ? raceDateKey(event.date) : undefined
   const daysUntil = dateStr
     ? Math.round((new Date(`${dateStr}T00:00:00`).getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000)
     : 0
@@ -153,7 +154,7 @@ export default function RaceDetail() {
         </div>
         <h1 className="mt-4 text-5xl md:text-6xl">{event.name ?? track?.name}</h1>
         <div className="mt-3 text-lg text-[var(--color-ink-2)]">
-          {track?.name}{track?.location ? ` · ${track.location}` : ''} · {fmtDateLong(event.date)}
+          {track?.name}{track?.location ? ` · ${track.location}` : ''} · {fmtDate(event.date)} · {fmtTime(event.date)}
         </div>
 
         <div className="mt-7 flex flex-wrap items-center gap-4">

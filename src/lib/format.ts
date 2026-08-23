@@ -34,23 +34,63 @@ const MON = [
 ]
 
 /**
- * Event dates are stored as calendar days pinned to UTC midnight
- * (`2026-08-01T00:00:00Z`). Reading those with local getters shows the previous
- * day for everyone west of UTC — i.e. every US viewer. So parse the calendar
- * part and rebuild it in local time: the day you typed is the day that renders.
- * Timestamps that carry a real time-of-day (protest `created_at`) still format
- * correctly, since we only take the date portion for date-only display.
+ * EVENT DATES ARE REAL INSTANTS, NOT CALENDAR MARKERS.
+ *
+ * This file used to strip the date out of the ISO string and rebuild it in local
+ * time, on the belief that `events.date` was a calendar day pinned to UTC midnight.
+ * That belief is out of date: `events.date` IS the green-flag timestamp, and the
+ * green flag is 8pm ET on a Saturday — which is midnight UTC on the SUNDAY. Taking
+ * the UTC date part therefore printed every race a day late, and the whole schedule
+ * read as Sundays.
+ *
+ * So an instant is now formatted as an instant, in the VIEWER'S OWN ZONE, with the
+ * zone named wherever a time is shown. A member in California sees 5:00 PM PDT and a
+ * member in ET sees 8:00 PM EDT — the same moment, described correctly for each of
+ * them, rather than one canonical string that is wrong for everybody but the author.
+ *
+ * The one exception is a bare `YYYY-MM-DD`, which carries no time and no zone and is
+ * genuinely a calendar day. Parsing that with `new Date()` would read it as UTC
+ * midnight and show the day before to every viewer west of UTC — the original bug
+ * this file was written to avoid. That case is still built in local time.
  */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+
 export function calendarDate(iso: string): Date {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
-  if (!m) return new Date(iso)
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  const s = String(iso).trim()
+  const m = DATE_ONLY.exec(s)
+  if (m) {
+    const [y, mo, d] = s.split('-').map(Number)
+    return new Date(y, mo - 1, d)
+  }
+  return new Date(s)
 }
 
-/** `YYYY-MM-DD` for the stored calendar day (no timezone shift). */
+/** `YYYY-MM-DD` for the day this instant falls on IN THE VIEWER'S ZONE. */
 export function dateKey(iso: string): string {
-  const m = /^(\d{4}-\d{2}-\d{2})/.exec(iso)
-  return m ? m[1] : new Date(iso).toISOString().slice(0, 10)
+  const d = calendarDate(iso)
+  if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10)
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
+}
+
+/**
+ * The race's calendar day AT THE TRACK, which is not always the viewer's day.
+ *
+ * The forecast query sends `timezone=auto`, so Open-Meteo reads start_date in the
+ * TRACK's zone — meaning this key has to be the race day there, not wherever the
+ * reader happens to be sitting. Every round is an evening event on North American
+ * soil, so the Eastern date and the track's local date are the same day (8pm ET is
+ * 5pm PT); a reader in Sydney, whose own date is already tomorrow, would otherwise
+ * pull the wrong day's forecast.
+ *
+ * Anchoring to ET rather than the viewer keeps one answer for every reader.
+ */
+export function raceDateKey(iso: string): string {
+  const s = String(iso).trim()
+  if (DATE_ONLY.test(s)) return s
+  const d = new Date(s)
+  if (Number.isNaN(d.getTime())) return s.slice(0, 10)
+  // en-CA renders as YYYY-MM-DD, which is exactly the shape the API wants.
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
 }
 
 export function fmtDate(iso: string): string {
@@ -64,28 +104,49 @@ export function fmtDateLong(iso: string): string {
 }
 
 /**
- * When a race-day event is "past". A round stays current all day locally
- * rather than flipping at UTC midnight (8pm ET the evening before).
+ * A race is over three hours after the green flag — the same window
+ * `advance_completed_events()` uses to mark it complete in the database, so the
+ * site and the scheduler agree on when a round stops being "next".
  */
+const RACE_WINDOW_MS = 3 * 60 * 60 * 1000
+
 export function eventEnded(iso: string, now: number = Date.now()): boolean {
-  const d = calendarDate(iso)
-  d.setHours(23, 59, 59, 999)
-  return d.getTime() < now
+  const s = String(iso).trim()
+  if (DATE_ONLY.test(s)) {
+    const d = calendarDate(s)
+    d.setHours(23, 59, 59, 999)
+    return d.getTime() < now
+  }
+  const t = new Date(s).getTime()
+  return Number.isNaN(t) ? false : t + RACE_WINDOW_MS < now
 }
 
-export function fmtTime(iso: string): string {
+export function fmtTime(iso: string, withZone = true): string {
   const d = new Date(iso)
-  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleTimeString([], {
+    hour: 'numeric', minute: '2-digit', ...(withZone ? { timeZoneName: 'short' } : {}),
+  })
+}
+
+/** "Sat Aug 22 · 8:00 PM EDT" — the green flag, in the reader's own zone. */
+export function fmtDateTime(iso: string): string {
+  const s = String(iso).trim()
+  if (DATE_ONLY.test(s)) return fmtDate(s)
+  return `${fmtDate(s)} · ${fmtTime(s)}`
 }
 
 /**
- * Break an ISO target into a countdown, or null once elapsed. Date-only /
- * UTC-midnight event dates count down to the START of that local day, not to
- * UTC midnight (which lands the evening before for US viewers).
+ * Break an ISO target into a countdown, or null once elapsed.
+ *
+ * This counted `...T00:00:00Z` down to local midnight, treating it as a calendar
+ * marker. For a green flag stored at midnight UTC that put the clock four hours
+ * LATE for an ET viewer, and further out the further west you sat. A timestamp is
+ * counted to the instant it names; only a bare `YYYY-MM-DD` counts to local midnight,
+ * because that is all the information it carries.
  */
 export function countdownParts(targetIso: string, now: number) {
-  const isCalendarDay = /^\d{4}-\d{2}-\d{2}(T00:00:00(\.000)?Z?)?$/.test(targetIso)
-  const target = isCalendarDay ? calendarDate(targetIso).getTime() : new Date(targetIso).getTime()
+  const target = calendarDate(targetIso).getTime()
   const diff = target - now
   if (diff <= 0) return null
   const s = Math.floor(diff / 1000)

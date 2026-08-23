@@ -94,6 +94,17 @@ instructions and nothing is recorded. Discord scheduled events are a CALENDAR �
 Penalties and rulings deliberately stay quiet. The mention must sit in `content` —
 an `@everyone` inside an embed renders as text and notifies nobody.
 
+**`events.date` is an INSTANT, and formatting it as a calendar day prints the wrong
+day.** The green flag is 8pm ET on a Saturday, which is **midnight UTC on the Sunday**.
+`src/lib/format.ts` used to slice the date out of the ISO string and rebuild it in
+local time — so the whole schedule read as Sundays, the countdown targeted local
+midnight (four hours late in ET), and the race-day forecast fetched the day AFTER the
+race. Instants are now formatted as instants in the viewer's own zone with the zone
+named; only a bare `YYYY-MM-DD`, which carries no time, is still built locally.
+Anything keyed to the track rather than the reader — the Open-Meteo window, which
+sends `timezone=auto` — uses `raceDateKey()` and is anchored to ET, because a reader
+in Sydney is already on tomorrow's date.
+
 **Races complete themselves at midnight, and the in-sim forecast is iRacing's, not
 the sky's.** `advance_completed_events()` (cron `hcr-advance-events`, 04:00 UTC daily
 = midnight ET race night) marks any current-season race complete three hours after its
