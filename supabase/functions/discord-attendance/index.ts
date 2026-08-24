@@ -221,7 +221,14 @@ Deno.serve(async (req) => {
     const guildId = String(cfg.guild_id ?? '').trim()
     if (!guildId || !botToken) return json({ error: 'Guild id or bot token missing.' }, 400)
 
-    const askChannel = String(cfg.channel_announcements ?? '').trim()
+    // THE ASK HAS ITS OWN ROOM NOW, and #announcements is the fallback rather than
+    // the destination. Attendance is a form, not news: mixed into announcements it
+    // buried the results and standings posts people actually come back for, and a
+    // member looking for "where do I say I'm racing" had to scroll past them. The
+    // fallback keeps a server that has not been provisioned yet working exactly as
+    // it did instead of silently posting nowhere.
+    const askChannel = String(cfg.channel_race_attendance ?? '').trim()
+      || String(cfg.channel_announcements ?? '').trim()
     if (!SNOWFLAKE.test(askChannel)) {
       return json({ error: 'No #announcements channel is configured, so there is nowhere to ask.' }, 400)
     }
@@ -546,14 +553,31 @@ Deno.serve(async (req) => {
     // real notification; everybody else gets nothing. allowed_mentions lists the
     // ids explicitly, so this cannot widen into a mass ping by accident even if
     // the copy above it ever changes.
+    //
+    // ONE ROLE, NOT A ROLL CALL. Listing the silent by name reached the right people
+    // and read like a list of them being told off — the same information, published
+    // as a grievance. @Attendance Pending contains exactly those people (see
+    // discord-attendance-role, which reconciles it every five minutes), so mentioning
+    // it notifies precisely the same set and names nobody. It also self-corrects: a
+    // driver who answers between this post and the next has already lost the role, so
+    // a reminder that stays on screen stops applying to them without being edited.
+    //
+    // If the role does not exist yet, this falls back to the explicit id list rather
+    // than posting a mention nobody receives.
     const chase = chaseable.map((r) => String(r.discord_user_id))
+    const pendingRole = String(cfg.role_attendance_pending ?? '').trim()
+    const useRole = SNOWFLAKE.test(pendingRole)
     const rem = await discord(`/channels/${askChannel}/messages`, 'POST', botToken, {
       content: [
         `**${label}** — ${when}`,
-        `Still need an answer from ${chase.length}: ${chase.map((id) => `<@${id}>`).join(' ')}`,
+        useRole
+          ? `<@&${pendingRole}> — still waiting on ${chase.length}. Tap a button and the role comes off you.`
+          : `Still need an answer from ${chase.length}: ${chase.map((id) => `<@${id}>`).join(' ')}`,
         jump ? `One tap here: ${jump}` : 'Answer on the attendance post above.',
       ].join('\n'),
-      allowed_mentions: { users: chase },
+      // Explicit either way: this cannot widen into @everyone by accident even if
+      // the copy above it changes.
+      allowed_mentions: useRole ? { roles: [pendingRole] } : { users: chase },
     })
     if (!rem.ok) return json({ error: `Could not post the reminder — ${rem.message}`, applied, warnings }, 502)
     const remId = String((rem.data as { id?: string } | null)?.id ?? '')
