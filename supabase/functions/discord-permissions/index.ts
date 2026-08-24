@@ -55,6 +55,9 @@ const RC_ANNOUNCE_NAME = 'race-control-announcements'
 // The one room in RACE CONTROL that members WRITE in. See section 6.
 const RECS_NAME = 'league-recommendations'
 const WELCOME_NAME = 'welcome'
+/** Where the grid answers "are you racing". Section 8. */
+const ATTEND_NAME = 'race-attendance'
+const CHAN_TEXT = 0
 
 /**
  * Discord's own join spam, switched off at the guild level. These are the grey
@@ -548,6 +551,45 @@ Deno.serve(async (req) => {
       }
     }
 
+    // --- 8. #race-attendance: where the grid answers, and nothing else ---
+    //
+    // The ask used to live in #announcements, which put a form in the middle of the
+    // room people come back to for results and standings. It has its own channel now,
+    // and discord-attendance reads the id from discord_config.channel_race_attendance
+    // (falling back to #announcements if this has never run).
+    //
+    // READ-ONLY FOR MEMBERS, DELIBERATELY. Pressing a button needs only VIEW_CHANNEL —
+    // components are not messages — so members can answer without being able to post.
+    // That keeps the channel exactly one post per race instead of a conversation with
+    // the buttons scrolled somewhere above it.
+    let attendChannel = channels.find((c) => String(c.id) === String(cfg.channel_race_attendance ?? '').trim())
+      ?? channels.find((c) => c.type !== CHAN_CATEGORY && String(c.name ?? '') === ATTEND_NAME)
+
+    if (!attendChannel && !dryRun) {
+      const made = await discord<Channel>(`/guilds/${guildId}/channels`, 'POST', botToken, {
+        name: ATTEND_NAME,
+        type: CHAN_TEXT,
+        parent_id: league.id,
+        topic: 'Are you racing this weekend? One post per round — tap a button. You can change your mind any time by pressing the other one. Race control reads this to know what the grid looks like.',
+      })
+      if (made.ok && made.data?.id) { attendChannel = made.data; created.push(ATTEND_NAME) }
+      else if (!made.ok) warnings.push(`Could not create #${ATTEND_NAME} — ${made.message}`)
+    } else if (!attendChannel && dryRun) {
+      planned.push({ channel: ATTEND_NAME, target: '(channel)', add: [`CREATE text channel in ${LEAGUE_CATEGORY}`], remove: [] })
+    }
+
+    if (attendChannel) {
+      await setPerms(attendChannel, guildId, '@everyone', READ_ONLY_ALLOW, READ_ONLY_DENY)
+      for (const [rid, label] of [[adminRole, 'Admin'], [rcRole, 'Race Control'], [botRole, 'HCR Bot']] as const) {
+        if (SNOWFLAKE.test(rid)) await setPerms(attendChannel, rid, label, FORUM_STAFF_ALLOW, 0n)
+      }
+      if (!dryRun && String(cfg.channel_race_attendance ?? '') !== String(attendChannel.id)) {
+        const { error } = await db.from('discord_config')
+          .update({ channel_race_attendance: String(attendChannel.id), updated_at: new Date().toISOString() }).eq('id', 1)
+        if (error) warnings.push(`Created #${ATTEND_NAME} but could not save its id — ${error.message}`)
+      }
+    }
+
     return json({
       ok: warnings.length === 0,
       dryRun,
@@ -555,6 +597,7 @@ Deno.serve(async (req) => {
       license_ups: licenseUps?.name ?? null,
       race_control_announcements: rcChannel?.name ?? null,
       league_recommendations: recsChannel?.name ?? null,
+      race_attendance: attendChannel?.name ?? null,
       league_category: league.name,
       channels_in_league: children.map((c) => c.name),
       forum: forum?.name ?? null,
