@@ -57,6 +57,10 @@ const MAX_DRIVERS = 5000
 const NICK_MAX = 32
 
 const SNOWFLAKE = /^\d{5,25}$/
+/** "Has never taken a start, in any season." See the block that maintains it. */
+const NEVER_RACED_NAME = 'Never Raced'
+/** Muted slate — a fact about someone new, not a warning about them. */
+const NEVER_RACED_COLOR = 0x6b7280
 
 interface DriverRow {
   id: string
@@ -76,7 +80,7 @@ type ApiResult<T> = { ok: true; data: T } | { ok: false; status: number; message
 // Spectator on LINKED members and to nothing else.
 async function discord<T>(
   path: string,
-  method: 'GET' | 'PUT' | 'DELETE' | 'PATCH',
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
   token: string,
   body?: unknown,
   attempt = 0,
@@ -192,6 +196,49 @@ Deno.serve(async (req) => {
       warnings.push('No Spectator role id is saved in config, so seatless linked drivers keep whatever they hold.')
     }
 
+    // NEVER RACED — a different question from Spectator, and easy to conflate.
+    //
+    //   Spectator   = not on THIS season's grid. Comes off the moment race control
+    //                 seats them, whether or not they have ever driven.
+    //   Never Raced = no classified result in ANY season. Survives being seated and
+    //                 comes off only when their first result lands.
+    //
+    // Somebody can hold both, either or neither, and the pair is what makes "new and
+    // not yet entered" distinguishable from "regular who is sitting this season out".
+    // Created once here rather than by hand, so a wiped config heals itself.
+    let neverRacedRole = SNOWFLAKE.test(String(cfg.role_never_raced ?? '').trim())
+      ? String(cfg.role_never_raced).trim()
+      : ''
+    {
+      const rolesRes = await discord<{ id: string; name?: string | null }[]>(
+        `/guilds/${guildId}/roles`, 'GET', botToken)
+      if (!rolesRes.ok) {
+        warnings.push(`Could not read the server roles, so ${NEVER_RACED_NAME} was left alone — ${rolesRes.message}`)
+        neverRacedRole = ''
+      } else {
+        const live = rolesRes.data ?? []
+        if (!neverRacedRole || !live.some((r) => String(r.id) === neverRacedRole)) {
+          const found = live.find((r) => String(r.name ?? '') === NEVER_RACED_NAME)
+          if (found) neverRacedRole = String(found.id)
+          else {
+            const made = await discord<{ id: string }>(`/guilds/${guildId}/roles`, 'POST', botToken, {
+              name: NEVER_RACED_NAME, color: NEVER_RACED_COLOR,
+              hoist: false, mentionable: true, permissions: '0',
+            })
+            if (made.ok && made.data?.id) neverRacedRole = String(made.data.id)
+            else {
+              warnings.push(`Could not create the ${NEVER_RACED_NAME} role — ${made.ok ? 'no id returned' : made.message}`)
+              neverRacedRole = ''
+            }
+          }
+          if (neverRacedRole) {
+            await db.from('discord_config')
+              .update({ role_never_raced: neverRacedRole, updated_at: new Date().toISOString() }).eq('id', 1)
+          }
+        }
+      }
+    }
+
     // --- class -> role ---
     const classRoles = new Map<string, string>()
     {
@@ -270,6 +317,34 @@ Deno.serve(async (req) => {
       .limit(MAX_DRIVERS)
     if (drvErr) return json({ error: `Could not read the drivers — ${drvErr.message}. Nothing was changed.` }, 500)
     const drivers = ((driverRows ?? []) as DriverRow[]).filter((d) => SNOWFLAKE.test(String(d.discord_user_id ?? '')))
+
+    // Who has ever taken a start. Matched BOTH ways because the two are populated by
+    // different routes: entry_id is set by the importer and the commissioner grid,
+    // while hand-written SQL has historically only filled drivers_text. Trusting one
+    // alone would hand the role to somebody with a full season behind them.
+    const hasRaced = new Set<string>()
+    {
+      const { data: linked } = await db
+        .from('results')
+        .select('entry_id, drivers_text, entries!inner(id)')
+        .not('entry_id', 'is', null)
+        .limit(5000)
+      const entryIds = new Set((linked ?? []).map((r) => String((r as { entry_id?: string }).entry_id ?? '')))
+      if (entryIds.size) {
+        const { data: links } = await db
+          .from('entry_drivers').select('entry_id, driver_id').limit(5000)
+        for (const l of (links ?? []) as { entry_id?: string; driver_id?: string }[]) {
+          if (entryIds.has(String(l.entry_id ?? ''))) hasRaced.add(String(l.driver_id ?? ''))
+        }
+      }
+      const { data: byName } = await db.from('results').select('drivers_text').limit(5000)
+      const names = new Set(
+        (byName ?? []).map((r) => String((r as { drivers_text?: string }).drivers_text ?? '').trim().toLowerCase())
+          .filter(Boolean))
+      for (const d of drivers) {
+        if (names.has(String(d.name ?? '').trim().toLowerCase())) hasRaced.add(String(d.id))
+      }
+    }
     if (drivers.length === 0) {
       return json({
         skipped: 'No driver has a Discord account attached yet. Run "Link drivers" first — it works out who is who.',
@@ -328,6 +403,8 @@ Deno.serve(async (req) => {
     const revoked: string[] = []
     const spectatorOn: string[] = []
     const spectatorOff: string[] = []
+    const neverRacedOn: string[] = []
+    const neverRacedOff: string[] = []
     const renamed: string[] = []
     let alreadyCorrect = 0
     let notInGuild = 0
@@ -381,13 +458,25 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Spectator: the exact inverse of having a seat.
+      // Spectator: the exact inverse of having a seat THIS season.
       if (spectatorRole) {
         const has = member.roles.has(spectatorRole)
         const want = !seat
         if (has !== want) {
           if (await setRole(uid, spectatorRole, want, name)) {
             ;(want ? spectatorOn : spectatorOff).push(name)
+            touched = true
+          }
+        }
+      }
+
+      // Never Raced: independent of the seat, and of the season.
+      if (neverRacedRole) {
+        const has = member.roles.has(neverRacedRole)
+        const want = !hasRaced.has(String(d.id))
+        if (has !== want) {
+          if (await setRole(uid, neverRacedRole, want, name)) {
+            ;(want ? neverRacedOn : neverRacedOff).push(name)
             touched = true
           }
         }
@@ -458,6 +547,8 @@ Deno.serve(async (req) => {
       revoked,
       spectator_granted: spectatorOn,
       spectator_removed: spectatorOff,
+      never_raced_granted: neverRacedOn,
+      never_raced_removed: neverRacedOff,
       renamed,
       owner_note: ownerSkipped,
       already_correct: alreadyCorrect,
