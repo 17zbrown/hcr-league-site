@@ -54,6 +54,25 @@ const RACE_CONTROL_CATEGORY = 'RACE CONTROL'
 const RC_ANNOUNCE_NAME = 'race-control-announcements'
 // The one room in RACE CONTROL that members WRITE in. See section 6.
 const RECS_NAME = 'league-recommendations'
+
+/**
+ * SLOWMODE ON THE SUGGESTION BOX — and the one number Discord would not take.
+ *
+ * On a FORUM channel the two limits mean different things. `rate_limit_per_user` is
+ * the cooldown on STARTING a post, so it is the "one suggestion per member per X"
+ * dial. `default_thread_rate_limit_per_user` is the cooldown on replies, stamped
+ * onto each post as Discord creates it.
+ *
+ * Race control asked for one post per 24 hours and one reply per 5 minutes. Discord
+ * caps slowmode at 21600 seconds — six hours — and rejects anything larger, so the
+ * post cooldown is set to that maximum rather than silently rounded to something
+ * that looks like it was asked for. Enforcing a true 24 hours would mean removing
+ * members' posts after the fact, which this league does not do.
+ *
+ * The reply limit is exactly what was asked.
+ */
+const RECS_POST_COOLDOWN = 21600
+const RECS_REPLY_COOLDOWN = 300
 const WELCOME_NAME = 'welcome'
 
 /**
@@ -135,6 +154,8 @@ interface Channel {
   position?: number | null
   parent_id?: string | null
   permission_overwrites?: Overwrite[] | null
+  rate_limit_per_user?: number | null
+  default_thread_rate_limit_per_user?: number | null
 }
 interface Member { roles?: string[] | null }
 interface Role { id: string; managed?: boolean | null }
@@ -500,6 +521,29 @@ Deno.serve(async (req) => {
       for (const [rid, label] of [[adminRole, 'Admin'], [rcRole, 'Race Control'], [botRole, 'HCR Bot']] as const) {
         if (SNOWFLAKE.test(rid)) await setPerms(recsChannel, rid, label, FORUM_STAFF_ALLOW, 0n)
       }
+      // Asserted every run, like the permissions above, so a hand-edit in the client
+      // does not quietly become the new normal.
+      if (recsChannel.type === CHAN_FORUM) {
+        const wantPost = RECS_POST_COOLDOWN
+        const wantReply = RECS_REPLY_COOLDOWN
+        const havePost = recsChannel.rate_limit_per_user ?? 0
+        const haveReply = recsChannel.default_thread_rate_limit_per_user ?? 0
+        if (havePost !== wantPost || haveReply !== wantReply) {
+          planned.push({
+            channel: RECS_NAME, target: '(slowmode)',
+            add: [`posts every ${wantPost}s`, `replies every ${wantReply}s`], remove: [],
+          })
+          if (!dryRun) {
+            const r = await discord(`/channels/${recsChannel.id}`, 'PATCH', botToken, {
+              rate_limit_per_user: wantPost,
+              default_thread_rate_limit_per_user: wantReply,
+            })
+            if (r.ok) applied.push(`${RECS_NAME} · one post per 6h, one reply per 5min`)
+            else warnings.push(`Could not set slowmode on #${RECS_NAME} — ${r.message}`)
+          }
+        }
+      }
+
       if (!dryRun && String(cfg.channel_recommendations ?? '') !== String(recsChannel.id)) {
         const { error } = await db.from('discord_config')
           .update({ channel_recommendations: String(recsChannel.id), updated_at: new Date().toISOString() }).eq('id', 1)
