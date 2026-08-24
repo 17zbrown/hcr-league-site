@@ -201,12 +201,14 @@ Deno.serve(async (req) => {
     // very first one is in. It does NOT bypass the once-ever check — the row in
     // race_attendance_posts still stops a second ask being posted.
     let force = false
+    let refreshAsk = false
     try {
       const b = await req.json()
       if (b && typeof b === 'object') {
         const o = b as Record<string, unknown>
         if (o.dryRun === true) dryRun = true
         if (o.force === true) force = true
+        if (o.refreshAsk === true) refreshAsk = true
         if (typeof o.review === 'string') reviewEventId = o.review
       }
     } catch { /* no body — normal daily run */ }
@@ -471,6 +473,41 @@ Deno.serve(async (req) => {
       footer: { text: `HCR League · staff only · ${tally.length} on the grid · updates as people answer` },
     }
 
+    // The ask's own headline and detail line. `where` still feeds the staff tally,
+    // which wants the track spelled out; here the track has moved into the title, so
+    // repeating it under the heading would just say Road America twice. Only a track
+    // CONFIG survives into the detail line — "Road America · Full Course" is worth
+    // saying, "Road America · Road America" is not.
+    // "HCR SportsCar Challenge at VIR" already names its venue, and appending the
+    // track to that produces "... at VIR at Virginia International Raceway". If the
+    // name already says "at" somewhere, it is doing this job itself and is left alone.
+    const nameCarriesVenue = / at /i.test(String(next.name ?? ''))
+    const askTitle = (nameCarriesVenue
+      ? String(next.name)
+      : [next.name, trackRow?.name].filter(Boolean).join(' at ')) || label
+    const detail = [trackRow?.config, when].filter(Boolean).join('\n')
+
+    // Built once, used twice: the first post and any later {"refreshAsk": true}.
+    // Two copies of this literal is how a corrected headline ends up live on the next
+    // race and stale on this one.
+    const askEmbed = {
+      // NAMES THE RACE THE WAY A DRIVER WOULD SAY IT: the meeting, then where it is.
+      // It used to read "Are you racing? — Round 8 — HCR SportsCar Weekend", two
+      // dashes doing one job, because the round label carries its own. The round
+      // number moves to the footer, available without being the first thing read.
+      title: `Are you racing? ${askTitle}`,
+      description: `${detail}\n\nTap a button so race control knows what the grid looks like. You can change your mind any time — press the other one.`,
+      color: HCR_YELLOW,
+      footer: { text: `HCR League · Round ${next.round} · ${SITE}/schedule` },
+    }
+    const askComponents = [{
+      type: 1,
+      components: [
+        { type: 2, style: 3, label: "I'm racing", custom_id: `${ATTEND_YES}:${next.id}`, emoji: { name: '🏁' } },
+        { type: 2, style: 2, label: "Can't make it", custom_id: `${ATTEND_NO}:${next.id}` },
+      ],
+    }]
+
     // --- post the ask, or nudge -------------------------------------------------
     if (!post) {
       if (dryRun) {
@@ -482,19 +519,8 @@ Deno.serve(async (req) => {
       const ask = await discord(`/channels/${askChannel}/messages`, 'POST', botToken, {
         content: '@everyone',
         allowed_mentions: { parse: ['everyone'] },
-        embeds: [{
-          title: `Are you racing? — ${label}`,
-          description: `${where}\n${when}\n\nTap a button so race control knows what the grid looks like. You can change your mind any time — press the other one.`,
-          color: HCR_YELLOW,
-          footer: { text: `HCR League · ${SITE}/schedule` },
-        }],
-        components: [{
-          type: 1,
-          components: [
-            { type: 2, style: 3, label: "I'm racing", custom_id: `${ATTEND_YES}:${next.id}`, emoji: { name: '🏁' } },
-            { type: 2, style: 2, label: "Can't make it", custom_id: `${ATTEND_NO}:${next.id}` },
-          ],
-        }],
+        embeds: [askEmbed],
+        components: askComponents,
       })
       if (!ask.ok) return json({ error: `Could not post the attendance ask — ${ask.message}`, applied, warnings }, 502)
       const askId = String((ask.data as { id?: string } | null)?.id ?? '')
@@ -515,6 +541,22 @@ Deno.serve(async (req) => {
 
       applied.push(`asked the server about ${label}`)
       return json({ ok: warnings.length === 0, next: label, posted: true, grid: tally.length, applied, notes, warnings })
+    }
+
+    // {"refreshAsk": true} re-renders the LIVE ask in place. Editing a message never
+    // re-notifies, so a corrected headline reaches the people already looking at it
+    // without a second @everyone — which deleting and reposting would cost. The
+    // buttons are re-sent unchanged; their custom_id still carries this event's id.
+    if (refreshAsk && post.message_id && SNOWFLAKE.test(String(post.channel_id ?? ''))) {
+      if (dryRun) {
+        notes.push(`would re-render the ask for ${label} in place`)
+      } else {
+        const up = await discord(
+          `/channels/${post.channel_id}/messages/${post.message_id}`, 'PATCH', botToken,
+          { embeds: [askEmbed], components: askComponents })
+        if (up.ok) applied.push(`re-rendered the ask for ${label}`)
+        else warnings.push(`Could not re-render the ask — ${up.message}`)
+      }
     }
 
     // Already asked. Refresh the staff tally in place, every run.
