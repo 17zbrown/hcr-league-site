@@ -14,6 +14,14 @@ collapsing two things into one, or making an existing automatic thing tell the t
 
 ## Things that will bite you
 
+**The Supabase CLI is authenticated on this machine — use it to deploy edge
+functions.** `npx supabase@latest functions deploy <name> --project-ref hcaduzaxviadzogmetcu`
+uploads the file from disk, so no transcription happens and the JSON-escape hazard
+below cannot apply. Always name the function; a bare `functions deploy` would push
+every one of them, and `discord-interactions` MUST stay `verify_jwt: false` (the CLI
+defaults to true unless you pass `--no-verify-jwt`). Docker is not running and is not
+needed — it warns and bundles remotely.
+
 **Deploy edge functions from the repo, verbatim, and verify after.** Hand-transcribed
 deploys have drifted from the repo more than once here. The MCP deploy tool's `files`
 parameter is JSON-parsed, so escape TEXT you write can be silently DECODED into
@@ -83,6 +91,17 @@ iRacing invites are the usual cause of a short grid.
 `roster_registration(registration, number, class, car)` RPC is what creates the entry.
 Anything answering "is this person on the grid?" must read both — reading `entries`
 alone tells a driver who registered minutes ago that they did nothing.
+
+**Attendance lives in #race-attendance, and the chase is a ROLE, not a roll call.**
+The ask posts to `channel_race_attendance` (read-only for members — pressing a button
+needs only VIEW_CHANNEL, so the room stays one post per race), falling back to
+`channel_announcements` if that is unset. `channel_attendance` is a DIFFERENT channel:
+the private staff tally in RACE CONTROL. Nudges mention `@Attendance Pending`, which
+`discord-attendance-role` reconciles every five minutes from `race_attendance_tally` —
+it holds exactly the on-grid drivers who have a linked Discord account and have not
+answered, and clears itself when they answer, when the race starts, or when no drive
+is open. Nobody is named. The bot's own role must sit ABOVE it or every assignment
+403s.
 
 **Attendance has exactly one source of truth**: the buttons on the attendance post,
 recorded in `race_attendance`, shown in the private race-control tally. Only drivers
