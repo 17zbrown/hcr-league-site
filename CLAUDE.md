@@ -73,6 +73,15 @@ commissioner grid and hand-written SQL — and a rule enforced in one is a rule 
 two break. Rulebook §31 still says drivers must "cross the checkered flag" to score;
 read literally that strips every DNF, so the wording trails the practice.
 
+**The bot clears its own spent posts, and that is not the same thing.**
+`discord-attendance` already recycles yesterday's nudge, and `discord-attendance-role`
+now removes the ask and its reminder from `#race-attendance` once the green flag has
+flown (stamping `race_attendance_posts.cleared_at` so the delete is tried once, not
+every five minutes). Nothing recoverable dies: the answers are rows in
+`race_attendance`, and the staff tally and post-race recap in the private channel are
+the record. The rule below is about the SERVER — its channels, categories, roles and a
+room's history — not about a bot tidying up a question it already has the answer to.
+
 **Never delete a Discord channel, category, role or message history.** Archive instead —
 move it out of its category and hide it. This holds even with explicit authorisation.
 The bot token is a Supabase secret and is never handled directly.
