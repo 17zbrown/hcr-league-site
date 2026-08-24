@@ -4,7 +4,7 @@
 // THREE THINGS, ONE DAILY RUN. A single cron ticks this once a day and the
 // function works out which of them is due:
 //
-//   THE ASK        On the Wednesday before a race, one post in #announcements
+//   THE ASK        On the Monday before a race, one post in #race-attendance
 //                  with @everyone and two buttons. Posted once, ever, per race.
 //                  This is the ONLY mass ping this function makes.
 //   THE NUDGE      Up to MAX_NUDGES afterwards, at most one a day, MENTIONING THE
@@ -133,21 +133,28 @@ function leagueDay(d: Date): { ymd: string; weekday: string } {
   return { ymd: `${parts.year}-${parts.month}-${parts.day}`, weekday: parts.weekday }
 }
 
+/** The day the ask opens. Monday gives the grid the full week to answer. */
+const ASK_WEEKDAY = 'Mon'
+
 /**
- * The Wednesday immediately before a race, as a league-local date.
+ * The ASK_WEEKDAY immediately before a race, as a league-local date.
  *
  * Walks back a day at a time rather than assuming races are on Saturdays. They
  * are today, but a midweek round would otherwise silently get its ask on the
- * wrong day — and "subtract three days" is the kind of shortcut that looks right
+ * wrong day — and "subtract five days" is the kind of shortcut that looks right
  * until the schedule changes.
+ *
+ * Weekday names come from Intl in the league's own timezone, never UTC: the races
+ * start at 00:00 UTC, which is the previous EVENING in New York, so a UTC weekday
+ * would call race day Sunday and open the ask a day out of step.
  */
-function wednesdayBefore(race: Date): string {
+function askDayBefore(race: Date): string {
   for (let back = 1; back <= 7; back++) {
     const d = new Date(race.getTime() - back * 86400000)
     const day = leagueDay(d)
-    if (day.weekday === 'Wed') return day.ymd
+    if (day.weekday === ASK_WEEKDAY) return day.ymd
   }
-  return leagueDay(new Date(race.getTime() - 3 * 86400000)).ymd // unreachable in practice
+  return leagueDay(new Date(race.getTime() - 5 * 86400000)).ymd // unreachable in practice
 }
 
 function isServiceRoleJwt(token: string): boolean {
@@ -381,7 +388,7 @@ Deno.serve(async (req) => {
 
     const raceAt = new Date(String(next.date))
     const today = leagueDay(new Date())
-    const opensOn = wednesdayBefore(raceAt)
+    const opensOn = askDayBefore(raceAt)
     const label = `Round ${next.round} — ${next.name}`
 
     // Read the drive's state BEFORE the calendar gate, because the gate answers
@@ -567,6 +574,36 @@ Deno.serve(async (req) => {
     const chase = chaseable.map((r) => String(r.discord_user_id))
     const pendingRole = String(cfg.role_attendance_pending ?? '').trim()
     const useRole = SNOWFLAKE.test(pendingRole)
+
+    // YESTERDAY'S REMINDER COMES DOWN FIRST.
+    //
+    // This used to post today's and then delete yesterday's, on the reasoning that a
+    // failed post would otherwise leave a day with no reminder at all. In practice
+    // that ordering means both messages exist at once — briefly if everything works,
+    // and permanently the moment a delete fails — and two near-identical reminders
+    // stacked in the channel is exactly what a recycled nudge is supposed to prevent.
+    // Race control asked for the other order, and it is the right one: the channel
+    // never shows a duplicate, and the cost is bounded, because a failed post leaves
+    // last_reminded_on untouched and the next daily run simply tries again.
+    //
+    // DELETED FROM THE CHANNEL IT WAS POSTED IN, not from wherever the ask points
+    // today. Those differ the moment the ask moves — as it just did, from
+    // #announcements to #race-attendance — and using the current channel would send a
+    // valid id to the wrong room, 404, and strand the old reminder where it was.
+    //
+    // The ORIGINAL ask is never touched here; it owns the buttons, and deleting it
+    // would take the whole drive down with it.
+    const previousNudge = String(post.reminder_message_id ?? '').trim()
+    const nudgeChannel = String(post.channel_id ?? '').trim() || askChannel
+    if (previousNudge) {
+      const del = await discord(`/channels/${nudgeChannel}/messages/${previousNudge}`, 'DELETE', botToken)
+      // A 404 means somebody already removed it by hand, which is the outcome we
+      // wanted anyway: no stale reminder left behind.
+      if (!del.ok && del.status !== 404) {
+        warnings.push(`Could not remove yesterday's reminder — ${del.message}. Today's was still posted.`)
+      }
+    }
+
     const rem = await discord(`/channels/${askChannel}/messages`, 'POST', botToken, {
       content: [
         `**${label}** — ${when}`,
@@ -579,23 +616,17 @@ Deno.serve(async (req) => {
       // the copy above it changes.
       allowed_mentions: useRole ? { roles: [pendingRole] } : { users: chase },
     })
-    if (!rem.ok) return json({ error: `Could not post the reminder — ${rem.message}`, applied, warnings }, 502)
-    const remId = String((rem.data as { id?: string } | null)?.id ?? '')
-
-    // Recycle: yesterday's nudge comes down now that today's is up, so the channel
-    // carries one live reminder instead of four by race day. Deleted AFTER the new
-    // one posts — the reverse order would turn a transient Discord error into a day
-    // with no reminder at all. The ORIGINAL ask is never touched; it owns the
-    // buttons, and deleting it would take the whole drive down with it.
-    const previousNudge = String(post.reminder_message_id ?? '').trim()
-    if (previousNudge && previousNudge !== remId) {
-      const del = await discord(`/channels/${askChannel}/messages/${previousNudge}`, 'DELETE', botToken)
-      // A 404 means somebody already removed it by hand, which is the outcome we
-      // wanted anyway: no stale reminder left behind.
-      if (!del.ok && del.status !== 404) {
-        warnings.push(`Posted today's reminder but could not remove yesterday's — ${del.message}`)
-      }
+    if (!rem.ok) {
+      // Yesterday's is already gone, so say so plainly rather than reporting a bare
+      // failure: the channel currently has no reminder, and tomorrow's run restores
+      // one because last_reminded_on was never advanced past today.
+      return json({
+        error: `Could not post the reminder — ${rem.message}. Yesterday's was already removed, ` +
+          'so the channel has none right now; the next daily run will post a fresh one.',
+        applied, warnings,
+      }, 502)
     }
+    const remId = String((rem.data as { id?: string } | null)?.id ?? '')
 
     await db.from('race_attendance_posts').update({
       last_reminded_on: today.ymd,
