@@ -29,6 +29,15 @@
 // The role is created once, hoisted false and mentionable, and its id is recorded in
 // discord_config.role_attendance_pending. It is never deleted.
 //
+// IT ALSO CLEARS THE PUBLIC POST AT THE GREEN FLAG. Once the race has started the
+// buttons are meaningless and the question is answered, so the ask and its reminder
+// come out of the member-facing channel and the room is empty for the next round.
+// This is the same recycling discord-attendance already does with yesterday's nudge,
+// extended to the end of the drive — and it destroys nothing: the answers live in
+// race_attendance, and the staff tally and post-race recap in the private channel are
+// the record. `cleared_at` is stamped so the delete is attempted exactly once rather
+// than 404-ing every five minutes forever.
+//
 // Secrets (Supabase → Edge Functions):  DISCORD_BOT_TOKEN
 // Auto-provided:  SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
 //
@@ -189,6 +198,46 @@ Deno.serve(async (req) => {
       )
     }
 
+    // --- take the public post down once the flag has flown ------------------------
+    const cleared: string[] = []
+    {
+      const { data: stale } = await db
+        .from('race_attendance_posts')
+        .select('event_id, channel_id, message_id, reminder_message_id, events!inner(round, name, date)')
+        .is('cleared_at', null)
+        .not('message_id', 'is', null)
+        .lte('events.date', nowIso)
+        .limit(5)
+
+      for (const row of (stale ?? []) as Array<{
+        event_id: string; channel_id: string | null
+        message_id: string | null; reminder_message_id: string | null
+        events?: { round?: number; name?: string }
+      }>) {
+        const ch = String(row.channel_id ?? '').trim()
+        if (!SNOWFLAKE.test(ch)) continue
+        if (dryRun) { cleared.push(`would clear Round ${row.events?.round}`); continue }
+
+        let failed = false
+        for (const mid of [row.message_id, row.reminder_message_id]) {
+          const id = String(mid ?? '').trim()
+          if (!SNOWFLAKE.test(id)) continue
+          const del = await api(`/channels/${ch}/messages/${id}`, 'DELETE', botToken)
+          // 404 is the outcome we wanted anyway — somebody removed it by hand.
+          if (!del.ok && del.status !== 404) {
+            warnings.push(`Could not clear a Round ${row.events?.round} post — ${del.message}`)
+            failed = true
+          }
+        }
+        // Only stamp when nothing errored, so a transient failure retries next run.
+        if (!failed) {
+          await db.from('race_attendance_posts')
+            .update({ cleared_at: new Date().toISOString() }).eq('event_id', row.event_id)
+          cleared.push(`Round ${row.events?.round} — ${row.events?.name}`)
+        }
+      }
+    }
+
     // --- who DOES hold it --------------------------------------------------------
     const holders: string[] = []
     let after = '0'
@@ -213,7 +262,8 @@ Deno.serve(async (req) => {
 
     if (dryRun) {
       return json({ ok: true, dryRun, drive: label, role: ROLE_NAME,
-        holding: has.size, should: should.size, would_add: toAdd.length, would_remove: toRemove.length })
+        holding: has.size, should: should.size, would_add: toAdd.length,
+        would_remove: toRemove.length, cleared })
     }
 
     let added = 0, removed = 0
@@ -236,6 +286,7 @@ Deno.serve(async (req) => {
       still_owing: should.size,
       added,
       removed,
+      cleared,
       warnings,
     })
   } catch (e) {
