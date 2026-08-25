@@ -7,7 +7,7 @@
 //   THE ASK        On the Monday before a race, one post in #race-attendance
 //                  with @everyone and two buttons. Posted once, ever, per race.
 //                  This is the ONLY mass ping this function makes.
-//   THE NUDGE      Up to MAX_NUDGES afterwards, at most one a day, MENTIONING THE
+//   THE NUDGE      Daily until race day, at most one a day, MENTIONING ONLY THE
 //                  PEOPLE WHO HAVE NOT ANSWERED rather than @everyone. A chase is
 //                  not an announcement: waking sixty-one people because six have
 //                  not filled in a form is how a server learns to mute, and a
@@ -81,7 +81,23 @@ const clip = (s: string, n = MAX_FIELD) => (s.length > n ? `${s.slice(0, n - 1)}
  * Two is the number because a third ask does not produce answers, it produces
  * mutes — and a muted server misses the results post as well.
  */
-const MAX_NUDGES = 2
+/**
+ * WHEN THE DAY'S MESSAGE GOES OUT, in league-local hours.
+ *
+ * Two cron slots feed this function — 16:00 and 22:30 UTC — and the function, not
+ * the schedule, decides which one is allowed to speak. Cron has no notion of a
+ * timezone and no notion of race day; both live here, where they can be read.
+ *
+ * On race day the reminder wants the morning: 6:30pm is ninety minutes from the
+ * green flag, far too late for somebody to notice and change their plans. Every
+ * other day it wants the evening, when people are actually in Discord.
+ *
+ * The `last_reminded_on` date guard makes the losing slot a no-op rather than a
+ * duplicate, so the two crons produce exactly one message a day between them.
+ */
+const SEND_HOUR_RACE_DAY = 12
+const SEND_HOUR_NORMAL = 18
+
 
 interface TallyRow {
   driver_id: string
@@ -393,6 +409,16 @@ Deno.serve(async (req) => {
     const opensOn = askDayBefore(raceAt)
     const label = `Round ${next.round} — ${next.name}`
 
+    // Race day is the race's LEAGUE-LOCAL date, never the UTC one: the green flag is
+    // stored at 00:00 UTC, which is the previous evening in New York, so a UTC
+    // comparison would call Sunday race day and open the noon slot a day late.
+    const isRaceDay = today.ymd === leagueDay(raceAt).ymd
+    const hourNow = Number(new Intl.DateTimeFormat('en-US', {
+      timeZone: LEAGUE_TZ, hour: 'numeric', hourCycle: 'h23',
+    }).format(new Date()))
+    const sendFrom = isRaceDay ? SEND_HOUR_RACE_DAY : SEND_HOUR_NORMAL
+    const inSendWindow = hourNow >= sendFrom
+
     // Read the drive's state BEFORE the calendar gate, because the gate answers
     // "is it time to OPEN a drive" and must not be allowed to answer "should I
     // service one that is already open". Getting that backwards meant a drive
@@ -402,6 +428,10 @@ Deno.serve(async (req) => {
     const { data: post } = await db.from('race_attendance_posts')
       .select('*').eq('event_id', String(next.id)).maybeSingle()
 
+    if (!post && !inSendWindow && !force) {
+      notes.push(`${label} opens today, but not until ${sendFrom}:00 ${LEAGUE_TZ.split('/')[1].replace('_',' ')} time.`)
+      return json({ ok: true, dryRun, next: label, opensOn, applied, notes, warnings })
+    }
     if (!post && today.ymd < opensOn && !force) {
       notes.push(`${label} opens for attendance on ${opensOn} (${today.ymd} today).`)
       return json({ ok: true, dryRun, next: label, opensOn, applied, notes, warnings })
@@ -575,11 +605,22 @@ Deno.serve(async (req) => {
       notes.push(`Already nudged today about ${label}.`)
       return json({ ok: true, dryRun, next: label, ...stats, applied, notes, warnings })
     }
-    if (sentSoFar >= MAX_NUDGES) {
+    // NO CAP. This used to stop after two, on the reasoning that a third mass ping
+    // buys mutes rather than answers — which was true when the reminder named every
+    // silent driver and notified the whole channel. It mentions @Attendance Pending
+    // now, so it reaches only the people who still owe an answer and stops reaching
+    // them the moment they answer. A daily reminder aimed exclusively at the people
+    // who have not replied is a different thing from a daily mass ping, and race
+    // control asked for it to run until race day.
+    //
+    // It cannot run away: one a day at most (the date guard above), only while a
+    // drive is open, only while somebody is still silent, and the window closes at
+    // the green flag.
+    if (!inSendWindow) {
       notes.push(
-        `${label} has had its ${MAX_NUDGES} nudges. ${chaseable.length} still silent — chase them by hand ` +
-        `if it matters; a third mass ping buys mutes, not answers.`)
-      return json({ ok: true, dryRun, next: label, ...stats, nudges_used: sentSoFar, applied, notes, warnings })
+        `${label}: ${chaseable.length} still silent, but the ${isRaceDay ? 'race-day' : 'daily'} ` +
+        `reminder goes out from ${sendFrom}:00 league time.`)
+      return json({ ok: true, dryRun, next: label, ...stats, applied, notes, warnings })
     }
     if (chaseable.length === 0) {
       notes.push(unreachable.length
