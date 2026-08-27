@@ -240,6 +240,11 @@ Deno.serve(async (req) => {
 
     // --- who DOES hold it --------------------------------------------------------
     const holders: string[] = []
+    // Everyone actually IN the guild right now. A driver who has left cannot hold a
+    // role, and asking Discord to give them one answers 404 Unknown Member — which
+    // this function then reported as a failure on every five-minute run, for ever.
+    // Presley Bromberg left on 25 Aug while still seated and did exactly that.
+    const present = new Set<string>()
     let after = '0'
     for (let page = 0; page < 20; page++) {
       const res = await api<Member[]>(`/guilds/${guildId}/members?limit=1000&after=${after}`, 'GET', botToken)
@@ -250,20 +255,27 @@ Deno.serve(async (req) => {
       const batch = res.data ?? []
       for (const m of batch) {
         const uid = String(m.user?.id ?? '')
-        if (uid && (m.roles ?? []).map(String).includes(roleId)) holders.push(uid)
+        if (!uid) continue
+        present.add(uid)
+        if ((m.roles ?? []).map(String).includes(roleId)) holders.push(uid)
       }
       if (batch.length < 1000) break
       after = String(batch[batch.length - 1]?.user?.id ?? '0')
     }
     const has = new Set(holders)
 
-    const toAdd = [...should].filter((id) => !has.has(id))
+    // Only people who are here. Someone still on the grid but no longer in the server
+    // is a roster problem for race control, not something to retry against Discord
+    // every five minutes — so they are counted and named once, not warned about
+    // repeatedly.
+    const gone = [...should].filter((id) => !present.has(id))
+    const toAdd = [...should].filter((id) => !has.has(id) && present.has(id))
     const toRemove = [...has].filter((id) => !should.has(id))
 
     if (dryRun) {
       return json({ ok: true, dryRun, drive: label, role: ROLE_NAME,
         holding: has.size, should: should.size, would_add: toAdd.length,
-        would_remove: toRemove.length, cleared })
+        would_remove: toRemove.length, left_the_server: gone, cleared })
     }
 
     let added = 0, removed = 0
@@ -286,6 +298,9 @@ Deno.serve(async (req) => {
       still_owing: should.size,
       added,
       removed,
+      // Seated, silent, and no longer in the server. Named so race control can decide
+      // whether to withdraw them; never retried, because there is nothing to retry.
+      left_the_server: gone,
       cleared,
       warnings,
     })
