@@ -69,19 +69,6 @@ const MAX_FIELD = 1024
 const clip = (s: string, n = MAX_FIELD) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
 /**
- * How many nudges one race may send, ever.
- *
- * A hard ceiling, deliberately separate from the "has everybody answered" check.
- * That check alone was not a stop condition at all: it counted the whole GRID, and
- * nine of the thirty-nine drivers have no Discord account and physically cannot
- * press a button — so it could never reach zero, and the reminder would have fired
- * every day of every race week for ever. Two belts now: only chase people who CAN
- * answer, and stop after this many regardless.
- *
- * Two is the number because a third ask does not produce answers, it produces
- * mutes — and a muted server misses the results post as well.
- */
-/**
  * WHEN THE DAY'S MESSAGE GOES OUT, in league-local hours.
  *
  * Two cron slots feed this function — 16:00 and 22:30 UTC — and the function, not
@@ -97,7 +84,6 @@ const clip = (s: string, n = MAX_FIELD) => (s.length > n ? `${s.slice(0, n - 1)}
  */
 const SEND_HOUR_RACE_DAY = 12
 const SEND_HOUR_NORMAL = 18
-
 
 interface TallyRow {
   driver_id: string
@@ -192,12 +178,37 @@ function isServiceRoleJwt(token: string): boolean {
  * fixable rather than looking like a rendering bug.
  */
 function nameList(
-  rows: { driver_name: string; class_id: string; car_number: string | null; car: string | null }[],
+  rows: {
+    driver_name: string; class_id: string; car_number: string | null
+    car: string | null; discord_user_id?: string | null
+  }[],
+  /**
+   * Drop the car. It is grid information, and on the lists race control ACTS from —
+   * who has not answered, who cannot make it — the car is noise that costs room.
+   *
+   * It costs real room: at twenty-five silent drivers the full form measured 1,260
+   * characters against Discord's 1,024 field limit, so that list had been quietly
+   * truncating with an ellipsis. Without the car the same twenty-five fit in 757.
+   */
+  compact = false,
 ): string {
   if (!rows.length) return '—'
-  return clip(rows.map((r) =>
-    `\`${r.class_id}${r.car_number ? ` #${r.car_number}` : ''}\` **${r.driver_name}** — ${r.car?.trim() || '_no car set_'}`
-  ).join('\n'))
+  return clip(rows.map((r) => {
+    // MENTION WHERE WE CAN, NAME WHERE WE CANNOT.
+    //
+    // A <@id> in an EMBED renders as a clickable profile and notifies nobody — which
+    // is what this list needs, since it is re-rendered every few minutes and pinging
+    // twenty-one drivers on each pass would be intolerable. (Message CONTENT behaves
+    // differently; that is why the nudge sets allowed_mentions and this does not.)
+    //
+    // The mention shows the member's server nickname, which discord-driver-roles
+    // already keeps as their iRacing name and car number — so nothing is lost by
+    // replacing the plain name with it. A driver with no linked account has no id to
+    // click, and keeps the written name rather than rendering a broken mention.
+    const who = r.discord_user_id ? `<@${r.discord_user_id}>` : `**${r.driver_name}**`
+    const tag = `\`${r.class_id}${r.car_number ? ` #${r.car_number}` : ''}\` ${who}`
+    return compact ? tag : `${tag} — ${r.car?.trim() || '_no car set_'}`
+  }).join('\n'))
 }
 
 Deno.serve(async (req) => {
@@ -472,13 +483,13 @@ Deno.serve(async (req) => {
 
     const controlFields: Record<string, unknown>[] = [
       { name: `Racing (${yes.length})`, value: nameList(yes), inline: false },
-      { name: `Cannot make it (${no.length})`, value: nameList(no), inline: false },
-      { name: `No answer (${chaseable.length})`, value: nameList(chaseable), inline: false },
+      { name: `Cannot make it (${no.length})`, value: nameList(no, true), inline: false },
+      { name: `No answer (${chaseable.length})`, value: nameList(chaseable, true), inline: false },
     ]
     if (unreachable.length) {
       controlFields.push({
         name: `⚠️ Cannot answer — no Discord account linked (${unreachable.length})`,
-        value: nameList(unreachable), inline: false,
+        value: nameList(unreachable, true), inline: false,
       })
     }
     // People who pressed a button but hold no entry this season. They used to be
