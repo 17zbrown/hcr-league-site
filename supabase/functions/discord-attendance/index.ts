@@ -456,9 +456,24 @@ Deno.serve(async (req) => {
       ? await db.from('tracks').select('name, config').eq('id', next.track_id).maybeSingle()
       : { data: null }
     const where = [trackRow?.name, trackRow?.config].filter(Boolean).join(' · ')
+    // THE TIME MEMBERS ARE TOLD IS WHEN THE TRACK OPENS, NOT THE GREEN FLAG.
+    //
+    // events.date is the green flag and stays that way — the ask window, race day and
+    // completion are all keyed to it. But "when is this race" for a driver means when
+    // to be in the sim, and practice opens an hour before the lights. Telling them 8pm
+    // is how somebody arrives to find qualifying already done.
+    //
+    // Falls back to the green flag for an event with no sessions filled in, so the ask
+    // still names a time rather than nothing.
+    const { data: sessRows } = await db
+      .from('sessions').select('start').eq('event_id', String(next.id))
+      .order('start', { ascending: true }).limit(1)
+    const firstSession = String((sessRows ?? [])[0]?.start ?? '')
+    const startAt = firstSession ? new Date(firstSession) : raceAt
     // Discord renders <t:unix:F> in every reader's own timezone, which beats
     // writing a time that is wrong for half the grid.
-    const when = `<t:${Math.floor(raceAt.getTime() / 1000)}:F> (<t:${Math.floor(raceAt.getTime() / 1000)}:R>)`
+    const startUnix = Math.floor(startAt.getTime() / 1000)
+    const when = `<t:${startUnix}:F> (<t:${startUnix}:R>)`
 
     // --- the tally, rebuilt from live data every run ----------------------------
     const { data: tallyRows } = await db.rpc('race_attendance_tally', { p_event: String(next.id) })

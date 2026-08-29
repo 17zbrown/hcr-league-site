@@ -11,7 +11,7 @@ import {
   useTeams,
 } from '../lib/queries'
 import { computeStandings } from '../lib/standings'
-import { CLASS_ORDER, classColor, eventEnded, fmtDate, fmtDateLong, fmtTime } from '../lib/format'
+import { CLASS_ORDER, classColor, eventEnded, eventStart, fmtDate, fmtDateLong, fmtTime } from '../lib/format'
 import { crewNames } from '../lib/attribution'
 import type { ClassId } from '../lib/types'
 import { ClassChip, Section, Skeleton } from '../components/ui'
@@ -180,8 +180,8 @@ export default function Home() {
                   </div>
                   <div className="mt-3 whitespace-nowrap font-display text-2xl leading-tight">{e.track?.name ?? e.name}</div>
                   <div className="mt-1 font-body text-sm text-[var(--color-muted)]">{e.track?.location}</div>
-                  <div className="tabular mt-4 text-sm font-medium">{fmtDate(e.date)}</div>
-                  <div className="tabular mt-0.5 text-xs text-[var(--color-muted)]">{fmtTime(e.date)}</div>
+                  <div className="tabular mt-4 text-sm font-medium">{fmtDate(eventStart(e))}</div>
+                  <div className="tabular mt-0.5 text-xs text-[var(--color-muted)]">{fmtTime(eventStart(e))}</div>
                 </div>
                 <div
                   className={`${ACTION_BAR} ${

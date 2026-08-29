@@ -1,5 +1,5 @@
 import { useCurrentSeason, useEvents } from '../lib/queries'
-import { CLASS_ORDER, fmtDate, fmtTime } from '../lib/format'
+import { CLASS_ORDER, eventStart, fmtDate, fmtTime } from '../lib/format'
 import { Link } from 'react-router-dom'
 import { ClassChip, Section, LoadError, Skeleton } from '../components/ui'
 import { Reveal } from '../components/motion'
@@ -60,7 +60,7 @@ export default function Schedule() {
                     </div>
                     <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[var(--color-line)] pt-3">
                       <span className="tabular text-xs font-semibold text-[var(--color-ink-2)]">
-                        {fmtDate(e.date)} · {fmtTime(e.date)}
+                        {fmtDate(eventStart(e))} · {fmtTime(eventStart(e))}
                       </span>
                       <span className="flex gap-1.5">
                         {CLASS_ORDER.map((c) => (

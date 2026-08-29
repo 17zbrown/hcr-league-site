@@ -65,7 +65,10 @@ export function useEvents(seasonId?: string) {
     queryFn: async (): Promise<RaceEvent[]> => {
       const { data, error } = await supabase
         .from('events')
-        .select('*, track:tracks(*)')
+        // sessions(start) rides along so every surface that prints a time can show
+        // when the track actually OPENS, not the green flag. One embedded array is
+        // cheaper than a second round trip on four different pages.
+        .select('*, track:tracks(*), sessions(start)')
         .eq('season_id', seasonId!)
         .order('round')
       if (error) throw error
@@ -82,7 +85,7 @@ export function useEvent(id?: string) {
     queryFn: async (): Promise<RaceEvent | null> => {
       const { data, error } = await supabase
         .from('events')
-        .select('*, track:tracks(*)')
+        .select('*, track:tracks(*), sessions(start)')
         .eq('id', id!)
         .maybeSingle()
       if (error) throw error

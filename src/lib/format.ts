@@ -93,6 +93,23 @@ export function raceDateKey(iso: string): string {
   return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
 }
 
+/**
+ * WHEN THE EVENT STARTS FOR A DRIVER, which is not when the race starts.
+ *
+ * `events.date` is the green flag and has to stay that way: race completion, the
+ * results window and the forecast anchor are all keyed to it. But a member reading
+ * the schedule needs to know when to be in the sim, and that is the first session —
+ * practice opens an hour before the lights.
+ *
+ * Falls back to the green flag when an event has no sessions, so a round that has
+ * not had its schedule filled in yet still prints a time rather than nothing.
+ */
+export function eventStart(e: { date: string; sessions?: { start: string }[] | null }): string {
+  const starts = (e.sessions ?? []).map((s) => s?.start).filter(Boolean) as string[]
+  if (!starts.length) return e.date
+  return starts.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b))
+}
+
 export function fmtDate(iso: string): string {
   const d = calendarDate(iso)
   return `${DAY[d.getDay()]} ${MON[d.getMonth()]} ${d.getDate()}`

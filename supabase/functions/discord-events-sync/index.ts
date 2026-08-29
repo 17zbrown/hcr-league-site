@@ -280,7 +280,7 @@ Deno.serve(async (req) => {
       `HCR League — ${seasonName}`,
       '',
       'Interested only sets a reminder — it does NOT tell race control you are racing.',
-      'Answer the attendance post in the announcements channel; that button is the only one counted.',
+      'Answer the attendance post in #race-attendance; that button is the only one counted.',
     ].filter((l) => l !== null).join('\n'), 1000)
     const location = clamp(track?.location?.trim() || track?.name?.trim() || 'iRacing', 100)
 

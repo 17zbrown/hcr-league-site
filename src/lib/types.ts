@@ -65,6 +65,8 @@ export interface RaceEvent {
   report: string | null
   // joined
   track?: Track
+  /** Start times of this event's sessions. See eventStart() in lib/format. */
+  sessions?: { start: string }[]
 }
 
 export interface RaceSession {
