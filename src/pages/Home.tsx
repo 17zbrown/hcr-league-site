@@ -8,8 +8,7 @@ import {
   useNews,
   useResults,
   useSeasonResults,
-  useTeams,
-} from '../lib/queries'
+  useTeams, useLeagueSettings } from '../lib/queries'
 import { computeStandings } from '../lib/standings'
 import { CLASS_ORDER, classColor, eventEnded, eventStart, fmtDate, fmtDateLong, fmtTime } from '../lib/format'
 import { crewNames } from '../lib/attribution'
@@ -69,6 +68,7 @@ export default function Home() {
 
       {/* ---------- PADDOCK NEWS — first thing under the hero ---------- */}
       <LeagueNews />
+      {/* Join band renders near the foot of the page — see JoinTheGrid. */}
 
       {/* ---------- LEAGUE PULSE ---------- */}
       <Section eyebrow="The season so far" title="League pulse">
@@ -199,6 +199,7 @@ export default function Home() {
       </Section>
 
       <Champions />
+      <JoinTheGrid />
 
     </>
   )
@@ -283,6 +284,63 @@ function LatestByClass({ eventId }: { eventId: string }) {
           </Reveal>
         )
       })}
+    </div>
+  )
+}
+
+/**
+ * THE ONE THING THE HOME PAGE WAS NOT ASKING FOR.
+ *
+ * The Discord invite existed only in the footer and the burger menu — findable if you
+ * already knew to look, invisible if you did not. Every other route into this league
+ * runs through the server: the attendance buttons, race control, the suggestion box.
+ * A visitor who reads the standings and leaves is a visitor the league never hears
+ * from again.
+ *
+ * Placed after the season content rather than above it, deliberately: somebody who
+ * has just read the championship tables is a warmer ask than somebody who has just
+ * arrived, and a join banner at the top of a results site reads as an ad.
+ *
+ * Renders nothing at all when no invite is configured, rather than a dead button.
+ */
+function JoinTheGrid() {
+  const { data: settings } = useLeagueSettings()
+  const invite = settings?.discord_url?.trim()
+  if (!invite) return null
+
+  return (
+    <div className="on-navy bg-[var(--color-deep)]">
+      <Section eyebrow="Get on the grid" title="Race with us">
+        <div className="grid items-center gap-7 md:grid-cols-[1.4fr_1fr]">
+          <div>
+            <p className="max-w-prose text-lg text-[var(--color-muted)]">
+              Three classes, one grid, Saturday nights. Practice opens at 7pm ET and you are done
+              by nine. Everything happens in the Discord — race control, attendance, and the people
+              you will be racing.
+            </p>
+            <p className="mt-3 max-w-prose font-body text-sm text-[var(--color-faint)]">
+              Already signed up? Sign in with the same Discord account and your results, licence
+              and entry all live on one profile.
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <a
+              href={invite}
+              target="_blank"
+              rel="noreferrer"
+              className="flex min-h-11 items-center justify-center gap-2.5 rounded-xl bg-[#5865f2] px-7 py-3.5 font-alt text-sm font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M19.3 5.4A17.6 17.6 0 0015 4l-.2.5c1.6.4 2.9 1 4.1 1.9A13.9 13.9 0 003 6.4 16 16 0 019.2 4.5L9 4a17.6 17.6 0 00-4.3 1.4C2 9.5 1.3 13.5 1.6 17.4a17.7 17.7 0 005.4 2.7l1.1-1.7c-.6-.2-1.2-.5-1.7-.9l.4-.3a12.6 12.6 0 0010.4 0l.4.3c-.5.4-1.1.7-1.7.9l1.1 1.7a17.7 17.7 0 005.4-2.7c.4-4.5-.6-8.5-2.9-12zM8.6 15c-1 0-1.9-1-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1S9.6 15 8.6 15zm6.8 0c-1 0-1.9-1-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1z" />
+              </svg>
+              Join the Discord
+            </a>
+            <Link to="/signup" className="hcr-btn hcr-btn-ghost w-full justify-center">
+              How it works →
+            </Link>
+          </div>
+        </div>
+      </Section>
     </div>
   )
 }
