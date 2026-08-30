@@ -833,7 +833,11 @@ A driver's result in a race is one of three outcomes, decided by how many laps t
 
 Laps run under the rolling start procedure in Section 10.1, before the green flag, do not count towards this.
 
-Qualifying points are not affected by a DNS. Qualifying is a separate session, and a driver who set a qualifying time keeps the points it earned even if they take no part in the race.
+**Qualifying points are earned by setting a qualifying lap, and by nothing else.**
+
+A driver who sets no valid lap in qualifying has no qualifying result. They score no qualifying points, regardless of where they start the race — a grid slot assigned by default is not a qualifying position.
+
+This is separate from the race outcome. A driver who qualifies and then takes no part in the race keeps the qualifying points their lap earned, because qualifying is a session they contested. The reverse does not apply: starting a race you did not qualify for earns nothing from the session you missed.
 
 A disqualification is a stewards' decision rather than a retirement. It is issued and recorded under Section 29 and carries its own consequences.
 

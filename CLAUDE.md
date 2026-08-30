@@ -43,6 +43,20 @@ verification over the raw request body, which is stronger than a shared bearer t
 ones look finished while holding no data. Gate UI on **presence of data**, never on
 `isLoading`. See `gridStateKnown` in `src/pages/portal/MemberPortal.tsx`.
 
+**No qualifying lap, no qualifying points — and the grid slot is not a substitute.**
+A driver who sets no valid lap in qualifying has no qualifying result: `quali_pos` is
+NULL and `quali_points` is 0, however far up the grid they started. Storing the
+default grid slot as a qualifying position is what made those points look earned, and
+it happened three times before the rule was written down (Tetreault R7, Collins11 and
+Cronk R8, corrected 29 Aug). The reverse still holds: a driver who DID qualify keeps
+those points even on a DNS, because qualifying is a session they contested. Rulebook
+§31.
+
+Only rounds 7 onward can be audited for this — `results` stores the qualifying
+POSITION but never the qualifying LAP TIME, so for rounds 1-6 there is no way to tell
+from the database who set a time and who was gridded by default. The source timing
+sheets are the only record.
+
 **Championship scoring is ported in THREE places and they must agree:**
 `src/lib/standings.ts` (the site), the `standings` branch of `discord-broadcast`, and
 `handleStandings` in `discord-interactions`. Crew names normalised and sorted so
