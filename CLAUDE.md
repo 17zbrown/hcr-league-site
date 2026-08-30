@@ -132,6 +132,31 @@ with an entry this season may press them; anyone else is refused with sign-up
 instructions and nothing is recorded. Discord scheduled events are a CALENDAR — their
 "Interested" list is read by nothing, and every event blurb says so.
 
+**Newsroom house style — race reports, previews and penalty notices.**
+Derived from how real series and teams actually write (Porsche Newsroom, Team Penske,
+NBC Sports IMSA recaps), because the first drafts here read like magazine features and
+made a comparison no racing writer would make.
+
+- **Result first.** The lead names the winner, the class and what makes it notable —
+  a streak, a drought, a first. Never open by setting a scene.
+- **NEVER COMPARE LAP TIMES ACROSS EVENTS.** A lap time means something only against
+  other laps at the same track in the same session. "Would have been quickest in
+  almost any other week" is meaningless and was a real mistake in the Road America
+  draft. Within-race superlatives (fastest lap of THIS race) are fine.
+- **Anchor streaks to a venue and a round**, not to times: "his first win since Long
+  Beach in Round 3". That is how the professional recaps date things.
+- **Margins are positions, laps down, or gaps inside this race.** Real reports use
+  numbers sparingly — "eleven laps down" beats a table of deltas.
+- **Incidents and penalties are stated neutrally, never editorialised.** Say what
+  happened and what it cost. No blame, no speculation about intent; the stewards own
+  the verdict and it is published under its own rules.
+- **One section per class**, same shape each time, in a consistent order.
+- **Quotes, if any, sit after the results narrative**, attributed by name and role —
+  not spliced mid-sentence.
+- **Close with the next round.** Championship standings may precede it; the last line
+  is where and when the grid races next.
+- Past tense, plain voice, drivers and teams as the subject.
+
 **@everyone goes on results, standings and news** (`PINGS` in `discord-broadcast`).
 Penalties and rulings deliberately stay quiet. The mention must sit in `content` —
 an `@everyone` inside an embed renders as text and notifies nobody.
