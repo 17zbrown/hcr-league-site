@@ -261,6 +261,12 @@ Deno.serve(async (req) => {
       // fall back to announcements so a published story is never stranded unsent.
       news: String(cfg.channel_news ?? '').trim() || String(cfg.channel_announcements ?? '').trim(),
       race_control: String(cfg.channel_race_control ?? '').trim(),
+      // SIGN-UPS ARE NOT STEWARDING. #race-control-announcements carries decisions
+      // race control ISSUES — penalties, suspensions, points deductions, grid drops.
+      // A driver entering the season is not a decision and does not belong in the
+      // same room as one. Falls back to race_control only if the sign-ups channel has
+      // never been provisioned, so a notice is never stranded unsent.
+      signups: String(cfg.channel_signups ?? '').trim() || String(cfg.channel_race_control ?? '').trim(),
     }
 
     let q = db.from('discord_outbox')
