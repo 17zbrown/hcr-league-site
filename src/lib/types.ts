@@ -187,6 +187,8 @@ export interface RaceResult {
   quali_points: number | null
   /** Guest/fill-in entry: scores the Fill-In Cup, never the main championship. */
   fill_in: boolean
+  /** Embedded by the season-results queries; carries the round for count-back. */
+  event?: { season_id?: string; round?: number; name?: string | null; date?: string; track?: { name: string } | null } | null
 }
 
 export interface WeatherRow {

@@ -24,12 +24,53 @@ interface Accum {
   podiums: number
   poles: number
   bestFinish: number | null
+  /** finishCounts[p] = classified race finishes at class position p (count-back). */
+  finishCounts: number[]
+  /** round -> class finish, for the most-recent-round tiebreak. */
+  roundFinish: Map<number, number>
+}
+
+/** Record one classified race finish into the count-back tallies. */
+function tallyFinish(a: Accum, clsPos: number | null, round: number | undefined) {
+  if (clsPos === null) return
+  a.finishCounts[clsPos] = (a.finishCounts[clsPos] ?? 0) + 1
+  if (round !== undefined) {
+    const prev = a.roundFinish.get(round)
+    a.roundFinish.set(round, prev === undefined ? clsPos : Math.min(prev, clsPos))
+  }
+}
+
+/**
+ * Count-back, the way real series break points ties (rulebook §31):
+ * most class wins, then most seconds, then thirds, and so on — the FIA/IMSA
+ * procedure. If two crews' full finish records are identical, the better class
+ * finish in the most recent round decides, walking backwards through the season
+ * (the MotoGP step). A crew with a classified finish in a round beats one
+ * without. Only race classifications count; qualifying never enters count-back.
+ */
+function countBack(a: Accum, b: Accum): number {
+  const maxP = Math.max(a.finishCounts.length, b.finishCounts.length)
+  for (let p = 1; p < maxP; p++) {
+    const diff = (b.finishCounts[p] ?? 0) - (a.finishCounts[p] ?? 0)
+    if (diff) return diff
+  }
+  const rounds = [...new Set([...a.roundFinish.keys(), ...b.roundFinish.keys()])].sort((x, y) => y - x)
+  for (const rd of rounds) {
+    const pa = a.roundFinish.get(rd)
+    const pb = b.roundFinish.get(rd)
+    if (pa !== pb) {
+      if (pa === undefined) return 1
+      if (pb === undefined) return -1
+      return pa - pb
+    }
+  }
+  return 0
 }
 
 function finalize(map: Map<string, Accum>): StandingRow[] {
   return Array.from(map.values())
     .map((a) => ({ ...a }))
-    .sort((a, b) => b.points - a.points || (a.bestFinish ?? 99) - (b.bestFinish ?? 99) || a.key.localeCompare(b.key))
+    .sort((a, b) => b.points - a.points || countBack(a, b) || a.key.localeCompare(b.key))
 }
 
 /** Row points: race + quali + steward adjustment. The single scoring formula. */
@@ -69,13 +110,14 @@ export function computeStandings(
     const dKey = crewKey(r.drivers_text, dName)
     const d =
       driverMap[cls].get(dKey) ??
-      { key: dKey, name: dName, number: r.number, classId: cls, points: 0, starts: 0, wins: 0, podiums: 0, poles: 0, bestFinish: null }
+      { key: dKey, name: dName, number: r.number, classId: cls, points: 0, starts: 0, wins: 0, podiums: 0, poles: 0, bestFinish: null, finishCounts: [], roundFinish: new Map() }
     d.points += pts
     d.starts += 1
     if (clsPos === 1) d.wins += 1
     if (clsPos !== null && clsPos <= 3) d.podiums += 1
     if (r.quali_pos === 1) d.poles += 1
     d.bestFinish = d.bestFinish === null ? clsPos : Math.min(d.bestFinish, clsPos ?? 99)
+    tallyFinish(d, clsPos, r.event?.round)
     driverMap[cls].set(dKey, d)
 
     // Team standings — keyed by team_id (fallback to number).
@@ -84,13 +126,14 @@ export function computeStandings(
     const tName = team?.name ?? `#${r.number}`
     const t =
       teamMap[cls].get(tKey) ??
-      { key: tKey, name: tName, number: r.number, car: team?.car ?? r.car, classId: cls, points: 0, starts: 0, wins: 0, podiums: 0, poles: 0, bestFinish: null }
+      { key: tKey, name: tName, number: r.number, car: team?.car ?? r.car, classId: cls, points: 0, starts: 0, wins: 0, podiums: 0, poles: 0, bestFinish: null, finishCounts: [], roundFinish: new Map() }
     t.points += pts
     t.starts += 1
     if (clsPos === 1) t.wins += 1
     if (clsPos !== null && clsPos <= 3) t.podiums += 1
     if (r.quali_pos === 1) t.poles += 1
     t.bestFinish = t.bestFinish === null ? clsPos : Math.min(t.bestFinish, clsPos ?? 99)
+    tallyFinish(t, clsPos, r.event?.round)
     teamMap[cls].set(tKey, t)
   }
 
@@ -211,13 +254,14 @@ export function computeFillInStandings(results: RaceResult[]): StandingRow[] {
     const key = `${crewKey(r.drivers_text, dName)}::${cls}`
     const a =
       map.get(key) ??
-      { key, name: dName, number: r.number, classId: cls, points: 0, starts: 0, wins: 0, podiums: 0, poles: 0, bestFinish: null }
+      { key, name: dName, number: r.number, classId: cls, points: 0, starts: 0, wins: 0, podiums: 0, poles: 0, bestFinish: null, finishCounts: [], roundFinish: new Map() }
     a.points += rowPoints(r)
     a.starts += 1
     if (clsPos === 1) a.wins += 1
     if (clsPos !== null && clsPos <= 3) a.podiums += 1
     if (r.quali_pos === 1) a.poles += 1
     a.bestFinish = a.bestFinish === null ? clsPos : Math.min(a.bestFinish, clsPos ?? 99)
+    tallyFinish(a, clsPos, r.event?.round)
     map.set(key, a)
   }
   return finalize(map)

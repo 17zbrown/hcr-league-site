@@ -199,7 +199,7 @@ export function useSeasonResults(seasonId?: string) {
     queryFn: async (): Promise<RaceResult[]> => {
       const { data, error } = await supabase
         .from('results')
-        .select('*, event:events!inner(season_id)')
+        .select('*, event:events!inner(season_id, round)')
         .eq('event.season_id', seasonId!)
       if (error) throw error
       return (data ?? []) as RaceResult[]

@@ -265,6 +265,7 @@ function crewKey(driversText?: string | null, fallback = ''): string {
   return names.length ? names.sort().join('|') : fallback.toLowerCase()
 }
 interface ScoreRow {
+  event_id?: string | null
   class_id?: string | null
   number?: string | null
   drivers_text?: string | null
@@ -276,9 +277,51 @@ interface ScoreRow {
 }
 const rowPoints = (r: ScoreRow) => (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)
 
+/** Count-back tally shape shared by every standings sort in this function. */
+interface CountBack {
+  finishCounts: number[]
+  roundFinish: Map<number, number>
+}
+
+/** Record one classified race finish into the count-back tallies. */
+function tallyFinish(t: CountBack, clsPos: number | null, round: number | undefined) {
+  if (clsPos === null) return
+  t.finishCounts[clsPos] = (t.finishCounts[clsPos] ?? 0) + 1
+  if (round !== undefined) {
+    const prev = t.roundFinish.get(round)
+    t.roundFinish.set(round, prev === undefined ? clsPos : Math.min(prev, clsPos))
+  }
+}
+
+/**
+ * Count-back, the way real series break points ties (rulebook §31): most class
+ * wins, then most seconds, and so on (FIA/IMSA); identical records fall to the
+ * better class finish in the most recent round, walking backwards (MotoGP).
+ * MUST stay in step with src/lib/standings.ts and the other Discord port.
+ */
+function countBack(a: CountBack, b: CountBack): number {
+  const maxP = Math.max(a.finishCounts.length, b.finishCounts.length)
+  for (let p = 1; p < maxP; p++) {
+    const diff = (b.finishCounts[p] ?? 0) - (a.finishCounts[p] ?? 0)
+    if (diff) return diff
+  }
+  const rounds = [...new Set([...a.roundFinish.keys(), ...b.roundFinish.keys()])].sort((x, y) => y - x)
+  for (const rd of rounds) {
+    const pa = a.roundFinish.get(rd)
+    const pb = b.roundFinish.get(rd)
+    if (pa !== pb) {
+      if (pa === undefined) return 1
+      if (pb === undefined) return -1
+      return pa - pb
+    }
+  }
+  return 0
+}
+
+
 /** Top `n` per class, keyed by crew, in CLASS_ORDER. */
-function standingsByClass(rows: ScoreRow[], n = 5) {
-  const perClass = new Map<string, Map<string, { key: string; name: string; points: number; best: number | null; starts: number }>>()
+function standingsByClass(rows: ScoreRow[], n = 5, roundByEvent: Map<string, number> = new Map()) {
+  const perClass = new Map<string, Map<string, { key: string; name: string; points: number; best: number | null; starts: number } & CountBack>>()
   for (const r of rows) {
     if (r.fill_in) continue
     const cls = String(r.class_id ?? '')
@@ -286,11 +329,12 @@ function standingsByClass(rows: ScoreRow[], n = 5) {
     const name = (r.drivers_text || '').trim() || `#${r.number ?? '?'}`
     const key = crewKey(r.drivers_text, name)
     const bucket = perClass.get(cls) ?? new Map()
-    const cur = bucket.get(key) ?? { key, name, points: 0, best: null, starts: 0 }
+    const cur = bucket.get(key) ?? { key, name, points: 0, best: null, starts: 0, finishCounts: [], roundFinish: new Map() }
     cur.points += rowPoints(r)
     cur.starts += 1
     const p = r.cls_pos ?? null
     cur.best = cur.best === null ? p : Math.min(cur.best, p ?? 99)
+    tallyFinish(cur, p, roundByEvent.get(String(r.event_id ?? '')))
     bucket.set(key, cur)
     perClass.set(cls, bucket)
   }
@@ -298,7 +342,7 @@ function standingsByClass(rows: ScoreRow[], n = 5) {
     const bucket = perClass.get(cls)
     if (!bucket || bucket.size === 0) return null
     const top = [...bucket.values()]
-      .sort((a, b) => b.points - a.points || (a.best ?? 99) - (b.best ?? 99) || a.key.localeCompare(b.key))
+      .sort((a, b) => b.points - a.points || countBack(a, b) || a.key.localeCompare(b.key))
       .slice(0, n)
     return { cls, top, leader: top[0]?.points ?? 0 }
   }).filter(Boolean) as { cls: string; top: { name: string; points: number }[]; leader: number }[]
@@ -544,10 +588,11 @@ async function handleStandings(
   if (!ids.length) return reply(`No races in this season yet. ${SITE}/standings`)
 
   const { data: res } = await db.from('results')
-    .select('class_id, number, drivers_text, cls_pos, points, quali_points, adjust, fill_in')
+    .select('event_id, class_id, number, drivers_text, cls_pos, points, quali_points, adjust, fill_in')
     .in('event_id', ids)
 
-  const table = standingsByClass((res ?? []) as ScoreRow[])
+  const roundByEvent = new Map<string, number>((evs ?? []).map((e) => [String(e.id), Number(e.round)]))
+  const table = standingsByClass((res ?? []) as ScoreRow[], 5, roundByEvent)
   const wanted = only ? table.filter((t) => t.cls === only) : table
   if (!wanted.length) {
     return reply(only

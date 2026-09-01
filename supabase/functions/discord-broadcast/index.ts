@@ -173,6 +173,48 @@ function crewKey(driversText?: string | null, fallback = ''): string {
 }
 const rowPoints = (r: ResultRow) => (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)
 
+/** Count-back tally shape shared by every standings sort in this function. */
+interface CountBack {
+  finishCounts: number[]
+  roundFinish: Map<number, number>
+}
+
+/** Record one classified race finish into the count-back tallies. */
+function tallyFinish(t: CountBack, clsPos: number | null, round: number | undefined) {
+  if (clsPos === null) return
+  t.finishCounts[clsPos] = (t.finishCounts[clsPos] ?? 0) + 1
+  if (round !== undefined) {
+    const prev = t.roundFinish.get(round)
+    t.roundFinish.set(round, prev === undefined ? clsPos : Math.min(prev, clsPos))
+  }
+}
+
+/**
+ * Count-back, the way real series break points ties (rulebook §31): most class
+ * wins, then most seconds, and so on (FIA/IMSA); identical records fall to the
+ * better class finish in the most recent round, walking backwards (MotoGP).
+ * MUST stay in step with src/lib/standings.ts and the other Discord port.
+ */
+function countBack(a: CountBack, b: CountBack): number {
+  const maxP = Math.max(a.finishCounts.length, b.finishCounts.length)
+  for (let p = 1; p < maxP; p++) {
+    const diff = (b.finishCounts[p] ?? 0) - (a.finishCounts[p] ?? 0)
+    if (diff) return diff
+  }
+  const rounds = [...new Set([...a.roundFinish.keys(), ...b.roundFinish.keys()])].sort((x, y) => y - x)
+  for (const rd of rounds) {
+    const pa = a.roundFinish.get(rd)
+    const pb = b.roundFinish.get(rd)
+    if (pa !== pb) {
+      if (pa === undefined) return 1
+      if (pb === undefined) return -1
+      return pa - pb
+    }
+  }
+  return 0
+}
+
+
 /** "1:35.433" / "95.4" / "1:02:03.1" → seconds. Null when it isn't a lap time. */
 function lapToSeconds(v?: string | null): number | null {
   if (!v) return null
@@ -447,14 +489,15 @@ Deno.serve(async (req) => {
         // what that did to the title. Top three rather than five, in one field, so
         // the post stays scannable — the full table is a tap away on the site.
         if (ev?.season_id) {
-          const { data: seasonEvents } = await db.from('events').select('id').eq('season_id', ev.season_id)
+          const { data: seasonEvents } = await db.from('events').select('id, round').eq('season_id', ev.season_id)
           const eventIds = (seasonEvents ?? []).map((e) => String(e.id))
+          const roundByEvent = new Map<string, number>((seasonEvents ?? []).map((e) => [String(e.id), Number(e.round)]))
           const { data: seasonRes } = await db
             .from('results')
-            .select('class_id, number, drivers_text, cls_pos, points, quali_points, adjust, fill_in')
+            .select('event_id, class_id, number, drivers_text, cls_pos, points, quali_points, adjust, fill_in')
             .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000'])
 
-          const champ = new Map<string, Map<string, { key: string; name: string; points: number; best: number | null }>>()
+          const champ = new Map<string, Map<string, { key: string; name: string; points: number; best: number | null } & CountBack>>()
           for (const r of ((seasonRes ?? []) as ResultRow[])) {
             if (r.fill_in) continue
             const cls = String(r.class_id ?? '')
@@ -462,10 +505,11 @@ Deno.serve(async (req) => {
             const nm = (r.drivers_text || '').trim() || `#${r.number ?? '?'}`
             const key = crewKey(r.drivers_text, nm)
             const bucket = champ.get(cls) ?? new Map()
-            const cur = bucket.get(key) ?? { key, name: nm, points: 0, best: null }
+            const cur = bucket.get(key) ?? { key, name: nm, points: 0, best: null, finishCounts: [], roundFinish: new Map() }
             cur.points += rowPoints(r)
             const p = r.cls_pos ?? null
             cur.best = cur.best === null ? p : Math.min(cur.best, p ?? 99)
+            tallyFinish(cur, p, roundByEvent.get(String(r.event_id ?? '')))
             bucket.set(key, cur)
             champ.set(cls, bucket)
           }
@@ -474,7 +518,7 @@ Deno.serve(async (req) => {
             const bucket = champ.get(cls)
             if (!bucket || bucket.size === 0) return null
             const top = [...bucket.values()]
-              .sort((a, b) => b.points - a.points || (a.best ?? 99) - (b.best ?? 99) || a.key.localeCompare(b.key)).slice(0, 3)
+              .sort((a, b) => b.points - a.points || countBack(a, b) || a.key.localeCompare(b.key)).slice(0, 3)
             return `**${cls}** ${top.map((t) => `${t.name} ${Math.round(t.points * 100) / 100}`).join(' · ')}`
           }).filter(Boolean) as string[]
 
@@ -544,14 +588,15 @@ Deno.serve(async (req) => {
           if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'no season' }).eq('id', row.id)
           continue
         }
-        const { data: seasonEvents } = await db.from('events').select('id').eq('season_id', seasonId)
+        const { data: seasonEvents } = await db.from('events').select('id, round').eq('season_id', seasonId)
         const eventIds = (seasonEvents ?? []).map((e) => String(e.id))
+        const roundByEvent = new Map<string, number>((seasonEvents ?? []).map((e) => [String(e.id), Number(e.round)]))
         const { data: res } = await db
           .from('results')
-          .select('class_id, number, drivers_text, cls_pos, points, quali_points, adjust, fill_in')
+          .select('event_id, class_id, number, drivers_text, cls_pos, points, quali_points, adjust, fill_in')
           .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000'])
 
-        const perClass = new Map<string, Map<string, { key: string; name: string; points: number; best: number | null; starts: number }>>()
+        const perClass = new Map<string, Map<string, { key: string; name: string; points: number; best: number | null; starts: number } & CountBack>>()
         for (const r of ((res ?? []) as ResultRow[])) {
           if (r.fill_in) continue
           const cls = String(r.class_id ?? '')
@@ -559,11 +604,12 @@ Deno.serve(async (req) => {
           const name = (r.drivers_text || '').trim() || `#${r.number ?? '?'}`
           const key = crewKey(r.drivers_text, name)
           const bucket = perClass.get(cls) ?? new Map()
-          const cur = bucket.get(key) ?? { key, name, points: 0, best: null, starts: 0 }
+          const cur = bucket.get(key) ?? { key, name, points: 0, best: null, starts: 0, finishCounts: [], roundFinish: new Map() }
           cur.points += rowPoints(r)
           cur.starts += 1
           const p = r.cls_pos ?? null
           cur.best = cur.best === null ? p : Math.min(cur.best, p ?? 99)
+          tallyFinish(cur, p, roundByEvent.get(String(r.event_id ?? '')))
           bucket.set(key, cur)
           perClass.set(cls, bucket)
         }
@@ -572,7 +618,7 @@ Deno.serve(async (req) => {
           const bucket = perClass.get(cls)
           if (!bucket || bucket.size === 0) return null
           const top = [...bucket.values()]
-            .sort((a, b) => b.points - a.points || (a.best ?? 99) - (b.best ?? 99) || a.key.localeCompare(b.key)).slice(0, 5)
+            .sort((a, b) => b.points - a.points || countBack(a, b) || a.key.localeCompare(b.key)).slice(0, 5)
           const leader = top[0]?.points ?? 0
           const lines = top.map((t, i) => {
             const pts = Math.round(t.points * 100) / 100
