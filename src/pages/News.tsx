@@ -98,7 +98,9 @@ export function ArticleCard({ article }: { article: NewsArticle }) {
           </span>
         </div>
         <h2 className={`mt-5 max-w-3xl ${feature ? 'text-4xl md:text-6xl' : 'text-3xl md:text-5xl'}`}>
-          {article.title}
+          <Link to={`/news/${article.slug}`} className="underline-offset-4 hover:underline">
+            {article.title}
+          </Link>
         </h2>
         {article.dek && (
           <p className="mt-4 max-w-2xl font-body text-lg leading-relaxed text-[var(--color-ink-2)]">
