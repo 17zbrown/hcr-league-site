@@ -470,10 +470,14 @@ Deno.serve(async (req) => {
       .order('start', { ascending: true }).limit(1)
     const firstSession = String((sessRows ?? [])[0]?.start ?? '')
     const startAt = firstSession ? new Date(firstSession) : raceAt
-    // Discord renders <t:unix:F> in every reader's own timezone, which beats
-    // writing a time that is wrong for half the grid.
+    // THE HEADLINE TIME IS THE GREEN FLAG — 8pm ET, which Discord's <t:unix:F>
+    // renders in every reader's own timezone. The session start survives as a
+    // second line, because "track opens an hour before the lights" is worth
+    // knowing without being the answer to "when is the race".
+    const raceUnix = Math.floor(raceAt.getTime() / 1000)
     const startUnix = Math.floor(startAt.getTime() / 1000)
-    const when = `<t:${startUnix}:F> (<t:${startUnix}:R>)`
+    const when = `Green flag <t:${raceUnix}:F> (<t:${raceUnix}:R>)` +
+      (startUnix < raceUnix ? `\nTrack opens <t:${startUnix}:t>` : '')
 
     // --- the tally, rebuilt from live data every run ----------------------------
     const { data: tallyRows } = await db.rpc('race_attendance_tally', { p_event: String(next.id) })

@@ -9,7 +9,7 @@ import {
   useTrackWinners,
   useWeather,
 } from '../lib/queries'
-import { CLASS_ORDER, classColor, eventStart, fmtDate, fmtDateLong, fmtTime } from '../lib/format'
+import { CLASS_ORDER, classColor, fmtDate, fmtDateLong, fmtTime } from '../lib/format'
 import { ClassChip, Skeleton } from '../components/ui'
 import { FeaturePanel, StatBand, type Stat } from '../components/editorial'
 import { DriverName } from '../components/links'
@@ -111,11 +111,11 @@ export default function RaceDetail() {
         </div>
         <h1 className="mt-4 text-5xl md:text-6xl">{event.name ?? track?.name}</h1>
         <div className="mt-3 text-lg text-[var(--color-ink-2)]">
-          {track?.name}{track?.location ? ` · ${track.location}` : ''} · {fmtDate(eventStart(event))} · {fmtTime(eventStart(event))}
+          {track?.name}{track?.location ? ` · ${track.location}` : ''} · {fmtDate(event.date)} · {fmtTime(event.date)}
         </div>
 
         <div className="mt-7 flex flex-wrap items-center gap-4">
-          {upcoming && <Countdown target={eventStart(event)} dark expiredLabel="Track is open" />}
+          {upcoming && <Countdown target={event.date} dark />}
           {(event.broadcast_url?.trim() || settings?.broadcast_url?.trim()) && (
             <a
               href={event.broadcast_url?.trim() || settings?.broadcast_url?.trim()}

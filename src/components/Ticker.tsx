@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useCurrentSeason, useEvents, useSeasonResults, useTeams } from '../lib/queries'
 import { computeStandings } from '../lib/standings'
-import { CLASS_ORDER, eventEnded, fmtDate, eventStart } from '../lib/format'
+import { CLASS_ORDER, eventEnded, fmtDate } from '../lib/format'
 import { Marquee } from './motion'
 
 interface Item {
@@ -30,7 +30,7 @@ export default function Ticker() {
     if (events?.length) out.push({ label: 'Calendar', value: `${complete.length}/${events.length} Rounds` })
 
     if (next) {
-      out.push({ label: `Next · R${next.round}`, value: `${next.track?.name ?? next.name} · ${fmtDate(eventStart(next))}` })
+      out.push({ label: `Next · R${next.round}`, value: `${next.track?.name ?? next.name} · ${fmtDate(next.date)}` })
     }
 
     const standings = computeStandings(results ?? [], teams ?? [])

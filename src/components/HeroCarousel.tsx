@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useReducedMotion } from 'framer-motion'
 import { useClasses, useCurrentSeason, useEvents, useSeasonResults, useTeams } from '../lib/queries'
 import { computeStandings } from '../lib/standings'
-import { CLASS_ORDER, classColor, eventEnded, eventStart, fmtDate, fmtTime } from '../lib/format'
+import { CLASS_ORDER, classColor, eventEnded, fmtDate, fmtTime } from '../lib/format'
 import Countdown from './Countdown'
 import { ClassChip } from './ui'
 import HeroVideo, { type VideoStatus } from './HeroVideo'
@@ -47,7 +47,7 @@ export default function HeroCarousel() {
               <h1 className="text-6xl leading-[0.9] sm:text-7xl md:text-8xl">{next.name ?? next.track?.name}</h1>
               <p className="mt-5 text-lg text-[var(--color-muted)]">
                 {next.track?.name}
-                {next.track?.location ? ` · ${next.track.location}` : ''} · {fmtDate(eventStart(next))} · {fmtTime(eventStart(next))}
+                {next.track?.location ? ` · ${next.track.location}` : ''} · {fmtDate(next.date)} · {fmtTime(next.date)}
               </p>
               {/*
                 The primary button goes to the round this slide is about, not to
@@ -73,7 +73,7 @@ export default function HeroCarousel() {
                   ))}
                 </div>
               </div>
-              <Countdown target={eventStart(next)} expiredLabel="Track is open" />
+              <Countdown target={next.date} />
             </Link>
           </div>
         ),

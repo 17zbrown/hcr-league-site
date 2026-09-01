@@ -26,7 +26,7 @@ export default function Countdown({ target, dark = false, expiredLabel = 'Lights
   const labelColor = dark ? 'text-white/70' : 'text-[var(--color-muted)]'
 
   return (
-    <div className="flex gap-2 sm:gap-2.5" role="timer" aria-label="Time until the track opens">
+    <div className="flex gap-2 sm:gap-2.5" role="timer" aria-label="Time until the green flag">
       {cells.map((c) => (
         <div key={c.l} className={`flex flex-1 flex-col items-center rounded-xl px-2 py-3 ${cellBg}`}>
           <span className="tabular text-2xl font-semibold sm:text-3xl">{pad2(c.v)}</span>
