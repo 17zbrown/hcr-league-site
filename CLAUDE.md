@@ -168,9 +168,10 @@ local time — so the whole schedule read as Sundays, the countdown targeted loc
 midnight (four hours late in ET), and the race-day forecast fetched the day AFTER the
 race. Instants are now formatted as instants in the viewer's own zone with the zone
 named; only a bare `YYYY-MM-DD`, which carries no time, is still built locally.
-Anything keyed to the track rather than the reader — the Open-Meteo window, which
-sends `timezone=auto` — uses `raceDateKey()` and is anchored to ET, because a reader
-in Sydney is already on tomorrow's date.
+Real-world weather is GONE, deliberately (league directive, 1 Sep: this is a sim
+league — show what iRacing shows). The Open-Meteo hooks, `wmo()` and `raceDateKey()`
+were deleted with it; the race page's only weather is the in-sim table below. Do not
+rebuild them.
 
 **Races complete themselves at midnight, and the in-sim forecast is iRacing's, not
 the sky's.** `advance_completed_events()` (cron `hcr-advance-events`, 04:00 UTC daily
