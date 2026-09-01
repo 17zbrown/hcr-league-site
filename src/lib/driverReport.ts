@@ -50,10 +50,18 @@ export interface DriverReport {
   fillIn: { drives: number; points: number; wins: number; bestFinish: number | null } | null
 }
 
-const isDnf = (r: RaceResult) => {
-  const s = (r.status ?? '').toUpperCase()
-  return s === 'DNF' || s === 'DNS' || s === 'DSQ' || s === 'DISCO'
-}
+/**
+ * The trigger on `results` normalises every import to exactly one of Running,
+ * DNF, DNS — or a preserved disqualification (DSQ/DQ/DISQUALIFIED, never
+ * rewritten because a verdict is not a retirement). This set matches it; DISCO
+ * and RET cannot survive the trigger and were dead entries wherever they
+ * appeared. The same set lives in discord-broadcast and discord-interactions —
+ * change one, change all three.
+ */
+const NON_FINISH = /^(DNF|DNS|DSQ|DQ|DISQUALIFIED)$/
+const isDnf = (r: RaceResult) => NON_FINISH.test((r.status ?? '').toUpperCase())
+/** DNS = took no part after the green flag. It scores nothing and proves nothing. */
+const isDns = (r: RaceResult) => (r.status ?? '').toUpperCase() === 'DNS' || (r.laps ?? 0) < 1
 
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null)
 
@@ -92,8 +100,18 @@ export function buildDriverReport(rows: FullRow[], allRows: FullRow[] = []): Dri
   const paceGaps: number[] = []
 
   for (const r of sorted) {
+    // Points always count — a DNS keeps its qualifying points under §31.
     points += (r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)
-    totalLaps += r.laps ?? 0
+    // Poles are a qualifying achievement; the race outcome cannot revoke one.
+    if (r.quali_pos === 1) poles += 1
+
+    // EVERYTHING BELOW REQUIRES HAVING STARTED. A DNS row still carries a class
+    // position, a (negative) lap count and sometimes a practice-session best lap
+    // in the sheet — counting those handed out a career podium, subtracted a lap
+    // from the total and fed a phantom time into the pace index.
+    if (isDns(r)) continue
+
+    totalLaps += Math.max(0, r.laps ?? 0)
     if (isDnf(r)) dnfs += 1
 
     const cp = r.cls_pos
@@ -105,7 +123,6 @@ export function buildDriverReport(rows: FullRow[], allRows: FullRow[] = []): Dri
       bestFinish = bestFinish == null ? cp : Math.min(bestFinish, cp)
       worstFinish = worstFinish == null ? cp : Math.max(worstFinish, cp)
     }
-    if (r.quali_pos === 1) poles += 1
     const startPos = r.grid ?? r.quali_pos
     if (startPos != null) starts.push(startPos)
     if (r.inc != null) incidentsArr.push(r.inc)

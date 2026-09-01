@@ -126,7 +126,8 @@ export function raceCredits(r: LicenseRow, paceIndex?: PaceIndex): number {
   if (!participated) return 0
 
   const status = (r.status ?? '').toUpperCase()
-  const dnf = status === 'DNF' || status === 'DNS' || status === 'DSQ'
+  const dnf = /^(DNF|DNS|DSQ|DQ|DISQUALIFIED)$/.test(status)
+  const dns = status === 'DNS' || (r.laps ?? 0) < 1
 
   // Finish — position in class (max 5).
   const cls = r.cls_pos
@@ -136,7 +137,10 @@ export function raceCredits(r: LicenseRow, paceIndex?: PaceIndex): number {
   }
   if (dnf) finish = Math.min(finish, 0.5)
 
-  const q = r.quali_pos ?? r.grid ?? null
+  // §31: a grid slot assigned by default is not a qualifying result. The same
+  // substitution this line used to make is the one that took three data
+  // corrections on the points side.
+  const q = r.quali_pos ?? null
 
   // Pace — comparative best lap vs the fastest in class that race (max 5).
   // Falls back to a qualifying-derived estimate when no lap time is available.
@@ -158,6 +162,11 @@ export function raceCredits(r: LicenseRow, paceIndex?: PaceIndex): number {
   const inc = r.inc
   let safety = 1 // neutral when incidents are unknown
   if (inc != null) safety = inc === 0 ? 4 : inc <= 2 ? 3 : inc <= 4 ? 2 : inc <= 6 ? 1.5 : inc <= 8 ? 1 : inc <= 12 ? 0 : inc <= 18 ? -1 : -2
+
+  // A DNS took no part after the green flag: whatever the sheet carried in its
+  // classification columns, the only session they contested was qualifying, so
+  // qualifying credit is the only credit.
+  if (dns) return qualy
 
   return finish + pace + qualy + safety
 }

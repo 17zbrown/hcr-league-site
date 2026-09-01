@@ -183,7 +183,10 @@ function lapToSeconds(v?: string | null): number | null {
   return sec > 0 ? sec : null
 }
 
-const DNF_STATUS = new Set(['DNF', 'DNS', 'DSQ', 'DQ', 'RET'])
+// Matches the trigger's output exactly: Running, DNF, DNS, or a preserved
+// disqualification. RET could never survive the trigger and was a dead entry.
+// The same set lives in src/lib/driverReport.ts — change one, change both.
+const DNF_STATUS = new Set(['DNF', 'DNS', 'DSQ', 'DQ', 'DISQUALIFIED'])
 const isDnf = (r: ResultRow) => DNF_STATUS.has(String(r.status ?? '').toUpperCase())
 const who = (r: ResultRow) => (r.drivers_text || `#${r.number ?? '?'}`).trim()
 
