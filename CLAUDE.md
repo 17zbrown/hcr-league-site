@@ -61,7 +61,10 @@ sheets are the only record.
 `src/lib/standings.ts` (the site), the `standings` branch of `discord-broadcast`, and
 `handleStandings` in `discord-interactions`. Crew names normalised and sorted so
 "A / B" and "B, A" are one entry; points = `points + quali_points + adjust`; `fill_in`
-rows excluded; ties broken by best class finish. Change one, change all three, and
+rows excluded; ties broken by count-back
+(most class wins, then seconds, and so on; identical records go to whoever achieved the
+shared best finish EARLIEST in the season — IMSA SR Art. 53, chosen over MotoGP's
+latest-wins because the league scores IMSA-style). Change one, change all three, and
 verify by running both over the same rows rather than reading them side by side.
 
 **Three race outcomes, and the DATABASE decides which — not the importer.**

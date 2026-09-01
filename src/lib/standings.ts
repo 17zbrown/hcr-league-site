@@ -41,12 +41,14 @@ function tallyFinish(a: Accum, clsPos: number | null, round: number | undefined)
 }
 
 /**
- * Count-back, the way real series break points ties (rulebook §31):
- * most class wins, then most seconds, then thirds, and so on — the FIA/IMSA
- * procedure. If two crews' full finish records are identical, the better class
- * finish in the most recent round decides, walking backwards through the season
- * (the MotoGP step). A crew with a classified finish in a round beats one
- * without. Only race classifications count; qualifying never enters count-back.
+ * Count-back, the way real series break points ties (rulebook §32.5):
+ * most class wins, then most seconds, then thirds, and so on down the order —
+ * the procedure F1, IMSA and MotoGP share (F1 SR Art. 7.2, IMSA SR Art. 53,
+ * FIM GP Art. 1.28.7). If two crews' full finish records are identical, IMSA's
+ * final step decides — the tie goes to whoever achieved the shared best
+ * finishing position EARLIEST in the season. (MotoGP takes the latest; this
+ * league scores IMSA-style, so it takes IMSA's side.) Only race
+ * classifications count; qualifying never enters count-back.
  */
 function countBack(a: Accum, b: Accum): number {
   const maxP = Math.max(a.finishCounts.length, b.finishCounts.length)
@@ -54,14 +56,17 @@ function countBack(a: Accum, b: Accum): number {
     const diff = (b.finishCounts[p] ?? 0) - (a.finishCounts[p] ?? 0)
     if (diff) return diff
   }
-  const rounds = [...new Set([...a.roundFinish.keys(), ...b.roundFinish.keys()])].sort((x, y) => y - x)
-  for (const rd of rounds) {
-    const pa = a.roundFinish.get(rd)
-    const pb = b.roundFinish.get(rd)
-    if (pa !== pb) {
-      if (pa === undefined) return 1
-      if (pb === undefined) return -1
-      return pa - pb
+  // Records identical — both hold the same best position; earliest date wins.
+  // Two crews cannot share a class position in the same round, so when both
+  // have any finish at all this terminates.
+  for (let p = 1; p < maxP; p++) {
+    if ((a.finishCounts[p] ?? 0) > 0) {
+      let ra = Infinity
+      let rb = Infinity
+      for (const [rd, pos] of a.roundFinish) if (pos === p && rd < ra) ra = rd
+      for (const [rd, pos] of b.roundFinish) if (pos === p && rd < rb) rb = rd
+      if (ra !== rb) return ra < rb ? -1 : 1
+      break
     }
   }
   return 0

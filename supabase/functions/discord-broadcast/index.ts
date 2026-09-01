@@ -190,9 +190,10 @@ function tallyFinish(t: CountBack, clsPos: number | null, round: number | undefi
 }
 
 /**
- * Count-back, the way real series break points ties (rulebook §31): most class
- * wins, then most seconds, and so on (FIA/IMSA); identical records fall to the
- * better class finish in the most recent round, walking backwards (MotoGP).
+ * Count-back, the way real series break points ties (rulebook §32.5): most
+ * class wins, then most seconds, and so on down the order (F1/IMSA/MotoGP all
+ * share this); identical records go to whoever achieved the shared best finish
+ * EARLIEST in the season (IMSA SR Art. 53 — this league scores IMSA-style).
  * MUST stay in step with src/lib/standings.ts and the other Discord port.
  */
 function countBack(a: CountBack, b: CountBack): number {
@@ -201,14 +202,14 @@ function countBack(a: CountBack, b: CountBack): number {
     const diff = (b.finishCounts[p] ?? 0) - (a.finishCounts[p] ?? 0)
     if (diff) return diff
   }
-  const rounds = [...new Set([...a.roundFinish.keys(), ...b.roundFinish.keys()])].sort((x, y) => y - x)
-  for (const rd of rounds) {
-    const pa = a.roundFinish.get(rd)
-    const pb = b.roundFinish.get(rd)
-    if (pa !== pb) {
-      if (pa === undefined) return 1
-      if (pb === undefined) return -1
-      return pa - pb
+  for (let p = 1; p < maxP; p++) {
+    if ((a.finishCounts[p] ?? 0) > 0) {
+      let ra = Infinity
+      let rb = Infinity
+      for (const [rd, pos] of a.roundFinish) if (pos === p && rd < ra) ra = rd
+      for (const [rd, pos] of b.roundFinish) if (pos === p && rd < rb) rb = rd
+      if (ra !== rb) return ra < rb ? -1 : 1
+      break
     }
   }
   return 0
