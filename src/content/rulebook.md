@@ -911,6 +911,14 @@ If supported, points may be awarded to manufacturers.
 
 Awarded to the team or driver with the most points across the HCR Endurance Cup races.
 
+### 32.5 Ties
+
+If two or more drivers finish level on championship points, the higher position goes to the one with the greater number of class wins; if that is equal, the greater number of second-place finishes, then third-place finishes, and so on down the classified order.
+
+If their finishing records are identical, the tie goes to whoever achieved the shared best finishing position earliest in the season.
+
+Only classified race results count towards a tie-break — qualifying results and fill-in drives never enter into it. The same procedure decides the team championship, and applies to the published standings at any point in the season, not only at its end.
+
 ## 33. Entry Limits
 
 ### 33.1 Class Caps
