@@ -72,26 +72,6 @@ export function dateKey(iso: string): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
 }
 
-/**
- * The race's calendar day AT THE TRACK, which is not always the viewer's day.
- *
- * The forecast query sends `timezone=auto`, so Open-Meteo reads start_date in the
- * TRACK's zone — meaning this key has to be the race day there, not wherever the
- * reader happens to be sitting. Every round is an evening event on North American
- * soil, so the Eastern date and the track's local date are the same day (8pm ET is
- * 5pm PT); a reader in Sydney, whose own date is already tomorrow, would otherwise
- * pull the wrong day's forecast.
- *
- * Anchoring to ET rather than the viewer keeps one answer for every reader.
- */
-export function raceDateKey(iso: string): string {
-  const s = String(iso).trim()
-  if (DATE_ONLY.test(s)) return s
-  const d = new Date(s)
-  if (Number.isNaN(d.getTime())) return s.slice(0, 10)
-  // en-CA renders as YYYY-MM-DD, which is exactly the shape the API wants.
-  return d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
-}
 
 /**
  * WHEN THE EVENT STARTS FOR A DRIVER, which is not when the race starts.
@@ -179,20 +159,3 @@ export function pad2(n: number): string {
   return String(n).padStart(2, '0')
 }
 
-/** Map an Open-Meteo WMO weather code to a short label + glyph. */
-export function wmo(code: number): { label: string; icon: string } {
-  const m: Record<number, [string, string]> = {
-    0: ['Clear', '☀️'], 1: ['Mainly clear', '🌤️'], 2: ['Partly cloudy', '⛅'], 3: ['Overcast', '☁️'],
-    45: ['Fog', '🌫️'], 48: ['Rime fog', '🌫️'],
-    51: ['Light drizzle', '🌦️'], 53: ['Drizzle', '🌦️'], 55: ['Heavy drizzle', '🌧️'],
-    56: ['Freezing drizzle', '🌧️'], 57: ['Freezing drizzle', '🌧️'],
-    61: ['Light rain', '🌦️'], 63: ['Rain', '🌧️'], 65: ['Heavy rain', '🌧️'],
-    66: ['Freezing rain', '🌧️'], 67: ['Freezing rain', '🌧️'],
-    71: ['Light snow', '🌨️'], 73: ['Snow', '🌨️'], 75: ['Heavy snow', '❄️'], 77: ['Snow grains', '🌨️'],
-    80: ['Rain showers', '🌦️'], 81: ['Rain showers', '🌧️'], 82: ['Heavy showers', '⛈️'],
-    85: ['Snow showers', '🌨️'], 86: ['Snow showers', '❄️'],
-    95: ['Thunderstorm', '⛈️'], 96: ['Thunderstorm', '⛈️'], 99: ['Thunderstorm', '⛈️'],
-  }
-  const [label, icon] = m[code] ?? ['—', '🌡️']
-  return { label, icon }
-}

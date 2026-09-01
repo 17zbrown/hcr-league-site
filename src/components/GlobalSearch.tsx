@@ -80,7 +80,7 @@ export function GlobalSearch() {
     }
     for (const a of news ?? []) {
       if (matches(q, a.title, a.dek, a.category, a.author)) {
-        out.push({ id: `n-${a.id}`, kind: 'News', label: a.title, detail: a.category, to: '/news' })
+        out.push({ id: `n-${a.id}`, kind: 'News', label: a.title, detail: a.category, to: `/news#${a.slug}` })
       }
     }
     return out.slice(0, 12)

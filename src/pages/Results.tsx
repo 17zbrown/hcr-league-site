@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useClasses, useCurrentSeason, useEvents, useResults } from '../lib/queries'
 import { CLASS_ORDER, classColor, fmtDateLong } from '../lib/format'
 import { lapToSeconds } from '../lib/license'
@@ -19,10 +20,15 @@ export default function Results() {
     () => (events ?? []).filter((e) => e.status === 'complete').sort((a, b) => b.round - a.round),
     [events],
   )
-  const [eventId, setEventId] = useState<string | undefined>()
+  // The selected round rides in ?event= so a result can be LINKED — the home
+  // cards, race pages and Discord posts all point at a specific round, and state
+  // that lives only in memory made every one of them land on the newest instead.
+  const [params, setParams] = useSearchParams()
+  const eventId = params.get('event') ?? undefined
+  const setEventId = (id: string) => setParams({ event: id }, { replace: false })
   useEffect(() => {
-    if (!eventId && completed.length) setEventId(completed[0].id)
-  }, [completed, eventId])
+    if (!eventId && completed.length) setParams({ event: completed[0].id }, { replace: true })
+  }, [completed, eventId, setParams])
 
   const active = completed.find((e) => e.id === eventId)
 
@@ -54,7 +60,7 @@ export default function Results() {
 
           {active && (
             <div className="mb-6">
-              <h2 className="text-3xl">{active.name}</h2>
+              <h2 className="text-3xl">{active.name ?? active.track?.name ?? `Round ${active.round}`}</h2>
               <div className="tabular mt-1 text-[var(--color-muted)]">
                 {active.track?.name} · {fmtDateLong(active.date)}
               </div>
@@ -254,7 +260,7 @@ function ClassTable({
                           '—'
                         )}
                       </td>
-                      <td className="tabular px-4 py-3 text-center">{r.inc ?? '—'}</td>
+                      <td className="tabular px-4 py-3 text-center">{r.inc != null ? `${r.inc}x` : '—'}</td>
                       <td className="px-4 py-3">
                         <span className={r.status === 'DNF' ? 'font-semibold text-[var(--color-red)]' : 'text-[var(--color-muted)]'}>
                           {r.status ?? '—'}

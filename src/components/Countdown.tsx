@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { countdownParts, pad2 } from '../lib/format'
 
-export default function Countdown({ target, dark = false }: { target: string; dark?: boolean }) {
+export default function Countdown({ target, dark = false, expiredLabel = 'Lights out' }: { target: string; dark?: boolean; expiredLabel?: string }) {
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
@@ -12,7 +12,7 @@ export default function Countdown({ target, dark = false }: { target: string; da
   const parts = countdownParts(target, now)
 
   if (!parts) {
-    return <div className="font-display text-2xl text-[var(--color-brand-deep)]">Lights out</div>
+    return <div className="font-display text-2xl text-[var(--color-brand-deep)]">{expiredLabel}</div>
   }
 
   const cells = [
@@ -26,7 +26,7 @@ export default function Countdown({ target, dark = false }: { target: string; da
   const labelColor = dark ? 'text-white/70' : 'text-[var(--color-muted)]'
 
   return (
-    <div className="flex gap-2 sm:gap-2.5" role="timer" aria-label="Time until next race">
+    <div className="flex gap-2 sm:gap-2.5" role="timer" aria-label="Time until the track opens">
       {cells.map((c) => (
         <div key={c.l} className={`flex flex-1 flex-col items-center rounded-xl px-2 py-3 ${cellBg}`}>
           <span className="tabular text-2xl font-semibold sm:text-3xl">{pad2(c.v)}</span>

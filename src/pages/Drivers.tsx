@@ -151,7 +151,7 @@ export default function Drivers() {
           onChange={setQuery}
           count={filtered.length}
           total={drivers?.length ?? 0}
-          placeholder="Search name, country, team, car or number…"
+          placeholder="Search name, country, car or number…"
           className="w-full max-w-sm sm:w-auto sm:flex-1"
         />
 

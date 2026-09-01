@@ -73,7 +73,7 @@ export default function HeroCarousel() {
                   ))}
                 </div>
               </div>
-              <Countdown target={next.date} />
+              <Countdown target={eventStart(next)} expiredLabel="Track is open" />
             </Link>
           </div>
         ),

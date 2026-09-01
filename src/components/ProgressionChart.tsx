@@ -88,7 +88,14 @@ export function ProgressionChart({ data, color, max = 8 }: { data: Progression; 
             return b.rank - a.rank // higher rank (index 0 = leader) drawn last
           })
           .map(({ s, rank }) => (
-            <g key={s.key} onMouseEnter={() => setHover(s.key)} onMouseLeave={() => setHover(null)} style={{ cursor: 'pointer' }}>
+            <g
+              key={s.key}
+              onMouseEnter={() => setHover(s.key)}
+              onMouseLeave={() => setHover(null)}
+              // Touch has no hover: a tap toggles the same highlight on and off.
+              onClick={() => setHover((h) => (h === s.key ? null : s.key))}
+              style={{ cursor: 'pointer' }}
+            >
               {/* fat invisible hit area */}
               <polyline points={pointsFor(s.cumulative)} fill="none" stroke="transparent" strokeWidth={14} />
               <polyline
@@ -128,6 +135,9 @@ export function ProgressionChart({ data, color, max = 8 }: { data: Progression; 
             type="button"
             onMouseEnter={() => setHover(s.key)}
             onMouseLeave={() => setHover(null)}
+            onClick={() => setHover((h) => (h === s.key ? null : s.key))}
+            onFocus={() => setHover(s.key)}
+            onBlur={() => setHover(null)}
             className="flex items-center gap-2 text-left transition-opacity"
             style={{ opacity: hover && hover !== s.key ? 0.4 : 1 }}
           >

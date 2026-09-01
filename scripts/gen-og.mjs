@@ -153,9 +153,13 @@ for (const [name, cfg] of Object.entries(CARDS)) {
 // cards only, and the edge function falls back to those.
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 function fmtDate(iso) {
+  // events.date is the green flag at 00:00 UTC, which is the previous EVENING in
+  // the league timezone - the UTC day is the day AFTER the race. Same bug, same
+  // fix as src/lib/format.ts.
   try {
-    const d = new Date(iso)
-    return `${MON[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`
+    return new Date(iso).toLocaleDateString('en-US', {
+      timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric',
+    })
   } catch {
     return ''
   }

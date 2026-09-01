@@ -16,7 +16,6 @@ const FillInStandings = lazy(() => import('./pages/FillInStandings'))
 const Results = lazy(() => import('./pages/Results'))
 const Drivers = lazy(() => import('./pages/Drivers'))
 const DriverProfile = lazy(() => import('./pages/DriverProfile'))
-const Teams = lazy(() => import('./pages/Teams'))
 const Compare = lazy(() => import('./pages/Compare'))
 const TeamProfile = lazy(() => import('./pages/TeamProfile'))
 const News = lazy(() => import('./pages/News'))
@@ -72,6 +71,36 @@ function ScrollToTop() {
   return null
 }
 
+/**
+ * The tab title, per route. index.html ships the homepage title and nothing ever
+ * changed it again, so every page a member kept open — and every bookmark and
+ * history entry — was called "HCR League — Realistic Endurance Sim Racing".
+ * Naming the section is the 90% fix; per-entity titles can refine it later.
+ */
+const TITLES: [RegExp, string][] = [
+  [/^\/schedule\/./, 'Race — HCR League'],
+  [/^\/schedule/, 'Schedule — HCR League'],
+  [/^\/standings\/fill-in/, 'Fill-In Cup — HCR League'],
+  [/^\/standings/, 'Standings — HCR League'],
+  [/^\/results/, 'Results — HCR League'],
+  [/^\/drivers\/./, 'Driver — HCR League'],
+  [/^\/drivers/, 'Drivers — HCR League'],
+  [/^\/news/, 'News — HCR League'],
+  [/^\/rulebook/, 'Rulebook — HCR League'],
+  [/^\/compare/, 'Compare — HCR League'],
+  [/^\/signup/, 'Join the Grid — HCR League'],
+  [/^\/login/, 'Sign In — HCR League'],
+  [/^\/portal/, 'Member Portal — HCR League'],
+]
+function DocumentTitle() {
+  const { pathname } = useLocation()
+  useEffect(() => {
+    const hit = TITLES.find(([re]) => re.test(pathname))
+    document.title = hit ? hit[1] : 'HCR League — Realistic Endurance Sim Racing'
+  }, [pathname])
+  return null
+}
+
 function RouteFallback() {
   return (
     <div className="container-hcr flex min-h-[60vh] items-center justify-center">
@@ -84,6 +113,7 @@ export default function App() {
   return (
     <div className="flex min-h-screen flex-col">
       <ScrollToTop />
+      <DocumentTitle />
       <Header />
       <main className="flex-1">
         <ErrorBoundary>
@@ -98,7 +128,9 @@ export default function App() {
             <Route path="/drivers" element={<Drivers />} />
             <Route path="/drivers/:id" element={<DriverProfile />} />
             <Route path="/compare" element={<Compare />} />
-            <Route path="/teams" element={<Teams />} />
+            {/* Zero teams entered this season, so the index is a dead end a marketing
+                visitor can walk into; team PAGES stay for the day teams exist. */}
+            <Route path="/teams" element={<Navigate to="/drivers" replace />} />
             <Route path="/teams/:id" element={<TeamProfile />} />
             {/*
               /news is the canonical path — it is what the #news channel topic

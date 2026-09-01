@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import {
   useClasses,
   useEvent,
+  useLeagueSettings,
   useResults,
   useSessions,
   useTrackWinners,
@@ -29,6 +30,7 @@ export default function RaceDetail() {
   const { data: event, isLoading } = useEvent(id)
   const { data: classes } = useClasses()
   const { data: sessions } = useSessions(id)
+  const { data: settings } = useLeagueSettings()
   const { data: simWeather } = useWeather(id)
   const { data: results } = useResults(id)
   const track = event?.track
@@ -113,9 +115,14 @@ export default function RaceDetail() {
         </div>
 
         <div className="mt-7 flex flex-wrap items-center gap-4">
-          {upcoming && <Countdown target={eventStart(event)} dark />}
-          {event.broadcast_url && (
-            <a href={event.broadcast_url} target="_blank" rel="noreferrer" className="hcr-btn hcr-btn-ghost">Watch Broadcast ↗</a>
+          {upcoming && <Countdown target={eventStart(event)} dark expiredLabel="Track is open" />}
+          {(event.broadcast_url?.trim() || settings?.broadcast_url?.trim()) && (
+            <a
+              href={event.broadcast_url?.trim() || settings?.broadcast_url?.trim()}
+              target="_blank" rel="noreferrer" className="hcr-btn hcr-btn-ghost"
+            >
+              Watch Broadcast ↗
+            </a>
           )}
           {done && <Link to="/results" className="hcr-btn hcr-btn-primary">Full Results</Link>}
         </div>

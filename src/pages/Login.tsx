@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useSearchParams, Link } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { useLeagueSettings } from '../lib/queries'
 import { DiscordButton } from '../components/DiscordButton'
 
 /**
@@ -14,6 +15,7 @@ import { DiscordButton } from '../components/DiscordButton'
  */
 export default function Login() {
   const { signIn } = useAuth()
+  const { data: settings } = useLeagueSettings()
   const [params] = useSearchParams()
   const recovery = params.get('recovery') === '1'
 
@@ -56,7 +58,15 @@ export default function Login() {
         )}
 
         <p className="mt-4 text-center text-xs text-[var(--color-faint)]">
-          Not in the server yet? Ask a commissioner for an invite, then sign in here.
+          Not in the server yet?{' '}
+          {settings?.discord_url ? (
+            <a href={settings.discord_url} target="_blank" rel="noreferrer" className="font-semibold text-[var(--color-blue)] underline-offset-2 hover:underline">
+              Join the Discord
+            </a>
+          ) : (
+            <>Ask a commissioner for an invite</>
+          )}
+          , then sign in here.
         </p>
 
         {recovery && (

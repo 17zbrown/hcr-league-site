@@ -20,6 +20,9 @@ const SECTIONS: Record<string, Meta> = {
   drivers: { title: 'Roster — HCR League', description: 'Drivers of the HCR League three-class endurance championship.', image: 'og-roster' },
   teams: { title: 'Teams — HCR League', description: 'Teams of the HCR League three-class endurance championship.', image: 'og-roster' },
   signup: { title: 'Enter Season — HCR League', description: 'Claim your seat on the 2026 HCR League grid.', image: 'og-signup' },
+  news: { title: 'News — HCR League', description: 'Race reports, previews and announcements from the HCR League newsroom.', image: 'og-default' },
+  rulebook: { title: 'Rulebook — HCR League', description: 'The complete HCR League sporting code — format, stewarding, points and conduct.', image: 'og-default' },
+  compare: { title: 'Compare Drivers — HCR League', description: 'Head-to-head season stats for any two HCR League drivers.', image: 'og-roster' },
   enter: { title: 'Enter Season — HCR League', description: 'Claim your seat on the 2026 HCR League grid.', image: 'og-signup' },
 }
 
@@ -103,6 +106,11 @@ export default async function handler(request: Request, context: Context) {
   set(/(<meta property="og:title" content=")[^"]*(")/, `$1${T}$2`)
   set(/(<meta property="og:description" content=")[^"]*(")/, `$1${D}$2`)
   set(/(<meta property="og:url" content=")[^"]*(")/, `$1${esc(pageUrl)}$2`)
+  // One canonical per page, injected right after the title. Query variants and
+  // soft-404s otherwise index as duplicates of whatever HTML they happen to serve.
+  if (!/rel="canonical"/.test(html)) {
+    html = html.replace(/<\/title>/, `</title><link rel="canonical" href="${esc(pageUrl)}">`)
+  }
   set(/(<meta property="og:image" content=")[^"]*(")/, `$1${esc(imageUrl)}$2`)
   set(/(<meta name="twitter:title" content=")[^"]*(")/, `$1${T}$2`)
   set(/(<meta name="twitter:description" content=")[^"]*(")/, `$1${D}$2`)

@@ -90,7 +90,7 @@ export default function Home() {
           eyebrow={`Round ${lastEvent.round} · ${lastEvent.name ?? lastEvent.track?.name}`}
           title="Latest Result"
           action={
-            <Link to="/results" className="font-body text-sm font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-blue)]">
+            <Link to={`/results?event=${lastEvent.id}`} className="font-body text-sm font-semibold text-[var(--color-ink-2)] hover:text-[var(--color-blue)]">
               All results →
             </Link>
           }
@@ -275,7 +275,7 @@ function LatestByClass({ eventId }: { eventId: string }) {
                 ))}
               </ol>
               <Link
-                to="/results"
+                to={`/results?event=${eventId}`}
                 className={`${ACTION_BAR} bg-[var(--color-mist)] text-[var(--color-ink)] hover:bg-[var(--color-deep)] hover:text-white`}
               >
                 Full classification <span aria-hidden>→</span>
@@ -338,6 +338,15 @@ function JoinTheGrid() {
             <Link to="/signup" className="hcr-btn hcr-btn-ghost w-full justify-center">
               How it works →
             </Link>
+            {settings?.broadcast_url && (
+              <a
+                href={settings.broadcast_url}
+                target="_blank" rel="noreferrer"
+                className="text-center font-body text-sm font-semibold text-[var(--color-muted)] underline-offset-4 hover:text-[var(--color-ink)] hover:underline"
+              >
+                Watch race nights on Twitch ↗
+              </a>
+            )}
           </div>
         </div>
       </Section>
@@ -399,7 +408,7 @@ function LeagueNews() {
           {news.slice(0, 3).map((a, i) => (
             <Reveal key={a.id} delay={i * 0.06} className="h-full">
               <Link
-                to="/news"
+                to={`/news#${a.slug}`}
                 className="group flex h-full flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] transition-transform hover:-translate-y-0.5 hover:shadow-card"
               >
                 <div className="flex flex-1 flex-col p-5">
