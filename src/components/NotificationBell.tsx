@@ -63,8 +63,11 @@ export default function NotificationBell() {
         )}
       </button>
 
+      {/* A 320px panel anchored right-0 hung ~25px off a 375px phone, so every
+          notification lost its tail. Below sm the panel is a fixed full-width sheet
+          under the header; from sm up, the anchored dropdown it always was. */}
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] shadow-card">
+        <div className="fixed inset-x-3 top-[72px] z-50 overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)] shadow-card sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-80">
           <div className="flex items-center justify-between border-b border-[var(--color-line)] px-4 py-3">
             <span className="font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">Notifications</span>
             {unread.length > 0 && (

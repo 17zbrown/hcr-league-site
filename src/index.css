@@ -203,7 +203,9 @@
     border-radius: 8px;
     padding: 0.7rem 0.85rem;
     font-family: var(--font-body);
-    font-size: 0.95rem;
+    /* 16px exactly, and not a hair less: iOS Safari auto-zooms any focused input
+       below 16px, which hit the season entry form on every phone. */
+    font-size: 1rem;
     color: var(--color-ink);
     transition: border-color 0.15s, box-shadow 0.15s;
   }
