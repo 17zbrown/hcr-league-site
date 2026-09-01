@@ -87,7 +87,7 @@ export function ArticleCard({ article }: { article: NewsArticle }) {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="hcr-chip">{article.category}</span>
           {feature && (
-            <span className="rounded-full bg-[var(--color-brand)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-black">
+            <span className="rounded-full bg-[var(--color-brand)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
               Pinned
             </span>
           )}

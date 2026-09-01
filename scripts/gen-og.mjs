@@ -14,7 +14,8 @@ const INK = '#0a0c11'
 const INK2 = '#12151c'
 const WHITE = '#f7f8fa'
 const MUTED = '#9aa1ad'
-const BRAND = '#f2e114'
+const BRAND = '#a6192e'
+const BRAND_TEXT = '#ef4655' // the carmine is ~1.7:1 on dark ink; text uses the bright cut
 const BLUE = '#4F8DF0'
 const GREEN = '#4ADE80'
 
@@ -93,16 +94,16 @@ function card({ eyebrow, title, subtitle, chips = true }) {
     <!-- header lockup -->
     <g transform="translate(90 78)">
       <rect width="60" height="60" rx="16" fill="${BRAND}"/>
-      <text x="30" y="40" text-anchor="middle" font-family="Archivo" font-weight="900" font-size="24" fill="${INK}">HCR</text>
+      <text x="30" y="40" text-anchor="middle" font-family="Archivo" font-weight="900" font-size="24" fill="${WHITE}">HCR</text>
       <text x="80" y="41" font-family="Archivo" font-weight="800" font-size="30" letter-spacing="1" fill="${WHITE}">HCR LEAGUE</text>
     </g>
 
-    <text x="90" y="200" font-family="Hanken Grotesk" font-weight="700" font-size="26" letter-spacing="4" fill="${BRAND}">${esc(eyebrow.toUpperCase())}</text>
+    <text x="90" y="200" font-family="Hanken Grotesk" font-weight="700" font-size="26" letter-spacing="4" fill="${BRAND_TEXT}">${esc(eyebrow.toUpperCase())}</text>
     ${titleSvg}
     <text x="92" y="${afterTitleY + 62}" font-family="Hanken Grotesk" font-weight="500" font-size="32" fill="${MUTED}">${esc(subtitle)}</text>
 
     ${chips ? `<g transform="translate(90 ${H - 96})">
-      ${chip(0, 0, 'GTP', BRAND)}
+      ${chip(0, 0, 'GTP', '#f2e114')}
       ${chip(150, 0, 'LMP2', BLUE, false)}
       ${chip(330, 0, 'GTD', GREEN, false)}
     </g>` : ''}

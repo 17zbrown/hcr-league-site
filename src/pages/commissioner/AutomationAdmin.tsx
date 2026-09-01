@@ -431,7 +431,7 @@ export default function AutomationAdmin() {
   )
 }
 
-/** Accessible switch — 44px hit target, brand yellow when on. */
+/** Accessible switch — 44px hit target, brand red when on. */
 function Toggle({
   checked,
   onChange,

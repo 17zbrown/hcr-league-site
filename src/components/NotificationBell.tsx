@@ -57,7 +57,7 @@ export default function NotificationBell() {
           />
         </svg>
         {unread.length > 0 && (
-          <span className="tabular absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-brand)] px-1 text-[10px] font-bold text-black">
+          <span className="tabular absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--color-brand)] px-1 text-[10px] font-bold text-white">
             {unread.length > 9 ? '9+' : unread.length}
           </span>
         )}

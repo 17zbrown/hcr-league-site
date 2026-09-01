@@ -232,7 +232,7 @@ const SITE = 'https://hcrleague.com'
  * directory — so it belongs in the copy rather than in config.
  */
 const IRACING_LEAGUE_ID = '14470'
-const HCR_YELLOW = 0xf2e114
+const HCR_RED = 0xa6192e
 const CLASS_ORDER = ['GTP', 'LMP2', 'GTD']
 const MAX_FIELD = 1024
 const clip = (s: string, n = MAX_FIELD) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
@@ -477,7 +477,7 @@ async function refreshTally(
     embeds: [{
       title: `Attendance — Round ${ev.round} — ${ev.name}`,
       description: `${[track?.name, track?.config].filter(Boolean).join(' · ')}\n<t:${at}:F> (<t:${at}:R>)`,
-      color: 0xf2e114,
+      color: 0xa6192e,
       fields,
       footer: { text: `HCR League · staff only · ${tally.length} on the grid · updates as people answer` },
     }],
@@ -565,7 +565,7 @@ async function handleNext(
   return replyEmbed({
     title: `Round ${ev.round} — ${ev.name}`,
     url: `${SITE}/schedule`,
-    color: HCR_YELLOW,
+    color: HCR_RED,
     fields,
     footer: { text: 'HCR League · only you can see this' },
   })
@@ -614,7 +614,7 @@ async function handleStandings(
   return replyEmbed({
     title: only ? `${only} championship` : 'Championship standings',
     url: `${SITE}/standings`,
-    color: HCR_YELLOW,
+    color: HCR_RED,
     description: `${season.name ?? 'This season'} · ${done} of ${ids.length} rounds scored`,
     fields,
     footer: { text: 'HCR League · top five per class · full table on the site · only you can see this' },

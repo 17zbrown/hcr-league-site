@@ -156,7 +156,7 @@ export function ProtestThread({ protestId, canReply = true }: { protestId: strin
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">{m.author?.display_name ?? (mine ? 'You' : 'Member')}</span>
                 {m.is_staff && (
-                  <span className="rounded-full bg-[var(--color-brand)] px-2 py-0.5 text-[10px] font-bold uppercase text-black">
+                  <span className="rounded-full bg-[var(--color-brand)] px-2 py-0.5 text-[10px] font-bold uppercase text-white">
                     Race control
                   </span>
                 )}

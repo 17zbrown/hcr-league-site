@@ -40,7 +40,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
 const SITE = 'https://hcrleague.com'
-const HCR_YELLOW = 0xf2e114
+const HCR_RED = 0xa6192e
 // A decision's colour is the fastest thing to read in a busy channel, so a penalty
 // and a no-action finding must never look alike at a glance.
 const PENALTY_RED = 0xc62430
@@ -532,7 +532,7 @@ Deno.serve(async (req) => {
           title,
           url: ev?.id ? `${SITE}/schedule/${ev.id}` : `${SITE}/results`,
           description: clip(where ? `Provisional classification — ${where}` : 'Provisional classification', MAX_DESC),
-          color: HCR_YELLOW,
+          color: HCR_RED,
           fields,
           footer: { text: 'HCR League · 🅿️ pole · full classification, lap times and championship tables at hcrleague.com' },
         }
@@ -575,7 +575,7 @@ Deno.serve(async (req) => {
           // report was unpublished after its ping went out.
           url: `${SITE}/news/${article.slug}`,
           description: clip(String(article.dek ?? ''), MAX_DESC),
-          color: HCR_YELLOW,
+          color: HCR_RED,
           ...(lead && /^https?:\/\//i.test(lead) ? { image: { url: lead } } : {}),
           footer: { text: article.author ? `HCR League · ${article.author} · read it all at hcrleague.com` : 'HCR League · read it all at hcrleague.com' },
         }
@@ -637,7 +637,7 @@ Deno.serve(async (req) => {
 
         title = clip(ev?.round != null ? `Championship after Round ${ev.round}` : 'Championship standings', MAX_TITLE)
         embed = {
-          title, url: `${SITE}/standings`, color: HCR_YELLOW, fields,
+          title, url: `${SITE}/standings`, color: HCR_RED, fields,
           footer: { text: 'HCR League · top five per class · every driver and every round at hcrleague.com' },
         }
       // ----------------------------------------------------------- penalty ----
@@ -692,7 +692,7 @@ Deno.serve(async (req) => {
           // Green for a reversal, red for a live sanction, brand yellow for a warning
           // — a warning is on the record but costs nothing, and colouring it like a
           // punishment would overstate it.
-          color: rescinded ? CLEARED_GREEN : pen.kind === 'warning' ? HCR_YELLOW : PENALTY_RED,
+          color: rescinded ? CLEARED_GREEN : pen.kind === 'warning' ? HCR_RED : PENALTY_RED,
           fields,
           footer: { text: 'HCR League · race control · decisions are final once published' },
         }
@@ -751,7 +751,7 @@ Deno.serve(async (req) => {
           // Green for a driver cleared, red only where a penalty was actually
           // applied. An upheld protest with no penalty is neither, so it stays brand
           // yellow rather than being coloured like a punishment.
-          color: dismissed ? CLEARED_GREEN : (penalty ? PENALTY_RED : HCR_YELLOW),
+          color: dismissed ? CLEARED_GREEN : (penalty ? PENALTY_RED : HCR_RED),
           fields,
           footer: { text: 'HCR League · race control · decisions are final once published' },
         }
@@ -808,7 +808,7 @@ Deno.serve(async (req) => {
         embed = {
           title,
           url: `${SITE}/admin`,
-          color: HCR_YELLOW,
+          color: HCR_RED,
           fields,
           footer: { text: 'HCR League · race control · nobody is on the grid until this is actioned' },
         }

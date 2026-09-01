@@ -15,7 +15,7 @@ import CarsAdmin from './CarsAdmin'
 /**
  * Race Control Dashboard — the SaaS-console layout (sidebar of grouped
  * sections, content pane) in the site's paddock-catalog language: white
- * ground, near-black rail, mono micro-labels, yellow as the active accent.
+ * ground, near-black rail, mono micro-labels, red as the active accent.
  *
  * The People group is four sections and each one answers a different question, which
  * is the test a new tab has to pass. Drivers is a PERSON, Grid is a CAR, Signups is a
@@ -160,7 +160,7 @@ export default function CommissionerPortal() {
                         aria-current={active ? 'page' : undefined}
                         className={`min-h-11 whitespace-nowrap rounded-lg px-3.5 py-2.5 text-left font-alt text-[13px] font-bold transition-colors ${
                           active
-                            ? 'bg-[var(--color-brand)] text-black'
+                            ? 'bg-[var(--color-brand)] text-white'
                             : 'text-[var(--color-ink-2)] hover:bg-[var(--color-cloud)] hover:text-[var(--color-ink)]'
                         }`}
                       >

@@ -101,7 +101,7 @@ export default function RaceDetail() {
             </span>
           )}
           {event.status === 'next' && (
-            <span className="rounded-full bg-[var(--color-brand)] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-black">
+            <span className="rounded-full bg-[var(--color-brand)] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white">
               Next Round
             </span>
           )}

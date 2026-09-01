@@ -89,7 +89,7 @@ function MemberRow({ member, onSaved }: { member: Profile; onSaved: () => void }
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <span className="truncate font-semibold">{member.display_name ?? member.email}</span>
-          {member.is_admin && <span className="rounded-full bg-[var(--color-brand)] px-2 py-0.5 text-[10px] font-bold uppercase text-black">Commish</span>}
+          {member.is_admin && <span className="rounded-full bg-[var(--color-brand)] px-2 py-0.5 text-[10px] font-bold uppercase text-white">Commish</span>}
         </div>
         <div className="truncate text-xs text-[var(--color-muted)]">{member.email}</div>
       </div>

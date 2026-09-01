@@ -106,7 +106,7 @@ export default function Header() {
                 My Portal
               </Link>
             ) : (
-              <Link to="/signup" className="hidden rounded-lg bg-[var(--color-brand)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-0.5 sm:block">
+              <Link to="/signup" className="hidden rounded-lg bg-[var(--color-brand)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-0.5 sm:block">
                 Enter the Season
               </Link>
             )}

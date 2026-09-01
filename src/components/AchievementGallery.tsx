@@ -3,7 +3,7 @@ import { AnimatedStat } from './editorial'
 
 /* ------------------------------------------------------------------ *
  * Trophy cabinet — a grid of small achievement cards. Earned cards get
- * a brand-yellow medal mark and a hover lift; locked cards sit quiet on
+ * a brand-red medal mark and a hover lift; locked cards sit quiet on
  * mist with the blurb doubling as the hint.
  * ------------------------------------------------------------------ */
 

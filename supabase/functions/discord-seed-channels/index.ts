@@ -39,7 +39,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
 const SITE = 'https://hcrleague.com'
-const HCR_YELLOW = 0xf2e114
+const HCR_RED = 0xa6192e
 const SNOWFLAKE = /^\d{5,25}$/
 const CHAN_CATEGORY = 4
 const CHAN_TEXT = 0
@@ -344,7 +344,7 @@ Deno.serve(async (req) => {
       const embed = {
         title: note.title,
         description: resolve(note.body),
-        color: HCR_YELLOW,
+        color: HCR_RED,
         ...(note.fields?.length
           ? { fields: note.fields.map((f) => ({ name: f.name, value: resolve(f.value), inline: false })) }
           : {}),

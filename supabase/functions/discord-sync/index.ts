@@ -159,7 +159,7 @@ Deno.serve(async (req) => {
           {
             title: promos.length === 1 ? 'License Promotion' : 'License Promotions',
             description: lines.join('\n'),
-            color: 0xf2e114,
+            color: 0xa6192e,
             footer: { text: 'HCR League · earned from race pace, safety & results' },
           },
         ],

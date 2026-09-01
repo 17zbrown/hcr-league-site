@@ -60,7 +60,7 @@ export default function HeroCarousel() {
                 addressed to a stranger, and there the ask is the right one.
               */}
               <div className="mt-8 flex flex-wrap gap-3">
-                <Link to={`/schedule/${next.id}`} className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1">Race Details</Link>
+                <Link to={`/schedule/${next.id}`} className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-1">Race Details</Link>
                 <Link to="/schedule" className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Full Schedule</Link>
               </div>
             </div>
@@ -121,7 +121,7 @@ export default function HeroCarousel() {
                 <ClassChip classId={winner.class_id} size="md" />
                 <span className="tabular text-[var(--color-muted)]">#{winner.number} · {winner.laps} laps · {winner.best_lap}</span>
               </div>
-              <Link to="/results" className="mt-8 inline-block rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1 shadow-glow">Race Results</Link>
+              <Link to="/results" className="mt-8 inline-block rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-1 shadow-glow">Race Results</Link>
             </div>
             <div className="hidden md:block">
               <Link to="/results" className="block rounded-2xl bg-[var(--color-deep-2)] p-8 text-center transition-transform hover:-translate-y-0.5">
@@ -152,7 +152,7 @@ export default function HeroCarousel() {
             fight for three titles — broadcast timing, real race control, no arcade shortcuts.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link to="/signup" className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-1">Enter the Season</Link>
+            <Link to="/signup" className="shadow-glow rounded-xl bg-[var(--color-brand)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-white transition-transform hover:-translate-y-1">Enter the Season</Link>
             <Link to="/standings" className="rounded-xl border border-[var(--color-line-2)] px-7 py-3.5 font-alt text-lg font-bold uppercase tracking-wide text-[var(--color-ink)] transition-colors hover:border-[var(--color-ink)]">Championship</Link>
           </div>
         </div>

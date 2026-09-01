@@ -232,7 +232,7 @@ function ClassTable({
                       <td className="px-4 py-3.5 font-semibold">
                         <span className="inline-flex items-center gap-2">
                           <DriverName text={r.drivers_text} />
-                          {isMe && <span className="rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-black">You</span>}
+                          {isMe && <span className="rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-white">You</span>}
                           {r.fill_in && (
                             <span className="rounded border border-[var(--color-line-2)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-[var(--color-muted)]" title="Fill-in entry — scores the Fill-In Cup, not the championship">
                               Fill-In
@@ -260,7 +260,7 @@ function ClassTable({
                               {r.best_on != null && <span className="ml-1 text-[11px] font-normal text-[var(--color-faint)]">L{r.best_on}</span>}
                             </span>
                             {r.id === flId && (
-                              <span className="rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-black" title="Fastest lap in class">FL</span>
+                              <span className="rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-white" title="Fastest lap in class">FL</span>
                             )}
                           </span>
                         ) : (

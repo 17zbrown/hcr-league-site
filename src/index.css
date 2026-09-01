@@ -3,8 +3,8 @@
 /* ------------------------------------------------------------------ *
  * HCR League — design tokens ("paddock catalog" system)
  * Clean white grounds, heavy grotesque display type, chip filters and
- * card grids, full-bleed near-black feature panels, HCR yellow as the
- * single hot accent. Mono is reserved for timing data — the league's
+ * card grids, full-bleed near-black feature panels, HCR red — a rich dark carmine — as the
+ * single hot accent (black/red/white brand). Mono is reserved for timing data — the league's
  * signature. Class colors come from the DB.
  * ------------------------------------------------------------------ */
 @theme {
@@ -25,10 +25,10 @@
   --color-muted: #5d5d58;   /* muted text (AA on light) */
   --color-faint: #63635e;   /* captions (AA on mist) */
 
-  /* Accents — HCR yellow is the hot accent (swap --color-brand to
-     #ff4d00 for the reference's literal orange) */
-  --color-brand: #f2e114;
-  --color-brand-deep: #756a07; /* yellow legible as text on white */
+  /* Accents — HCR red is the hot accent: a rich, dark carmine (Pantone 187
+     territory), black/red/white brand per league directive 1 Sep 2026 */
+  --color-brand: #a6192e;
+  --color-brand-deep: #7c1121; /* red legible as text on white */
   --color-accent: #d93b45;
   --color-blue: #2f6bff;
   --color-green: #12805c;
@@ -82,7 +82,7 @@
 
   ::selection {
     background: var(--color-brand);
-    color: #000;
+    color: #fff;
   }
 
   .tabular {
@@ -122,7 +122,7 @@
     box-shadow: 0 18px 40px -28px rgba(10, 10, 10, 0.35);
   }
   .shadow-glow {
-    box-shadow: 0 14px 38px -14px rgba(242, 225, 20, 0.7);
+    box-shadow: 0 14px 38px -14px rgba(166, 25, 46, 0.55);
   }
 
   /* Telemetry gridline on feature panels, fading via a radial mask. */
@@ -148,9 +148,12 @@
     --color-ink-2: #d9d9d4;
     --color-muted: #a8a8a2;
     --color-faint: #97978f;
-    /* accents tuned for white fail AA on near-black — remap them too */
+    /* accents tuned for white fail AA on near-black — remap them too.
+       The rich carmine itself is ~1.7:1 on black, so both brand tokens
+       brighten on dark grounds. */
     --color-blue: #7da2ff;
-    --color-brand-deep: var(--color-brand);
+    --color-brand: #ef4655;
+    --color-brand-deep: #f2556a;
     color: var(--color-ink);
   }
 
@@ -274,7 +277,7 @@
     transition: transform 0.15s, background 0.2s, border-color 0.2s, opacity 0.2s;
   }
   .hcr-btn:disabled { opacity: 0.55; cursor: default; }
-  .hcr-btn-primary { background: var(--color-brand); color: #000; }
+  .hcr-btn-primary { background: var(--color-brand); color: #fff; }
   .hcr-btn-primary:hover:not(:disabled) { transform: translateY(-1px); }
   /* Solid ink button — the reference's black CTA. */
   .hcr-btn-dark { background: var(--color-deep); color: #fff; }

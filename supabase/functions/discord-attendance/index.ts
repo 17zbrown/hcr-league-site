@@ -51,7 +51,7 @@ const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
 const SITE = 'https://hcrleague.com'
-const HCR_YELLOW = 0xf2e114
+const HCR_RED = 0xa6192e
 const CLEARED_GREEN = 0x12805c
 const PENALTY_RED = 0xc62430
 const SNOWFLAKE = /^\d{5,25}$/
@@ -528,7 +528,7 @@ Deno.serve(async (req) => {
     const controlEmbed = {
       title: `Attendance — ${label}`,
       description: `${where}\n${when}`,
-      color: HCR_YELLOW,
+      color: HCR_RED,
       fields: controlFields,
       footer: { text: `HCR League · staff only · ${tally.length} on the grid · updates as people answer` },
     }
@@ -557,7 +557,7 @@ Deno.serve(async (req) => {
       // number moves to the footer, available without being the first thing read.
       title: `Are you racing? ${askTitle}`,
       description: `${detail}\n\nTap a button so race control knows what the grid looks like. You can change your mind any time — press the other one.`,
-      color: HCR_YELLOW,
+      color: HCR_RED,
       footer: { text: `HCR League · Round ${next.round} · ${SITE}/schedule` },
     }
     const askComponents = [{

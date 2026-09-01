@@ -108,7 +108,7 @@ function SideValue({ line, side }: { line: LedgerLine; side: 'a' | 'b' }) {
           <AnimatedStat value={v} decimals={line.decimals} prefix={prefix} />
         </span>
       )}
-      {/* winner mark: 2px gold underline; kept as a spacer on the loser so rows don't jitter */}
+      {/* winner mark: 2px brand-red underline; kept as a spacer on the loser so rows don't jitter */}
       <span
         className={`mt-1.5 h-[2px] w-9 rounded-full ${win ? 'bg-[var(--color-brand-deep)]' : 'bg-transparent'}`}
         aria-hidden="true"
@@ -365,7 +365,7 @@ export default function Compare() {
                   </div>
                 </div>
                 <p className="mt-3 font-body text-xs text-[var(--color-faint)]">
-                  The gold underline marks whoever holds the edge on each line. Ties and missing data go unmarked.
+                  The red underline marks whoever holds the edge on each line. Ties and missing data go unmarked.
                 </p>
               </section>
 

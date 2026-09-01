@@ -134,7 +134,7 @@ function SourceBadge({ source }: { source?: string | null }) {
     return (
       <span
         title={source}
-        className="rounded-full bg-[var(--color-brand)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-black"
+        className="rounded-full bg-[var(--color-brand)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white"
       >
         Auto
       </span>

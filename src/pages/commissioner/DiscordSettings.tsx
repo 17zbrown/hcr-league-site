@@ -1615,7 +1615,7 @@ function CommunityChip({ outcome, dryRun }: { outcome: CommunityOutcome; dryRun:
 }
 
 /**
- * Accessible switch — 44px hit target, brand yellow when on. The same control
+ * Accessible switch — 44px hit target, brand red when on. The same control
  * the automation panel uses, so a toggle behaves the same wherever a
  * commissioner meets one.
  */

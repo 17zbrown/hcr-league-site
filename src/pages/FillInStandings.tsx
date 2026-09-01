@@ -147,7 +147,7 @@ export default function FillInStandings() {
                       <td className="px-4 py-3.5 font-semibold">
                         <span className="inline-flex items-center gap-2">
                           <DriverName text={r.name} />
-                          {isMe && <span className="rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-black">You</span>}
+                          {isMe && <span className="rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-white">You</span>}
                         </span>
                       </td>
                       <td className="px-4 py-3.5">

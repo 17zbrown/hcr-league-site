@@ -134,7 +134,7 @@ export default function Home() {
                     </ol>
                     <Link
                       to="/standings"
-                      className={`${ACTION_BAR} bg-[var(--color-cloud)] text-[var(--color-ink)] hover:bg-[var(--color-brand)] hover:text-black`}
+                      className={`${ACTION_BAR} bg-[var(--color-cloud)] text-[var(--color-ink)] hover:bg-[var(--color-brand)] hover:text-white`}
                     >
                       Full standings <span aria-hidden>→</span>
                     </Link>
@@ -175,7 +175,7 @@ export default function Home() {
                 <div className="flex-1 p-5">
                   <div className="flex items-center justify-between gap-4">
                     <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">Round {e.round}</span>
-                    {isNext && <span className="rounded-full bg-[var(--color-brand)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-black">Next</span>}
+                    {isNext && <span className="rounded-full bg-[var(--color-brand)] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-white">Next</span>}
                     {done && <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--color-faint)]">Final</span>}
                   </div>
                   <div className="mt-3 whitespace-nowrap font-display text-2xl leading-tight">{e.track?.name ?? e.name}</div>
@@ -186,7 +186,7 @@ export default function Home() {
                 <div
                   className={`${ACTION_BAR} ${
                     isNext
-                      ? 'bg-[var(--color-brand)] text-black'
+                      ? 'bg-[var(--color-brand)] text-white'
                       : 'bg-[var(--color-mist)] text-[var(--color-ink)] group-hover:bg-[var(--color-deep)] group-hover:text-white'
                   }`}
                 >

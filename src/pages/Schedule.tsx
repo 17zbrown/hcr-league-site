@@ -43,7 +43,7 @@ export default function Schedule() {
                         {String(e.round).padStart(2, '0')}
                       </span>
                       {isNext && (
-                        <span className="rounded-full bg-[var(--color-brand)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.06em] text-black">
+                        <span className="rounded-full bg-[var(--color-brand)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.06em] text-white">
                           Next
                         </span>
                       )}
