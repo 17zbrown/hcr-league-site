@@ -176,6 +176,9 @@ export interface RaceResult {
   intvl: string | null
   best_lap: string | null
   best_on: number | null
+  laps_led: number | null
+  quali_time: string | null
+  avg_lap: string | null
   status: string | null
   points: number | null
   adjust: number | null

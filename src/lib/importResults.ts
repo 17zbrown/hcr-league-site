@@ -4,8 +4,8 @@ import type { Season } from './types'
 /** Canonical fields we import into the `results` table. */
 export type Field =
   | 'cls_pos' | 'pos' | 'class_id' | 'number' | 'drivers_text' | 'car'
-  | 'grid' | 'laps' | 'total_time' | 'gap' | 'intvl' | 'best_lap' | 'best_on'
-  | 'inc' | 'status' | 'points' | 'quali_pos' | 'quali_points' | 'fill_in'
+  | 'grid' | 'laps' | 'laps_led' | 'total_time' | 'gap' | 'intvl' | 'best_lap' | 'best_on'
+  | 'inc' | 'status' | 'points' | 'quali_pos' | 'quali_time' | 'quali_points' | 'avg_lap' | 'fill_in'
 
 export interface ImportedRow {
   cls_pos?: string
@@ -16,6 +16,7 @@ export interface ImportedRow {
   car?: string
   grid?: string
   laps?: string
+  laps_led?: string
   total_time?: string
   gap?: string
   intvl?: string
@@ -25,22 +26,24 @@ export interface ImportedRow {
   status?: string
   points?: string
   quali_pos?: string
+  quali_time?: string
   quali_points?: string
+  avg_lap?: string
   fill_in?: string
 }
 
 export const FIELD_LABELS: Record<Field, string> = {
   cls_pos: 'Cls Pos', pos: 'Overall', class_id: 'Class', number: 'No.',
   drivers_text: 'Driver(s)', car: 'Car', grid: 'Grid', laps: 'Laps',
-  total_time: 'Total Time', gap: 'Gap', intvl: 'Interval', best_lap: 'Best Lap',
+  laps_led: 'Laps Led', total_time: 'Total Time', gap: 'Gap', intvl: 'Interval', best_lap: 'Best Lap',
   best_on: 'Best On', inc: 'Inc', status: 'Status', points: 'Pts',
-  quali_pos: 'Q Pos', quali_points: 'Q Pts', fill_in: 'Fill-In (y/n)',
+  quali_pos: 'Q Pos', quali_time: 'Q Time', quali_points: 'Q Pts', avg_lap: 'Avg Lap', fill_in: 'Fill-In (y/n)',
 }
 
 // Columns shown in the review grid, in order.
 export const GRID_FIELDS: Field[] = [
   'cls_pos', 'pos', 'class_id', 'number', 'drivers_text', 'car', 'grid', 'laps',
-  'best_lap', 'inc', 'status', 'quali_pos', 'quali_points', 'points', 'fill_in',
+  'laps_led', 'best_lap', 'inc', 'status', 'quali_pos', 'quali_time', 'quali_points', 'points', 'fill_in',
 ]
 
 /** True when a fill-in cell says yes: y / yes / true / 1 / x / fill / fill-in. */
@@ -55,43 +58,76 @@ const SYNONYMS: Record<Field, string[]> = {
   class_id: ['class', 'category', 'cls', 'cat'],
   number: ['no', 'number', 'carnumber', 'carno', 'num', 'carnum'],
   drivers_text: ['driver', 'drivers', 'name', 'entry', 'competitor', 'teamdriver', 'crew'],
-  car: ['car', 'vehicle', 'model', 'carmodel', 'make', 'chassis'],
+  car: ['car', 'cartype', 'vehicle', 'model', 'carmodel', 'make', 'chassis'],
   // NB: 'qualpos' belongs to quali_pos only — listing it here too made grid win
   // the match (object key order), so a lone "Qual Pos" column imported as grid.
   grid: ['grid', 'start', 'startpos', 'startingposition', 'st'],
   laps: ['laps', 'lap', 'completed', 'lapscompleted', 'lapscomp'],
+  // "Laps Led" used to contains-match `laps` and steal it — a zero-led finisher
+  // then imported as laps<1 and the DB trigger scored them DNS. Exact home first.
+  laps_led: ['lapsled', 'led', 'lapslead'],
   total_time: ['time', 'totaltime', 'racetime', 'total', 'elapsed'],
   gap: ['gap', 'behind', 'delta'],
   intvl: ['interval', 'int', 'intvl'],
-  best_lap: ['best', 'bestlap', 'fastlap', 'fastest', 'fastestlap', 'besttime', 'fl'],
-  best_on: ['bestlapnum', 'beston', 'fllap', 'bestlapon'],
+  best_lap: ['best', 'bestlap', 'fastlap', 'fastest', 'fastestlap', 'fastestlaptime', 'besttime', 'fl'],
+  // iRaceControl's "Fast Lap#" is the LAP NUMBER the fastest lap was set on. norm()
+  // turns '#' into 'num', so it arrives here as 'fastlapnum' and cannot collide
+  // with a plain "Fast Lap" time column.
+  best_on: ['bestlapnum', 'beston', 'fllap', 'bestlapon', 'fastlapnum'],
   inc: ['inc', 'incidents', 'incident', 'contact', 'x'],
   status: ['status', 'result', 'out', 'classified', 'reason'],
   points: ['points', 'pts', 'championshippoints', 'champpts'],
   quali_pos: ['qualpos', 'qualifying', 'qualifyingposition', 'qpos', 'qualiposition', 'qual'],
+  quali_time: ['qualifytime', 'qualtime', 'qualifyingtime', 'qtime', 'qualitime'],
+  avg_lap: ['averagelaptime', 'avglap', 'avglaptime', 'averagelap'],
   quali_points: ['qualpoints', 'qpts', 'polepoints', 'qualifyingpoints'],
   fill_in: ['fillin', 'fill', 'guest', 'wildcard', 'nonscoring', 'invitational'],
 }
 
 function norm(s: string) {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, '')
+  // '#' means "number" on every timing sheet — keep that meaning instead of
+  // deleting it, so "Car #" and "Fast Lap#" stay distinguishable from "Car" and
+  // "Fast Lap" after normalisation.
+  return s.toLowerCase().replace(/#/g, 'num').replace(/[^a-z0-9]/g, '')
 }
 
-/** Match a raw CSV header to a canonical field. */
-function matchField(header: string, taken: Set<Field>): Field | null {
-  const h = norm(header)
-  if (!h) return null
-  // exact match first
-  for (const f of Object.keys(SYNONYMS) as Field[]) {
-    if (taken.has(f)) continue
-    if (SYNONYMS[f].some((s) => s === h)) return f
-  }
-  // contains match
-  for (const f of Object.keys(SYNONYMS) as Field[]) {
-    if (taken.has(f)) continue
-    if (SYNONYMS[f].some((s) => h.includes(s) || s.includes(h))) return f
-  }
-  return null
+/**
+ * Map every header to a canonical field — EXACT MATCHES FIRST, ACROSS THE WHOLE
+ * ROW, then a contains pass over what is left.
+ *
+ * A per-column exact-then-contains order let an EARLIER fuzzy column steal a
+ * LATER column's exact home: iRaceControl orders "Out ID" before "Out" and
+ * "Laps Led" before "Laps Comp", so `status` held a numeric id and `laps` held
+ * laps led — and a finisher who led nothing imported as a 0-lap DNS.
+ *
+ * The contains pass keeps two guards: only the header may contain the synonym
+ * (never the reverse — a lone short header used to claim whole fields), and the
+ * synonym must be 5+ characters, because 'car' inside 'carid' and 'fill' inside
+ * 'maxfuelfill' are coincidences, not matches.
+ */
+function mapHeaders(headers: string[]): (Field | null)[] {
+  const fields = Object.keys(SYNONYMS) as Field[]
+  const taken = new Set<Field>()
+  const out: (Field | null)[] = headers.map(() => null)
+
+  headers.forEach((header, i) => {
+    const h = norm(header)
+    if (!h) return
+    for (const f of fields) {
+      if (taken.has(f)) continue
+      if (SYNONYMS[f].some((s) => s === h)) { out[i] = f; taken.add(f); return }
+    }
+  })
+  headers.forEach((header, i) => {
+    if (out[i]) return
+    const h = norm(header)
+    if (!h) return
+    for (const f of fields) {
+      if (taken.has(f)) continue
+      if (SYNONYMS[f].some((s) => s.length >= 5 && h.includes(s))) { out[i] = f; taken.add(f); return }
+    }
+  })
+  return out
 }
 
 /** Parse a CSV string into review rows with fuzzy header mapping. */
@@ -101,12 +137,7 @@ export function parseCsv(text: string): ImportedRow[] {
   if (!rows.length) return []
 
   const headers = rows[0].map(String)
-  const taken = new Set<Field>()
-  const colMap: (Field | null)[] = headers.map((h) => {
-    const f = matchField(h, taken)
-    if (f) taken.add(f)
-    return f
-  })
+  const colMap = mapHeaders(headers)
 
   // If we mapped at least a couple of columns, treat row 0 as a header.
   const mappedCount = colMap.filter(Boolean).length
@@ -133,12 +164,7 @@ export function parseText(text: string): ImportedRow[] {
 
   const splitCells = (l: string) => l.split(/\t|\s{2,}/).map((c) => c.trim()).filter(Boolean)
   const headers = splitCells(lines[headerIdx])
-  const taken = new Set<Field>()
-  const colMap = headers.map((h) => {
-    const f = matchField(h, taken)
-    if (f) taken.add(f)
-    return f
-  })
+  const colMap = mapHeaders(headers)
   const mapped = colMap.filter(Boolean).length
 
   const body = lines.slice(headerIdx + 1)
@@ -241,6 +267,7 @@ export function toResultInsert(r: ImportedRow, eventId: string, teamByClassNumbe
     cls_pos: numOrNull(r.cls_pos),
     grid: numOrNull(r.grid),
     laps: numOrNull(r.laps),
+    laps_led: numOrNull(r.laps_led),
     total_time: r.total_time ?? null,
     gap: r.gap ?? null,
     intvl: r.intvl ?? null,
@@ -250,7 +277,9 @@ export function toResultInsert(r: ImportedRow, eventId: string, teamByClassNumbe
     status: r.status ?? null,
     points: numOrNull(r.points),
     quali_pos: numOrNull(r.quali_pos),
+    quali_time: r.quali_time?.trim() || null,
     quali_points: numOrNull(r.quali_points),
+    avg_lap: r.avg_lap?.trim() || null,
     team_id: (number && teamByClassNumber.get(teamKey(classId, number))) || null,
     fill_in: isFillIn(r.fill_in),
   }
