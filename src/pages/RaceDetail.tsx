@@ -3,14 +3,12 @@ import { Link, useParams } from 'react-router-dom'
 import {
   useClasses,
   useEvent,
-  useLiveWeather,
-  useRaceForecast,
   useResults,
   useSessions,
   useTrackWinners,
   useWeather,
 } from '../lib/queries'
-import { CLASS_ORDER, classColor, eventStart, fmtDate, fmtDateLong, fmtTime, raceDateKey, wmo } from '../lib/format'
+import { CLASS_ORDER, classColor, eventStart, fmtDate, fmtDateLong, fmtTime } from '../lib/format'
 import { ClassChip, Skeleton } from '../components/ui'
 import { FeaturePanel, StatBand, type Stat } from '../components/editorial'
 import { DriverName } from '../components/links'
@@ -26,11 +24,6 @@ function sessionTime(iso: string) {
   })
 }
 
-function hourLabel(h: number) {
-  const hr = h % 12 === 0 ? 12 : h % 12
-  return `${hr}${h < 12 ? 'am' : 'pm'}`
-}
-
 export default function RaceDetail() {
   const { id } = useParams()
   const { data: event, isLoading } = useEvent(id)
@@ -39,48 +32,10 @@ export default function RaceDetail() {
   const { data: simWeather } = useWeather(id)
   const { data: results } = useResults(id)
   const track = event?.track
-  const { data: live, isLoading: liveLoading, isError: liveError } = useLiveWeather(track?.lat, track?.lon)
   const { data: trackWinners } = useTrackWinners(track?.id)
 
   const done = event?.status === 'complete'
   const upcoming = !!event && !done
-
-  // Race-day forecast window, centered on the in-sim start hour. The key is the
-  // race day AT THE TRACK (see raceDateKey) because the query sends timezone=auto;
-  // it used to be the UTC day, which for a midnight-UTC green flag is the day AFTER
-  // the race and fetched the wrong forecast entirely.
-  const dateStr = event ? raceDateKey(event.date) : undefined
-  const daysUntil = dateStr
-    ? Math.round((new Date(`${dateStr}T00:00:00`).getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000)
-    : 0
-  const pastRace = daysUntil < 0
-  const tooFar = daysUntil > 15
-  const centerHour = event?.sim_start_hour != null ? Math.round(event.sim_start_hour) : 13
-  const { data: fc, isLoading: fcLoading, isError: fcError } = useRaceForecast({
-    lat: track?.lat, lon: track?.lon, dateStr, past: pastRace, tooFar,
-  })
-
-  const forecastHours = useMemo(() => {
-    const h = fc?.hourly
-    if (!h?.time?.length) return []
-    const found = h.time.findIndex((t) => parseInt(t.slice(11, 13), 10) === centerHour)
-    const center = found >= 0 ? found : Math.min(13, h.time.length - 1)
-    const out: {
-      hour: number; temp?: number; code?: number; precipProb?: number; precip?: number; isCenter: boolean
-    }[] = []
-    for (let i = center - 3; i <= center + 3; i++) {
-      if (i < 0 || i >= h.time.length) continue
-      out.push({
-        hour: parseInt(h.time[i].slice(11, 13), 10),
-        temp: h.temperature_2m?.[i],
-        code: h.weather_code?.[i],
-        precipProb: h.precipitation_probability?.[i],
-        precip: h.precipitation?.[i],
-        isCenter: i === center,
-      })
-    }
-    return out
-  }, [fc, centerHour])
 
   const winners = useMemo(
     () =>
@@ -203,84 +158,22 @@ export default function RaceDetail() {
           </section>
         </Reveal>
 
-        {/* Weather */}
+        {/* Weather — IN-SIM ONLY, deliberately.
+            This section used to lead with live real-world conditions at the physical
+            circuit and a real-world race-day forecast. Neither means anything here:
+            the session runs its own in-sim date under Realistic Weather, so the sky
+            over the real Elkhart Lake is trivia, not information. League directive,
+            1 Sep: no real-world items — show what iRacing shows. The one block that
+            matches the session editor is now the whole section. */}
         <Reveal delay={0.08}>
           <section>
             <div className="mb-4 flex items-center gap-3">
-              <h2 className="text-2xl leading-none">Weather</h2>
+              <h2 className="text-2xl leading-none">In-Sim Weather</h2>
               <span className="h-px flex-1 bg-[var(--color-line)]" aria-hidden />
             </div>
-
-            {/* Live real-world conditions */}
-            <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
-              <div className={`${MICRO} mb-3`}>Now at {track?.location ?? track?.name}</div>
-              {track?.lat == null ? (
-                <p className="text-sm text-[var(--color-muted)]">No coordinates for this track.</p>
-              ) : liveLoading ? (
-                <Skeleton className="h-16 w-full" />
-              ) : liveError || !live?.current ? (
-                <p className="text-sm text-[var(--color-muted)]">Live weather unavailable right now.</p>
-              ) : (
-                <div className="flex items-center gap-5">
-                  <div className="text-5xl">{wmo(live.current.weather_code).icon}</div>
-                  <div>
-                    <div className="font-display text-4xl leading-none">{Math.round(live.current.temperature_2m)}°F</div>
-                    <div className="text-sm text-[var(--color-muted)]">{wmo(live.current.weather_code).label}</div>
-                  </div>
-                  <div className="tabular ml-auto space-y-1 text-right text-sm text-[var(--color-ink-2)]">
-                    <div><span className="text-[var(--color-muted)]">Feels </span>{Math.round(live.current.apparent_temperature)}°</div>
-                    <div><span className="text-[var(--color-muted)]">Wind </span>{Math.round(live.current.wind_speed_10m)} mph</div>
-                    <div><span className="text-[var(--color-muted)]">Humidity </span>{live.current.relative_humidity_2m}%</div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Real-world race-day forecast, centered on the in-sim start hour */}
-            {track?.lat != null && (
-              <div className="mt-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5">
-                <div className={`${MICRO} mb-3`}>
-                  {pastRace ? 'Conditions on race day' : 'Race-day forecast'} · sim start {hourLabel(centerHour)}
-                </div>
-                {tooFar ? (
-                  <p className="text-sm text-[var(--color-muted)]">Available closer to race day (within ~2 weeks).</p>
-                ) : fcLoading ? (
-                  <Skeleton className="h-24 w-full" />
-                ) : fcError || !forecastHours.length ? (
-                  <p className="text-sm text-[var(--color-muted)]">Forecast unavailable right now.</p>
-                ) : (
-                  <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1" tabIndex={0} role="region" aria-label="Race day forecast">
-                    {forecastHours.map((h) => (
-                      <div
-                        key={h.hour}
-                        className={`min-w-[62px] flex-1 rounded-lg border bg-[var(--color-paper)] p-2 text-center ${
-                          h.isCenter ? 'shadow-card border-[var(--color-brand)]' : 'border-[var(--color-line)]'
-                        }`}
-                      >
-                        <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">{hourLabel(h.hour)}</div>
-                        <div className="my-0.5 text-2xl">{h.code != null ? wmo(h.code).icon : '—'}</div>
-                        <div className="font-display text-lg leading-none">
-                          {h.temp != null ? `${Math.round(h.temp)}°` : '—'}
-                        </div>
-                        <div className="tabular mt-1 text-[10px] text-[var(--color-blue)]">
-                          {pastRace
-                            ? h.precip != null ? `${h.precip.toFixed(1)}mm` : ''
-                            : h.precipProb != null ? `${h.precipProb}%` : ''}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* In-sim race-day forecast — mirrors the iRacing session editor, which is
-                the weather drivers will actually get. The real-world blocks above are
-                context; this one is the truth for setup decisions, so it carries every
-                field the editor shows: temp, skies, rain, wind, humidity, cloud cover. */}
-            {!!simWeather?.length && (
-              <div className="mt-3 rounded-xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-5">
-                <div className={`${MICRO} mb-3`}>In-sim forecast (from iRacing)</div>
+            {simWeather?.length ? (
+              <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-cloud)] p-5">
+                <div className={`${MICRO} mb-3`}>From the iRacing session editor — what the grid will actually race in</div>
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                   {simWeather.map((w) => (
                     <div key={w.id} className="tabular">
@@ -298,6 +191,10 @@ export default function RaceDetail() {
                   ))}
                 </div>
               </div>
+            ) : (
+              <p className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-5 text-sm text-[var(--color-muted)]">
+                Session weather appears here once race control sets it in the iRacing session editor.
+              </p>
             )}
           </section>
         </Reveal>
