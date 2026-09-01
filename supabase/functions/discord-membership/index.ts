@@ -75,10 +75,11 @@ const WELCOME_MAX_AGE_MS = 2 * 24 * 60 * 60 * 1000
  */
 const TOUR: { names: string[]; blurb: string }[] = [
   { names: ['website'], blurb: 'the league site — schedule, standings, results and sign-up' },
-  { names: ['announcements'], blurb: 'race weeks and results — the one channel to keep unmuted' },
+  { names: ['announcements'], blurb: 'league announcements — the one channel to keep unmuted' },
+  { names: ['race-attendance'], blurb: 'answer the two buttons each week so race control can plan the grid' },
   { names: ['news'], blurb: 'every story the site publishes' },
   { names: ['general-chat', 'general'], blurb: 'talk to the rest of the grid' },
-  { names: ['race-control'], blurb: 'stewarding decisions and rulings' },
+  { names: ['race-control-announcements'], blurb: 'stewarding decisions and rulings, published as they land' },
   { names: ['incident-protests', 'protests'], blurb: 'discuss an incident — but protests are **filed on the website**, not here' },
   { names: ['rules', 'rulebook'], blurb: 'the rulebook — worth ten minutes before your first race' },
 ]

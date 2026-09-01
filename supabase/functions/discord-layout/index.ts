@@ -68,12 +68,15 @@ const CHANNEL_ORDER: Record<string, string[]> = {
   // driver must visit each week, and unlisted channels sort to the BOTTOM of
   // their category — which is where the enforcement run kept shoving it every
   // thirty minutes until it was added here.
-  LEAGUE: ['welcome', 'rules', 'announcements', 'race-attendance', 'news', 'standings', 'race-results', 'season-signups', 'rulebook'],
+  LEAGUE: ['welcome', 'rules', 'website', 'announcements', 'race-attendance', 'news', 'season-signups'],
   PADDOCK: ['general-chat', 'gravel-trap', 'promotions', 'Race Channel', 'Voice Chat'],
   // league-recommendations is the only member-writable room in here, so it sits at the
   // bottom of the text channels — staff rooms first, then the one members open.
   // attendance is the private staff tally, distinct from LEAGUE/race-attendance.
-  'RACE CONTROL': ['race-control', 'incident-protests', 'attendance', 'license-ups', 'race-control-announcements', 'league-recommendations', 'Steward Radio'],
+  // Topology decided 1 Sep: the published-information channels live HERE, because
+  // race control is the league staff and these rooms are what they publish. Staff
+  // working rooms first, then everything members read, then the suggestion box.
+  'RACE CONTROL': ['race-control', 'incident-protests', 'attendance', 'race-control-announcements', 'license-ups', 'standings', 'race-results', 'rulebook', 'league-recommendations', 'Steward Radio'],
   ADMIN: ['admin-chat', 'bot-log', 'member-departures', 'safety-alerts', 'community-updates', 'iracing-names'],
 }
 
@@ -478,6 +481,7 @@ Deno.serve(async (req) => {
         const roleCols = [
           'role_site_admin', 'role_site_race_control', 'role_league_member', 'role_endurance_member',
           'role_driver', 'role_bronze', 'role_silver', 'role_gold', 'role_platinum',
+          'role_spectator', 'role_attendance_pending', 'role_never_raced', 'gate_role_id',
         ]
         const deletedIds = new Set(rolePlan.filter((p) => p.action === 'delete').map((p) => p.id))
         const patch: Record<string, null> = {}

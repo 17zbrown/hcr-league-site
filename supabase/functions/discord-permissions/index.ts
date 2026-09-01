@@ -349,10 +349,13 @@ Deno.serve(async (req) => {
     }
 
     // --- 3. the results forum: reply, don't post ---
-    const forum = children.find((c) => String(c.id) === forumId)
+    // Found by its CONFIGURED ID across the whole server, not by hunting LEAGUE:
+    // the topology decision of 1 Sep keeps it in RACE CONTROL, and the old
+    // LEAGUE-only search made this whole section a silent no-op there.
+    const forum = channels.find((c) => String(c.id) === forumId)
       ?? children.find((c) => c.type === CHAN_FORUM)
     if (!forum) {
-      warnings.push('No forum channel was found in LEAGUE, so the reply-only rule was not applied to anything.')
+      warnings.push('No results forum was found (channel_results unset and no forum in LEAGUE), so the reply-only rule was not applied.')
     } else {
       if (forum.type !== CHAN_FORUM) {
         warnings.push(`#${forum.name} is not a forum channel, so "reply but don't create posts" does not apply to it the same way. Left alone.`)
@@ -557,6 +560,44 @@ Deno.serve(async (req) => {
             if (patched.ok) applied.push("server \u00b7 Discord's join messages suppressed")
             else warnings.push(`Could not suppress Discord's join messages — ${patched.message}`)
           }
+        }
+      }
+    }
+
+    // --- 7b. the published-information channels in RACE CONTROL stay readable ---
+    //
+    // Topology decision, 1 Sep: #standings, #race-results and #rulebook live in
+    // RACE CONTROL because race control is the league staff and these are what
+    // they publish. The category denies @everyone, so each channel needs its own
+    // member allow — until now those allows were LEFTOVERS from before the move,
+    // guaranteed by nothing. This asserts them every run. Read-only: they are
+    // publication surfaces, not conversations.
+    for (const name of ['standings', 'race-results', 'rulebook']) {
+      const ch = channels.find((c) => c.type !== CHAN_CATEGORY && String(c.name ?? '') === name
+        && String(c.parent_id ?? '') === String(raceControlCat?.id ?? ''))
+      if (!ch) continue
+      if (ch.type === CHAN_FORUM) continue // the results forum has its own rule above
+      await setPerms(ch, memberRole, memberLabel, READ_ONLY_ALLOW, READ_ONLY_DENY)
+      for (const [rid, label] of [[adminRole, 'Admin'], [rcRole, 'Race Control'], [botRole, 'HCR Bot']] as const) {
+        if (SNOWFLAKE.test(rid)) await setPerms(ch, rid, label, FORUM_STAFF_ALLOW, 0n)
+      }
+    }
+
+    // --- 7c. the uncategorised strays get homes in LEAGUE ---
+    //
+    // #welcome, #rules and #website have floated outside every category since the
+    // reorg dissolved START HERE. Moved (not resynced) into LEAGUE so their own
+    // overwrites survive; the layout order puts them at the top.
+    if (league) {
+      for (const name of [WELCOME_NAME, 'rules', 'website']) {
+        const ch = channels.find((c) => c.type !== CHAN_CATEGORY && String(c.name ?? '') === name)
+        if (!ch || String(ch.parent_id ?? '') === String(league.id)) continue
+        if (ch.parent_id != null) continue // categorised elsewhere on purpose — leave it
+        planned.push({ channel: name, target: '(category)', add: ['MOVE to LEAGUE'], remove: [] })
+        if (!dryRun) {
+          const moved = await discord(`/channels/${ch.id}`, 'PATCH', botToken, { parent_id: league.id })
+          if (moved.ok) applied.push(`${name} · moved to LEAGUE`)
+          else warnings.push(`Could not move #${name} into LEAGUE — ${moved.message}`)
         }
       }
     }
