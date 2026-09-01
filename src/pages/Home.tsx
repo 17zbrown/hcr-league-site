@@ -336,7 +336,7 @@ function JoinTheGrid() {
               Join the Discord
             </a>
             <Link to="/signup" className="hcr-btn hcr-btn-ghost w-full justify-center">
-              How it works →
+              Enter the Season →
             </Link>
             {settings?.broadcast_url && (
               <a
@@ -408,7 +408,7 @@ function LeagueNews() {
           {news.slice(0, 3).map((a, i) => (
             <Reveal key={a.id} delay={i * 0.06} className="h-full">
               <Link
-                to={`/news#${a.slug}`}
+                to={`/news/${a.slug}`}
                 className="group flex h-full flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] transition-transform hover:-translate-y-0.5 hover:shadow-card"
               >
                 <div className="flex flex-1 flex-col p-5">

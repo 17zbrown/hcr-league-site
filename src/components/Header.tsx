@@ -107,7 +107,7 @@ export default function Header() {
               </Link>
             ) : (
               <Link to="/signup" className="hidden rounded-lg bg-[var(--color-brand)] px-4 py-2.5 text-[13px] font-bold uppercase tracking-wide text-black transition-transform hover:-translate-y-0.5 sm:block">
-                Enter Season
+                Enter the Season
               </Link>
             )}
 

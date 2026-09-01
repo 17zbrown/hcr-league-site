@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   useClasses,
   useCurrentSeason,
+  useEntries,
   useDrivers,
   useSeasonResultsFull,
 } from '../lib/queries'
@@ -120,13 +121,17 @@ function SideValue({ line, side }: { line: LedgerLine; side: 'a' | 'b' }) {
 function HeadName({
   driver,
   classes,
+  entryLabel,
+  entryClass,
   side,
 }: {
   driver: Driver
   classes?: LeagueClass[]
+  entryLabel?: string | null
+  entryClass?: string | null
   side: 'a' | 'b'
 }) {
-  const cls = driver.team?.class_id
+  const cls = entryClass ?? driver.team?.class_id
   const color = cls ? classColor(cls, classes) : 'var(--color-brand)'
   const align = side === 'a' ? 'md:items-start md:text-left' : 'md:items-end md:text-right'
   return (
@@ -137,7 +142,7 @@ function HeadName({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {cls && <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} aria-hidden="true" />}
         <span className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-[var(--color-muted)]">
-          {driver.team ? `${driver.team.class_id} · ${driver.team.name}` : 'Free agent'}
+          {entryLabel ?? (driver.team ? `${driver.team.class_id} · ${driver.team.name}` : 'Not entered this season')}
         </span>
       </div>
     </div>
@@ -154,6 +159,14 @@ export default function Compare() {
   const { data: drivers, isLoading: driversLoading } = useDrivers()
   const { data: classes } = useClasses()
   const { data: season, isLoading: seasonLoading } = useCurrentSeason()
+  const { data: entries } = useEntries(season?.id)
+  // The seat is the truth about class and number this season; drivers.team is the
+  // empty teams-schema leftover.
+  const seatFor = (id?: string) => (entries ?? []).find((e) => (e.drivers ?? []).some((l) => l.driver?.id === id))
+  const seatLabel = (id?: string) => {
+    const s = seatFor(id)
+    return s ? `${s.class_id} · #${s.number}` : null
+  }
   const { data: results, isLoading: resultsLoading } = useSeasonResultsFull(season?.id)
 
   const driverA = drivers?.find((d) => d.id === aId)
@@ -297,11 +310,11 @@ export default function Compare() {
           {/* ---------- feature header ---------- */}
           <FeaturePanel className="mt-8">
             <div className="grid items-center gap-6 p-7 md:grid-cols-[1fr_auto_1fr] md:gap-8 md:p-10">
-              <HeadName driver={driverA!} classes={classes} side="a" />
+              <HeadName driver={driverA!} classes={classes} entryLabel={seatLabel(aId)} entryClass={seatFor(aId)?.class_id} side="a" />
               <div className="text-center font-mono text-sm uppercase tracking-[0.3em] text-[var(--color-muted)]">
                 vs
               </div>
-              <HeadName driver={driverB!} classes={classes} side="b" />
+              <HeadName driver={driverB!} classes={classes} entryLabel={seatLabel(bId)} entryClass={seatFor(bId)?.class_id} side="b" />
             </div>
           </FeaturePanel>
 

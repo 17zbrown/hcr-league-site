@@ -93,6 +93,13 @@ export default async function handler(request: Request, context: Context) {
     imageUrl = await pickImage(origin, `/og/driver-${parts[1]}.png`, meta.image)
   }
 
+  if (section === 'news' && parts[1]) {
+    const row = await sbOne(`news?slug=eq.${encodeURIComponent(parts[1])}&is_published=eq.true&select=title,dek`)
+    const title = row?.title as string | undefined
+    const dek = row?.dek as string | undefined
+    if (title) meta = { ...meta, title: `${title} — ${SITE}`, description: dek || meta.description }
+  }
+
   const pageUrl = `${origin}${url.pathname}`
   const T = esc(meta.title)
   const D = esc(meta.description)

@@ -37,7 +37,7 @@ export default function Footer() {
               <li><a className="hover:text-[var(--color-brand)]" href={settings.broadcast_url} target="_blank" rel="noreferrer">Watch Live</a></li>
             )}
             <li><Link className="hover:text-[var(--color-brand)]" to="/rulebook">Rulebook</Link></li>
-            <li><Link className="hover:text-[var(--color-brand)]" to="/signup">Season Sign-Up</Link></li>
+            <li><Link className="hover:text-[var(--color-brand)]" to="/signup">Enter the Season</Link></li>
           </ul>
         </div>
       </div>

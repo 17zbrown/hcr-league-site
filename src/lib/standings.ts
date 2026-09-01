@@ -29,7 +29,7 @@ interface Accum {
 function finalize(map: Map<string, Accum>): StandingRow[] {
   return Array.from(map.values())
     .map((a) => ({ ...a }))
-    .sort((a, b) => b.points - a.points || (a.bestFinish ?? 99) - (b.bestFinish ?? 99))
+    .sort((a, b) => b.points - a.points || (a.bestFinish ?? 99) - (b.bestFinish ?? 99) || a.key.localeCompare(b.key))
 }
 
 /** Row points: race + quali + steward adjustment. The single scoring formula. */
@@ -189,7 +189,7 @@ export function computeProgression(
     }
     return { key, name: s.name, cumulative, total: run }
   })
-  series.sort((a, b) => b.total - a.total)
+  series.sort((a, b) => b.total - a.total || a.key.localeCompare(b.key))
 
   return { rounds, series }
 }

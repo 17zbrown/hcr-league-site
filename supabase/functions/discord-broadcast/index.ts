@@ -454,7 +454,7 @@ Deno.serve(async (req) => {
             .select('class_id, number, drivers_text, cls_pos, points, quali_points, adjust, fill_in')
             .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000'])
 
-          const champ = new Map<string, Map<string, { name: string; points: number; best: number | null }>>()
+          const champ = new Map<string, Map<string, { key: string; name: string; points: number; best: number | null }>>()
           for (const r of ((seasonRes ?? []) as ResultRow[])) {
             if (r.fill_in) continue
             const cls = String(r.class_id ?? '')
@@ -462,7 +462,7 @@ Deno.serve(async (req) => {
             const nm = (r.drivers_text || '').trim() || `#${r.number ?? '?'}`
             const key = crewKey(r.drivers_text, nm)
             const bucket = champ.get(cls) ?? new Map()
-            const cur = bucket.get(key) ?? { name: nm, points: 0, best: null }
+            const cur = bucket.get(key) ?? { key, name: nm, points: 0, best: null }
             cur.points += rowPoints(r)
             const p = r.cls_pos ?? null
             cur.best = cur.best === null ? p : Math.min(cur.best, p ?? 99)
@@ -474,7 +474,7 @@ Deno.serve(async (req) => {
             const bucket = champ.get(cls)
             if (!bucket || bucket.size === 0) return null
             const top = [...bucket.values()]
-              .sort((a, b) => b.points - a.points || (a.best ?? 99) - (b.best ?? 99)).slice(0, 3)
+              .sort((a, b) => b.points - a.points || (a.best ?? 99) - (b.best ?? 99) || a.key.localeCompare(b.key)).slice(0, 3)
             return `**${cls}** ${top.map((t) => `${t.name} ${Math.round(t.points * 100) / 100}`).join(' · ')}`
           }).filter(Boolean) as string[]
 
@@ -528,7 +528,7 @@ Deno.serve(async (req) => {
           // the reader at the top of the feed — so a ping about round 5 could land
           // them on a round-4 story, which is exactly what happened when the Detroit
           // report was unpublished after its ping went out.
-          url: `${SITE}/news#${article.slug}`,
+          url: `${SITE}/news/${article.slug}`,
           description: clip(String(article.dek ?? ''), MAX_DESC),
           color: HCR_YELLOW,
           ...(lead && /^https?:\/\//i.test(lead) ? { image: { url: lead } } : {}),
@@ -551,7 +551,7 @@ Deno.serve(async (req) => {
           .select('class_id, number, drivers_text, cls_pos, points, quali_points, adjust, fill_in')
           .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000'])
 
-        const perClass = new Map<string, Map<string, { name: string; points: number; best: number | null; starts: number }>>()
+        const perClass = new Map<string, Map<string, { key: string; name: string; points: number; best: number | null; starts: number }>>()
         for (const r of ((res ?? []) as ResultRow[])) {
           if (r.fill_in) continue
           const cls = String(r.class_id ?? '')
@@ -559,7 +559,7 @@ Deno.serve(async (req) => {
           const name = (r.drivers_text || '').trim() || `#${r.number ?? '?'}`
           const key = crewKey(r.drivers_text, name)
           const bucket = perClass.get(cls) ?? new Map()
-          const cur = bucket.get(key) ?? { name, points: 0, best: null, starts: 0 }
+          const cur = bucket.get(key) ?? { key, name, points: 0, best: null, starts: 0 }
           cur.points += rowPoints(r)
           cur.starts += 1
           const p = r.cls_pos ?? null
@@ -572,7 +572,7 @@ Deno.serve(async (req) => {
           const bucket = perClass.get(cls)
           if (!bucket || bucket.size === 0) return null
           const top = [...bucket.values()]
-            .sort((a, b) => b.points - a.points || (a.best ?? 99) - (b.best ?? 99)).slice(0, 5)
+            .sort((a, b) => b.points - a.points || (a.best ?? 99) - (b.best ?? 99) || a.key.localeCompare(b.key)).slice(0, 5)
           const leader = top[0]?.points ?? 0
           const lines = top.map((t, i) => {
             const pts = Math.round(t.points * 100) / 100

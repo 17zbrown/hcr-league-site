@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useCurrentSeason, useDrivers, useEvents, useNews } from '../lib/queries'
+import { useCurrentSeason, useDrivers, useEntries, useEvents, useNews } from '../lib/queries'
 import { flagFor } from '../lib/countries'
 import { matches } from '../lib/search'
 import { fmtDateLong } from '../lib/format'
@@ -38,6 +38,7 @@ export function GlobalSearch() {
 
   const { data: season } = useCurrentSeason()
   const { data: drivers } = useDrivers()
+  const { data: entries } = useEntries(season?.id)
   const { data: events } = useEvents(season?.id)
   const { data: news } = useNews(30)
 
@@ -64,7 +65,13 @@ export function GlobalSearch() {
       if (matches(q, d.name, d.country, d.team?.name, d.iracing_custid)) {
         out.push({
           id: `d-${d.id}`, kind: 'Driver', label: d.name,
-          detail: d.team?.name ?? 'Free agent',
+          // The seat says what a stranger wants to know: class and number. "Free
+          // agent" was the old teams-schema fallback and applied to literally
+          // everyone, since no team has entered this season.
+          detail: (() => {
+            const seat = (entries ?? []).find((e) => (e.drivers ?? []).some((l) => l.driver?.id === d.id))
+            return seat ? `${seat.class_id} · #${seat.number}` : d.team?.name ?? 'Not entered this season'
+          })(),
           to: `/drivers/${d.id}`, lead: flagFor(d.country),
         })
       }
@@ -80,7 +87,7 @@ export function GlobalSearch() {
     }
     for (const a of news ?? []) {
       if (matches(q, a.title, a.dek, a.category, a.author)) {
-        out.push({ id: `n-${a.id}`, kind: 'News', label: a.title, detail: a.category, to: `/news#${a.slug}` })
+        out.push({ id: `n-${a.id}`, kind: 'News', label: a.title, detail: a.category, to: `/news/${a.slug}` })
       }
     }
     return out.slice(0, 12)

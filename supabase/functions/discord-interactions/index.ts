@@ -278,7 +278,7 @@ const rowPoints = (r: ScoreRow) => (r.points ?? 0) + (r.quali_points ?? 0) + (r.
 
 /** Top `n` per class, keyed by crew, in CLASS_ORDER. */
 function standingsByClass(rows: ScoreRow[], n = 5) {
-  const perClass = new Map<string, Map<string, { name: string; points: number; best: number | null; starts: number }>>()
+  const perClass = new Map<string, Map<string, { key: string; name: string; points: number; best: number | null; starts: number }>>()
   for (const r of rows) {
     if (r.fill_in) continue
     const cls = String(r.class_id ?? '')
@@ -286,7 +286,7 @@ function standingsByClass(rows: ScoreRow[], n = 5) {
     const name = (r.drivers_text || '').trim() || `#${r.number ?? '?'}`
     const key = crewKey(r.drivers_text, name)
     const bucket = perClass.get(cls) ?? new Map()
-    const cur = bucket.get(key) ?? { name, points: 0, best: null, starts: 0 }
+    const cur = bucket.get(key) ?? { key, name, points: 0, best: null, starts: 0 }
     cur.points += rowPoints(r)
     cur.starts += 1
     const p = r.cls_pos ?? null
@@ -298,7 +298,7 @@ function standingsByClass(rows: ScoreRow[], n = 5) {
     const bucket = perClass.get(cls)
     if (!bucket || bucket.size === 0) return null
     const top = [...bucket.values()]
-      .sort((a, b) => b.points - a.points || (a.best ?? 99) - (b.best ?? 99))
+      .sort((a, b) => b.points - a.points || (a.best ?? 99) - (b.best ?? 99) || a.key.localeCompare(b.key))
       .slice(0, n)
     return { cls, top, leader: top[0]?.points ?? 0 }
   }).filter(Boolean) as { cls: string; top: { name: string; points: number }[]; leader: number }[]

@@ -128,6 +128,7 @@ function ClassTable({
     driver: (r) => r.drivers_text,
     grid: (r) => r.grid,
     laps: (r) => r.laps,
+    gap: (r) => r.intvl ?? r.gap,
     best: (r) => r.best_lap,
     inc: (r) => r.inc,
     status: (r) => r.status,
@@ -148,7 +149,7 @@ function ClassTable({
   const shown = cf.apply(rows)
 
   return (
-          <div className="shadow-card overflow-hidden rounded-xl border border-[var(--color-line)]">
+          <div className="shadow-card relative overflow-hidden rounded-2xl border border-[var(--color-line)]">
             {/* Class header — black bar, inverted via on-navy tokens */}
             <div className="on-navy flex items-center gap-3 bg-[var(--color-deep)] px-4 py-3 sm:px-5">
               <span
@@ -170,15 +171,16 @@ function ClassTable({
               <table className="w-full min-w-[820px] border-collapse text-sm">
                 <thead>
                   <tr className="font-body border-b border-[var(--color-line)] bg-[var(--color-mist)] text-left text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
-                    <th className="px-4 py-3">Pos</th>
-                    <th className="px-4 py-3">No.</th>
-                    <th className="px-4 py-3">Driver</th>
-                    <th className="px-4 py-3 text-center">Grid</th>
-                    <th className="px-4 py-3 text-center">Laps</th>
-                    <th className="px-4 py-3">Best Lap</th>
-                    <th className="px-4 py-3 text-center">Inc</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Pts</th>
+                    <th className="px-4 py-3.5">Pos</th>
+                    <th className="px-4 py-3.5">No.</th>
+                    <th className="px-4 py-3.5">Driver</th>
+                    <th className="px-4 py-3.5 text-center">Grid</th>
+                    <th className="px-4 py-3.5 text-center">Laps</th>
+                    <th className="px-4 py-3.5">Int</th>
+                    <th className="px-4 py-3.5">Best Lap</th>
+                    <th className="px-4 py-3.5 text-center">Inc</th>
+                    <th className="px-4 py-3.5">Status</th>
+                    <th className="px-4 py-3.5 text-right">Pts</th>
                   </tr>
                   <ColumnFilterRow
                     ctl={cf}
@@ -188,6 +190,7 @@ function ClassTable({
                       { key: 'driver', label: 'Driver' },
                       { key: 'grid', label: 'Grid' },
                       { key: 'laps', label: 'Laps' },
+                      { key: 'gap', label: 'Interval' },
                       { key: 'best', label: 'Best lap' },
                       { key: 'inc', label: 'Incidents' },
                       { key: 'status', label: 'Status' },
@@ -198,7 +201,7 @@ function ClassTable({
                 <tbody>
                   {shown.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-8 text-center text-[var(--color-muted)]">
+                      <td colSpan={10} className="px-4 py-8 text-center text-[var(--color-muted)]">
                         No cars in {cls} match these column filters.
                       </td>
                     </tr>
@@ -210,10 +213,10 @@ function ClassTable({
                     return (
                     <tr
                       key={r.id}
-                      className={`border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-mist)] ${isMe ? 'bg-[var(--color-brand)]/[0.09]' : ''}`}
+                      className={`border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-cloud)] ${isMe ? 'bg-[var(--color-brand)]/[0.09]' : ''}`}
                       style={!isMe && r.cls_pos === 1 ? { background: `${color}14` } : undefined}
                     >
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3.5">
                         {podium ? (
                           <span className="font-display text-2xl leading-none">P{r.cls_pos}</span>
                         ) : (
@@ -225,8 +228,8 @@ function ClassTable({
                           </span>
                         )}
                       </td>
-                      <td className="tabular px-4 py-3 text-[var(--color-muted)]">#{r.number}</td>
-                      <td className="px-4 py-3 font-semibold">
+                      <td className="tabular px-4 py-3.5 text-[var(--color-muted)]">#{r.number}</td>
+                      <td className="px-4 py-3.5 font-semibold">
                         <span className="inline-flex items-center gap-2">
                           <DriverName text={r.drivers_text} />
                           {isMe && <span className="rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-black">You</span>}
@@ -237,7 +240,7 @@ function ClassTable({
                           )}
                         </span>
                       </td>
-                      <td className="tabular px-4 py-3 text-center">
+                      <td className="tabular px-4 py-3.5 text-center">
                         <span className="inline-flex items-center gap-1.5">
                           {r.grid ?? '—'}
                           {delta != null && delta !== 0 && (
@@ -247,11 +250,15 @@ function ClassTable({
                           )}
                         </span>
                       </td>
-                      <td className="tabular px-4 py-3 text-center">{r.laps ?? '—'}</td>
-                      <td className="tabular px-4 py-3">
+                      <td className="tabular px-4 py-3.5 text-center">{r.laps ?? '—'}</td>
+                      <td className="tabular px-4 py-3.5 text-[var(--color-muted)]">{r.intvl ?? r.gap ?? '—'}</td>
+                      <td className="tabular px-4 py-3.5">
                         {r.best_lap ? (
                           <span className="inline-flex items-center gap-1.5">
-                            <span className={r.id === flId ? 'font-bold text-[var(--color-brand-deep)]' : ''}>{r.best_lap}</span>
+                            <span className={r.id === flId ? 'font-bold text-[var(--color-brand-deep)]' : ''}>
+                              {r.best_lap}
+                              {r.best_on != null && <span className="ml-1 text-[11px] font-normal text-[var(--color-faint)]">L{r.best_on}</span>}
+                            </span>
                             {r.id === flId && (
                               <span className="rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-black" title="Fastest lap in class">FL</span>
                             )}
@@ -260,13 +267,13 @@ function ClassTable({
                           '—'
                         )}
                       </td>
-                      <td className="tabular px-4 py-3 text-center">{r.inc != null ? `${r.inc}x` : '—'}</td>
-                      <td className="px-4 py-3">
+                      <td className="tabular px-4 py-3.5 text-center">{r.inc != null ? `${r.inc}x` : '—'}</td>
+                      <td className="px-4 py-3.5">
                         <span className={r.status === 'DNF' ? 'font-semibold text-[var(--color-red)]' : 'text-[var(--color-muted)]'}>
                           {r.status ?? '—'}
                         </span>
                       </td>
-                      <td className="tabular px-4 py-3 text-right font-bold">{(r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)}</td>
+                      <td className="tabular px-4 py-3.5 text-right font-bold">{(r.points ?? 0) + (r.quali_points ?? 0) + (r.adjust ?? 0)}</td>
                     </tr>
                     )
                   })}

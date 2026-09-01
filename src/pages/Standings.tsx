@@ -125,7 +125,7 @@ function StandingsTable({
   }
 
   return (
-    <div className="shadow-card relative overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+    <div className="shadow-card relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
       <div className="flex items-center justify-between gap-3 border-b border-[var(--color-line)] px-5 py-2.5">
         <span className="tabular font-mono text-[11px] uppercase tracking-wider text-[var(--color-muted)]">
           {cf.active > 0 ? `${shown.length} of ${ranked.length}` : `${ranked.length} drivers`}
@@ -136,18 +136,18 @@ function StandingsTable({
       <div className="overflow-x-auto">
       <table className="w-full min-w-[640px] border-collapse">
         <thead>
-          <tr className="border-b border-[var(--color-line)] bg-[var(--color-mist)] text-left font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
-            <th className="w-16 px-5 py-3.5">Pos</th>
-            <th className="px-5 py-3.5">Driver</th>
-            <th className="px-5 py-3.5 text-center">Starts</th>
-            <th className="px-5 py-3.5 text-center">Wins</th>
-            <th className="px-5 py-3.5 text-center">Pod</th>
-            <th className="px-5 py-3.5 text-right">Pts</th>
-            <th className="hidden px-5 py-3.5 text-right sm:table-cell">Gap</th>
+          <tr className="border-b border-[var(--color-line)] bg-[var(--color-mist)] text-left font-body text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
+            <th className="w-16 px-4 py-3.5">Pos</th>
+            <th className="px-4 py-3.5">Driver</th>
+            <th className="px-4 py-3.5 text-center">Starts</th>
+            <th className="px-4 py-3.5 text-center">Wins</th>
+            <th className="px-4 py-3.5 text-center">Pod</th>
+            <th className="px-4 py-3.5 text-right">Pts</th>
+            <th className="hidden px-4 py-3.5 text-right sm:table-cell">Gap</th>
           </tr>
           <ColumnFilterRow
             ctl={cf}
-            className="px-5 pb-3 pt-0"
+            className="px-4 pb-3 pt-0"
             cells={[
               { key: 'pos', label: 'Pos' },
               { key: 'name', label: 'Driver' },
@@ -172,8 +172,8 @@ function StandingsTable({
             const rowColor = color ?? classColor(r.classId, classes)
             const isMe = !!meName && resultListsDriver(r.name, meName)
             return (
-              <tr key={r.key} className={`border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-mist)] ${isMe ? 'bg-[var(--color-brand)]/[0.09]' : ''}`}>
-                <td className="px-5 py-3.5">
+              <tr key={r.key} className={`border-b border-[var(--color-line)] last:border-0 hover:bg-[var(--color-cloud)] ${isMe ? 'bg-[var(--color-brand)]/[0.09]' : ''}`}>
+                <td className="px-4 py-3.5">
                   <span
                     className="tabular flex h-8 w-8 items-center justify-center rounded-md text-sm font-bold"
                     style={{ background: i === 0 ? rowColor : 'var(--color-mist)', color: i === 0 ? '#000' : 'var(--color-ink)' }}
@@ -181,19 +181,19 @@ function StandingsTable({
                     {i + 1}
                   </span>
                 </td>
-                <td className="px-5 py-3.5 font-semibold">
+                <td className="px-4 py-3.5 font-semibold">
                   <span className="inline-flex items-center gap-2">
                     <DriverName text={r.name} />
                     {isMe && <span className="rounded bg-[var(--color-brand)] px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none text-black">You</span>}
                   </span>
                 </td>
-                <td className="tabular px-5 py-3.5 text-center text-[var(--color-muted)]">{r.starts}</td>
-                <td className="tabular px-5 py-3.5 text-center">{r.wins || '—'}</td>
-                <td className="tabular px-5 py-3.5 text-center">{r.podiums || '—'}</td>
-                <td className="px-5 py-3.5 text-right font-display text-2xl leading-none">
+                <td className="tabular px-4 py-3.5 text-center text-[var(--color-muted)]">{r.starts}</td>
+                <td className="tabular px-4 py-3.5 text-center">{r.wins || '—'}</td>
+                <td className="tabular px-4 py-3.5 text-center">{r.podiums || '—'}</td>
+                <td className="px-4 py-3.5 text-right font-display text-2xl leading-none">
                   <CountUp value={r.points} />
                 </td>
-                <td className="tabular hidden px-5 py-3.5 text-right text-[var(--color-faint)] sm:table-cell">
+                <td className="tabular hidden px-4 py-3.5 text-right text-[var(--color-faint)] sm:table-cell">
                   {gap}
                 </td>
               </tr>

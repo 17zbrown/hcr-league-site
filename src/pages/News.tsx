@@ -67,7 +67,7 @@ function MediaStrip({ media }: { media: NewsMedia[] }) {
 }
 
 /** One story. Pinned articles render as the black feature panel. */
-function ArticleCard({ article }: { article: NewsArticle }) {
+export function ArticleCard({ article }: { article: NewsArticle }) {
   const feature = article.pinned
   const paras = paragraphs(article.body_md)
   return (

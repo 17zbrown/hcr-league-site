@@ -287,20 +287,22 @@ export function ResultsTable({
         <h2 className="text-3xl">Round by round</h2>
         <ColumnFilterToggle ctl={cf} className="!py-1 !text-[11px]" />
       </div>
-      <div className="relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
+      <div className="shadow-card relative overflow-hidden rounded-2xl border border-[var(--color-line)] bg-[var(--color-paper)]">
         <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-[var(--color-paper)] sm:hidden" aria-hidden />
         <div className="overflow-x-auto" tabIndex={0} role="region" aria-label="Round by round results">
           <table className="w-full min-w-[680px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-[var(--color-line)] bg-[var(--color-mist)] text-left font-body text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--color-muted)]">
-                <th className="px-4 py-3">Rnd</th>
-                <th className="px-4 py-3">Race</th>
-                <th className="px-4 py-3">Class</th>
-                <th className="px-4 py-3 text-center">Finish</th>
-                <th className="px-4 py-3 text-center">Grid</th>
-                <th className="px-4 py-3">Best lap</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Pts</th>
+                <th className="px-4 py-3.5">Rnd</th>
+                <th className="px-4 py-3.5">Race</th>
+                <th className="px-4 py-3.5">Class</th>
+                <th className="px-4 py-3.5 text-center">Finish</th>
+                <th className="px-4 py-3.5 text-center">Grid</th>
+                <th className="px-4 py-3.5">Laps</th>
+                <th className="px-4 py-3.5">Int</th>
+                <th className="px-4 py-3.5">Best lap</th>
+                <th className="px-4 py-3.5">Status</th>
+                <th className="px-4 py-3.5 text-right">Pts</th>
               </tr>
               <ColumnFilterRow
                 ctl={cf}
@@ -319,7 +321,7 @@ export function ResultsTable({
             <tbody>
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-[var(--color-muted)]">
+                  <td colSpan={10} className="px-4 py-8 text-center text-[var(--color-muted)]">
                     No rounds match these column filters.
                   </td>
                 </tr>
@@ -349,7 +351,12 @@ export function ResultsTable({
                       {r.cls_pos ? `P${r.cls_pos}` : '—'}
                     </td>
                     <td className="tabular px-4 py-3.5 text-center">{r.grid ?? '—'}</td>
-                    <td className="tabular px-4 py-3.5">{r.best_lap ?? '—'}</td>
+                    <td className="tabular px-4 py-3.5 text-center">{r.laps ?? '—'}</td>
+                    <td className="tabular px-4 py-3.5 text-[var(--color-muted)]">{r.intvl ?? r.gap ?? '—'}</td>
+                    <td className="tabular px-4 py-3.5">
+                      {r.best_lap ?? '—'}
+                      {r.best_lap && r.best_on != null && <span className="ml-1 text-[11px] text-[var(--color-faint)]">L{r.best_on}</span>}
+                    </td>
                     <td className="px-4 py-3.5 font-body">
                       <span className={r.status === 'DNF' ? 'font-semibold text-[var(--color-red)]' : 'text-[var(--color-muted)]'}>
                         {r.status ?? '—'}

@@ -4,6 +4,7 @@ import {
   useClasses,
   useCurrentSeason,
   useDrivers,
+  useEntries,
   useLicenseResults,
   useSeasonResultsFull,
 } from '../lib/queries'
@@ -12,6 +13,7 @@ import { DriverReportBody } from '../components/DriverReport'
 import { computeAchievements } from '../lib/achievements'
 import { buildPaceIndex, computeLicense, resultsForDriver } from '../lib/license'
 import { classColor } from '../lib/format'
+import { flagFor } from '../lib/countries'
 import { Skeleton } from '../components/ui'
 import { LicenseBadge } from '../components/LicenseBadge'
 import { TeamLink } from '../components/links'
@@ -24,8 +26,13 @@ export default function DriverProfile() {
   const { data: season, isLoading: seasonLoading } = useCurrentSeason()
   const { data: results, isLoading: resultsLoading } = useSeasonResultsFull(season?.id)
   const { data: licenseResults } = useLicenseResults()
+  const { data: entries } = useEntries(season?.id)
 
   const driver = drivers?.find((d) => d.id === id)
+  // The driver's seat this season — source of the car number and class the
+  // masthead shows. drivers.team is a leftover of the teamless schema and is
+  // empty for everyone, which is why the tile used to show an initial.
+  const entry = (entries ?? []).find((e) => (e.drivers ?? []).some((l) => l.driver?.id === id))
 
   const rows = useMemo<FullRow[]>(() => {
     if (!driver || !results) return []
@@ -57,7 +64,7 @@ export default function DriverProfile() {
     )
   }
 
-  const cls = driver.team?.class_id
+  const cls = entry?.class_id ?? driver.team?.class_id
   const color = cls ? classColor(cls, classes) : 'var(--color-brand)'
   const raced = report.starts > 0
   const resultsPending = seasonLoading || resultsLoading
@@ -80,14 +87,18 @@ export default function DriverProfile() {
             className="tabular flex h-24 w-28 shrink-0 items-center justify-center rounded-2xl bg-[var(--color-deep-2)] font-display text-5xl text-[var(--color-ink)]"
             style={{ borderBottom: `4px solid ${color}` }}
           >
-            {driver.team?.number ?? driver.name.slice(0, 1)}
+            {entry?.number ?? driver.team?.number ?? driver.name.slice(0, 1)}
           </div>
 
           <div className="min-w-0">
             <h1 className="text-5xl leading-[1.02] md:text-7xl">{driver.name}</h1>
             <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
               {driver.country && (
-                <span className="text-xl leading-none">{driver.country}</span>
+                // The flag, with the name as its tooltip — "United States" spelled
+                // out was the one raw-text country left on the site.
+                <span className="text-2xl leading-none" title={driver.country}>
+                  {flagFor(driver.country) || driver.country}
+                </span>
               )}
               {driver.team && (
                 <TeamLink teamId={driver.team.id} className="font-body font-semibold text-[var(--color-ink)] underline-offset-4 hover:underline">

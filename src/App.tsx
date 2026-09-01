@@ -19,6 +19,7 @@ const DriverProfile = lazy(() => import('./pages/DriverProfile'))
 const Compare = lazy(() => import('./pages/Compare'))
 const TeamProfile = lazy(() => import('./pages/TeamProfile'))
 const News = lazy(() => import('./pages/News'))
+const NewsArticle = lazy(() => import('./pages/NewsArticle'))
 const Rulebook = lazy(() => import('./pages/Rulebook'))
 const SignUp = lazy(() => import('./pages/SignUp'))
 const Login = lazy(() => import('./pages/Login'))
@@ -139,6 +140,7 @@ export default function App() {
               registered as a redirect because links to it are already out there.
             */}
             <Route path="/news" element={<News />} />
+            <Route path="/news/:slug" element={<NewsArticle />} />
             <Route path="/reports" element={<Navigate to="/news" replace />} />
             <Route path="/rulebook" element={<Rulebook />} />
             <Route path="/signup" element={<SignUp />} />

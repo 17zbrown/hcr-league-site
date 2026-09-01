@@ -40,23 +40,35 @@ export default function ScheduleAdmin() {
   )
 }
 
+// events.date is the green-flag INSTANT, not a calendar day. Edit it as local
+// wall-clock time and convert back through Date so the same instant round-trips —
+// slicing to a date and re-appending T00:00:00Z moved every standard-time race an
+// hour and forgot the 8pm green flag entirely.
+function toLocalInput(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 function EventRow({ event, onChange }: { event: RaceEvent; onChange: () => void }) {
   const [name, setName] = useState(event.name ?? '')
-  const [date, setDate] = useState((event.date ?? '').slice(0, 10))
+  const [date, setDate] = useState(toLocalInput(event.date))
   const [status, setStatus] = useState(event.status)
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  const dirty = name !== (event.name ?? '') || date !== (event.date ?? '').slice(0, 10) || status !== event.status
+  const dirty = name !== (event.name ?? '') || date !== toLocalInput(event.date) || status !== event.status
 
   const save = async () => {
-    if (!date) { setErr('Pick a date before saving.'); return }
+    if (!date || Number.isNaN(new Date(date).getTime())) { setErr('Pick a date and time before saving.'); return }
     setBusy(true)
     setErr(null)
     const { error } = await supabase
       .from('events')
-      .update({ name, date: `${date}T00:00:00Z`, status })
+      .update({ name, date: new Date(date).toISOString(), status })
       .eq('id', event.id)
     setBusy(false)
     if (error) { setErr(error.message); return }
@@ -67,10 +79,10 @@ function EventRow({ event, onChange }: { event: RaceEvent; onChange: () => void 
 
   return (
     <div className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-3">
-    <div className="grid items-center gap-2 md:grid-cols-[46px_1.7fr_150px_130px_auto]">
+    <div className="grid items-center gap-2 md:grid-cols-[46px_1.5fr_210px_130px_auto]">
       <div className="text-center font-display text-2xl text-[var(--color-faint)]">{event.round}</div>
       <input className="hcr-input !py-2" value={name} onChange={(e) => setName(e.target.value)} placeholder={event.track?.name} aria-label="Event name" />
-      <input className="hcr-input !py-2 tabular" type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
+      <input className="hcr-input !py-2 tabular" type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Green flag (your local time)" />
       <select className="hcr-select !py-2" value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
         {STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
       </select>
