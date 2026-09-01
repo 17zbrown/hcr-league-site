@@ -87,8 +87,17 @@ function notes(L: Links): Record<string, Note> {
 
     'LEAGUE/announcements': {
       title: 'League announcements',
-      body: 'Operational league business lands here: schedule changes, rule updates, penalties, and the race-week event each Wednesday — hit **Interested** on it if you are planning to race. News stories have their own room in <#LEAGUE/news>.',
+      // The old note taught the RETIRED Interested mechanism (read by nothing) and
+      // claimed penalties post here (they publish in race-control-announcements,
+      // deliberately without a ping). Both claims sent members to the wrong place.
+      body: 'Operational league business lands here: schedule changes, rule updates and league notices. Race attendance has its own room — answer the buttons in <#LEAGUE/race-attendance> each week. News stories post to <#LEAGUE/news>.',
       fields: [{ name: 'Also on the site', value: `Schedule · ${SITE}/schedule` }],
+    },
+
+    'LEAGUE/race-attendance': {
+      title: 'Are you racing this weekend?',
+      body: 'One post per round, two buttons. Tap **I\'m racing** or **Can\'t make it** — that button is the only signal race control counts, and you can change your answer any time by pressing the other one. The post opens on Monday and comes down when the race starts.',
+      fields: [{ name: 'Why it matters', value: 'The grid is planned from these answers. Thirty seconds here saves race control chasing you all week.' }],
     },
 
     'LEAGUE/news': {

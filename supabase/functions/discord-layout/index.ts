@@ -64,12 +64,17 @@ const ARCHIVE_NAME = 'ARCHIVE'
 // Discord sorts voice into its own block below the text channels regardless, so the
 // voice entries here only order voice against voice.
 const CHANNEL_ORDER: Record<string, string[]> = {
-  LEAGUE: ['welcome', 'rules', 'announcements', 'news', 'standings', 'race-results', 'season-signups', 'rulebook'],
+  // race-attendance sits right under announcements: it is the one room every
+  // driver must visit each week, and unlisted channels sort to the BOTTOM of
+  // their category — which is where the enforcement run kept shoving it every
+  // thirty minutes until it was added here.
+  LEAGUE: ['welcome', 'rules', 'announcements', 'race-attendance', 'news', 'standings', 'race-results', 'season-signups', 'rulebook'],
   PADDOCK: ['general-chat', 'gravel-trap', 'promotions', 'Race Channel', 'Voice Chat'],
   // league-recommendations is the only member-writable room in here, so it sits at the
   // bottom of the text channels — staff rooms first, then the one members open.
-  'RACE CONTROL': ['race-control', 'incident-protests', 'license-ups', 'race-control-announcements', 'league-recommendations', 'Steward Radio'],
-  ADMIN: ['admin-chat', 'bot-log', 'safety-alerts', 'community-updates', 'iracing-names'],
+  // attendance is the private staff tally, distinct from LEAGUE/race-attendance.
+  'RACE CONTROL': ['race-control', 'incident-protests', 'attendance', 'license-ups', 'race-control-announcements', 'league-recommendations', 'Steward Radio'],
+  ADMIN: ['admin-chat', 'bot-log', 'member-departures', 'safety-alerts', 'community-updates', 'iracing-names'],
 }
 
 interface Channel {

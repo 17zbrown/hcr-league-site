@@ -230,7 +230,19 @@ Deno.serve(async (req) => {
     if (!guildId) return json({ skipped: 'No Discord server is configured yet.' })
     if (!botToken) return json({ error: 'DISCORD_BOT_TOKEN secret is not set.' }, 400)
 
-    const memberRole = String(cfg.role_league_member ?? '').trim()
+    // WHO IS "A MEMBER"? The configured League Member role if one exists — and
+    // @everyone when it does not, which is this server's actual state: the reorg
+    // deleted the role, role_league_member has been empty ever since, and sections
+    // 1-5 silently skipped for weeks. The cost of that skip was not cosmetic:
+    // nothing asserted that members can read #race-control-announcements (where
+    // penalties and rulings publish) or #license-ups, and nothing enforced
+    // reply-only on the results forum. @everyone's role id is the guild id — a
+    // Discord invariant — and every rule below is exactly the "all members" rule
+    // under either identity. Sections 6-8 already work this way.
+    const cfgMemberRole = String(cfg.role_league_member ?? '').trim()
+    const usingEveryone = !SNOWFLAKE.test(cfgMemberRole)
+    const memberRole = usingEveryone ? guildId : cfgMemberRole
+    const memberLabel = usingEveryone ? '@everyone' : 'League Member'
     const adminRole = String(cfg.role_site_admin ?? '').trim()
     const rcRole = String(cfg.role_site_race_control ?? '').trim()
     const forumId = String(cfg.channel_results ?? '').trim()
@@ -250,12 +262,10 @@ Deno.serve(async (req) => {
      * change. Section 6 does not need the role: a suggestion box open to "all
      * members" is @everyone, whose role id is the guild id.
      */
-    const hasMemberRole = SNOWFLAKE.test(memberRole)
-    if (!hasMemberRole) {
+    if (usingEveryone) {
       warnings.push(
-        'No League Member role is configured, so every member-facing rule in sections 1-5 was skipped — ' +
-        'LEAGUE visibility, the results forum, #license-ups and ' + `#${RC_ANNOUNCE_NAME}. ` +
-        `Only the staff re-allows ran there. #${RECS_NAME} does not depend on that role and was applied in full.`,
+        'No League Member role is configured, so the member-facing rules in sections 1-5 were applied to ' +
+        '@everyone instead of being skipped. Configure role_league_member to scope them to a role again.',
       )
     }
 
@@ -324,7 +334,7 @@ Deno.serve(async (req) => {
     }
 
     // --- 1. the category: League Member can see LEAGUE ---
-    await setPerms(league, memberRole, 'League Member', P.VIEW_CHANNEL | P.READ_MESSAGE_HISTORY, 0n)
+    await setPerms(league, memberRole, memberLabel, P.VIEW_CHANNEL | P.READ_MESSAGE_HISTORY, 0n)
 
     // --- 2. no child may quietly override that ---
     // Only ever clears a DENY of view/history for League Member. It does not grant
@@ -334,7 +344,7 @@ Deno.serve(async (req) => {
       const ow = (ch.permission_overwrites ?? []).find((o) => String(o.id) === memberRole)
       const deny = big(ow?.deny)
       if ((deny & (P.VIEW_CHANNEL | P.READ_MESSAGE_HISTORY)) !== 0n) {
-        await setPerms(ch, memberRole, 'League Member', P.VIEW_CHANNEL | P.READ_MESSAGE_HISTORY, 0n)
+        await setPerms(ch, memberRole, memberLabel, P.VIEW_CHANNEL | P.READ_MESSAGE_HISTORY, 0n)
       }
     }
 
@@ -347,7 +357,7 @@ Deno.serve(async (req) => {
       if (forum.type !== CHAN_FORUM) {
         warnings.push(`#${forum.name} is not a forum channel, so "reply but don't create posts" does not apply to it the same way. Left alone.`)
       } else {
-        await setPerms(forum, memberRole, 'League Member', FORUM_MEMBER_ALLOW, FORUM_MEMBER_DENY)
+        await setPerms(forum, memberRole, memberLabel, FORUM_MEMBER_ALLOW, FORUM_MEMBER_DENY)
         // Staff and the bot must not inherit that deny through League Member.
         for (const [rid, label] of [[adminRole, 'Admin'], [rcRole, 'Race Control'], [botRole, 'HCR Bot']] as const) {
           if (SNOWFLAKE.test(rid)) await setPerms(forum, rid, label, FORUM_STAFF_ALLOW, 0n)
@@ -364,7 +374,7 @@ Deno.serve(async (req) => {
     if (!licenseUps) {
       warnings.push('No #license-ups channel is configured, so licence promotions were not opened up to members.')
     } else {
-      await setPerms(licenseUps, memberRole, 'League Member', READ_ONLY_ALLOW, READ_ONLY_DENY)
+      await setPerms(licenseUps, memberRole, memberLabel, READ_ONLY_ALLOW, READ_ONLY_DENY)
       for (const [rid, label] of [[adminRole, 'Admin'], [rcRole, 'Race Control'], [botRole, 'HCR Bot']] as const) {
         if (SNOWFLAKE.test(rid)) await setPerms(licenseUps, rid, label, FORUM_STAFF_ALLOW, 0n)
       }
@@ -424,7 +434,7 @@ Deno.serve(async (req) => {
     }
 
     if (rcChannel) {
-      await setPerms(rcChannel, memberRole, 'League Member', READ_ONLY_ALLOW, READ_ONLY_DENY)
+      await setPerms(rcChannel, memberRole, memberLabel, READ_ONLY_ALLOW, READ_ONLY_DENY)
       for (const [rid, label] of [[adminRole, 'Admin'], [rcRole, 'Race Control'], [botRole, 'HCR Bot']] as const) {
         if (SNOWFLAKE.test(rid)) await setPerms(rcChannel, rid, label, FORUM_STAFF_ALLOW, 0n)
       }

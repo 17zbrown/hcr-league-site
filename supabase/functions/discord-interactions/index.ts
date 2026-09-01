@@ -382,20 +382,40 @@ async function refreshTally(
   const tally = all.filter((r) => !r.off_grid)
   const offGrid = all.filter((r) => r.off_grid)
 
-  const list = (rs: typeof tally) => rs.length === 0 ? '—' : rs.map((r) =>
-    `\`${r.class_id}${r.car_number ? ` #${r.car_number}` : ''}\` **${r.driver_name}** — ${r.car?.trim() || NO_CAR}`
-  ).join('\n').slice(0, 1024)
+  // MUST RENDER IDENTICALLY TO discord-attendance's tally — a member pressing a
+  // button and the daily run redraw the same message, and every divergence here
+  // briefly rewrote the staff view into an older dialect (plain names instead of
+  // clickable mentions, no unreachable split, full-width chase lists that blew
+  // Discord's 1024-char field cap). Ported 1 Sep; change one, change both.
+  const list = (rs: typeof tally, compact = false) => rs.length === 0 ? '—' : rs.map((r) => {
+    const who = r.discord_user_id ? `<@${r.discord_user_id}>` : `**${r.driver_name}**`
+    const tag = `\`${r.class_id}${r.car_number ? ` #${r.car_number}` : ''}\` ${who}`
+    return compact ? tag : `${tag} — ${r.car?.trim() || NO_CAR}`
+  }).join('\n').slice(0, 1024)
 
   const yes = tally.filter((r) => r.answer === true)
   const no = tally.filter((r) => r.answer === false)
   const silent = tally.filter((r) => r.answer === null)
-  const at = Math.floor(new Date(String(ev.date)).getTime() / 1000)
+  const chaseable = silent.filter((r) => !!r.discord_user_id)
+  const unreachable = silent.filter((r) => !r.discord_user_id)
+
+  // The time shown is when the track opens, matching the ask and the website.
+  const { data: sessRow } = await db.from('sessions').select('start')
+    .eq('event_id', String(ev.id)).order('start', { ascending: true }).limit(1).maybeSingle()
+  const startIso = String((sessRow as { start?: string } | null)?.start ?? ev.date)
+  const at = Math.floor(new Date(startIso).getTime() / 1000)
 
   const fields: Record<string, unknown>[] = [
     { name: `Racing (${yes.length})`, value: list(yes), inline: false },
-    { name: `Cannot make it (${no.length})`, value: list(no), inline: false },
-    { name: `No answer (${silent.length})`, value: list(silent), inline: false },
+    { name: `Cannot make it (${no.length})`, value: list(no, true), inline: false },
+    { name: `No answer (${chaseable.length})`, value: list(chaseable, true), inline: false },
   ]
+  if (unreachable.length) {
+    fields.push({
+      name: `⚠️ Cannot answer — no Discord account linked (${unreachable.length})`,
+      value: list(unreachable, true), inline: false,
+    })
+  }
   // Somebody who answered while holding no entry. Worth its own heading rather than
   // being hidden: it is a roster gap that only shows up as a short grid on race day.
   if (offGrid.length) {
@@ -476,11 +496,15 @@ async function handleNext(
     ? `\`${seat.entries.class_id}${seat.entries.number ? ` #${seat.entries.number}` : ''}\` ${seat.entries.car ?? ''}`.trim()
     : null
 
+  const { data: cfgRow } = await db.from('discord_config')
+    .select('channel_race_attendance').eq('id', 1).maybeSingle()
+  const attendChannel = String((cfgRow as { channel_race_attendance?: string } | null)?.channel_race_attendance ?? '').trim()
+
   const you = !seat
     ? 'You are **not on this season\'s entry list**, so nothing has been counted for you. ' +
       `Two minutes to fix: ${SITE}/signup`
     : answer == null
-      ? 'You have **not answered yet** — the attendance post in the announcements channel has the buttons.'
+      ? `You have **not answered yet** — the attendance post in ${attendChannel ? `<#${attendChannel}>` : 'the attendance channel'} has the buttons.`
       : answer.planned
         ? 'You are down as **racing**. 🏁'
         : 'You are down as **not racing**. Press "I\'m racing" on the attendance post if that changes.'
