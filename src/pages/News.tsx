@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react'
+import { inline } from '../lib/richtext'
 import { Link } from 'react-router-dom'
 import { useNews } from '../lib/queries'
 import { parseClipUrl } from '../lib/evidence'
@@ -6,12 +8,68 @@ import { fmtDateLong } from '../lib/format'
 import { LoadError, Section, Skeleton } from '../components/ui'
 import { Reveal } from '../components/motion'
 
-/** Plain paragraphs from the stored body — split on blank lines, no markdown lib. */
-function paragraphs(body: string): string[] {
-  return body
-    .split(/\n{2,}/)
-    .map((p) => p.trim())
-    .filter((p) => p.length > 0)
+/**
+ * The slice of Markdown the newsroom actually writes: `## headings`, `**bold**` and
+ * `- bullets`. Nothing else — no links, no numbered lists, no quotes, checked against
+ * every stored article.
+ *
+ * Deliberately not a Markdown library. The composers emit exactly these three
+ * constructs, and parsing them is thirty lines against a dependency that would ship a
+ * whole CommonMark engine to render three tags. It builds React nodes rather than
+ * HTML, so an article can never inject markup however it is written.
+ *
+ * Before this existed the body was printed verbatim, so every race report and
+ * auto-preview showed its own `##` and `**` to the reader.
+ */
+
+function ArticleBody({ body }: { body: string }) {
+  const nodes: ReactNode[] = []
+  let para: string[] = []
+  let bullets: string[] = []
+
+  const flushPara = (k: string) => {
+    if (!para.length) return
+    // Single newlines inside a paragraph are soft wraps, the way Markdown reads them.
+    nodes.push(<p key={k}>{inline(para.join(' '), k)}</p>)
+    para = []
+  }
+  const flushList = (k: string) => {
+    if (!bullets.length) return
+    nodes.push(
+      <ul key={k} className="ml-5 list-disc space-y-1.5">
+        {bullets.map((b, j) => <li key={j}>{inline(b, `${k}-${j}`)}</li>)}
+      </ul>,
+    )
+    bullets = []
+  }
+
+  body.split('\n').forEach((raw, i) => {
+    const line = raw.trim()
+    const heading = line.match(/^#{1,6}\s+(.*)$/)
+    const bullet = line.match(/^[-*]\s+(.*)$/)
+
+    if (!line) { flushList(`l${i}`); flushPara(`p${i}`); return }
+    if (heading) {
+      flushList(`l${i}`); flushPara(`p${i}`)
+      nodes.push(
+        <h3 key={`h${i}`} className="!mt-8 font-display text-xl tracking-tight text-[var(--color-ink)]">
+          {inline(heading[1], `h${i}`)}
+        </h3>,
+      )
+      return
+    }
+    if (bullet) { flushPara(`p${i}`); bullets.push(bullet[1]); return }
+    flushList(`l${i}`); para.push(line)
+  })
+  flushList('l-end')
+  flushPara('p-end')
+
+  if (!nodes.length) return null
+  return (
+    <div className="mt-6 max-w-prose space-y-4 font-body leading-relaxed text-[var(--color-ink-2)]">
+      {nodes}
+    </div>
+  )
 }
 
 /**
@@ -69,7 +127,6 @@ function MediaStrip({ media }: { media: NewsMedia[] }) {
 /** One story. Pinned articles render as the black feature panel. */
 export function ArticleCard({ article }: { article: NewsArticle }) {
   const feature = article.pinned
-  const paras = paragraphs(article.body_md)
   return (
     <article
       // The anchor every Discord news ping now points at. Without an id on the
@@ -107,13 +164,7 @@ export function ArticleCard({ article }: { article: NewsArticle }) {
             {article.dek}
           </p>
         )}
-        {paras.length > 0 && (
-          <div className="mt-6 max-w-prose space-y-4 font-body leading-relaxed text-[var(--color-ink-2)]">
-            {paras.map((p, i) => (
-              <p key={i}>{p}</p>
-            ))}
-          </div>
-        )}
+        <ArticleBody body={article.body_md} />
         <MediaStrip media={article.media ?? []} />
       </div>
       {article.event_id && (

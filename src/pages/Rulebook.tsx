@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { inline } from '../lib/richtext'
 import raw from '../content/rulebook.md?raw'
 
 /**
@@ -21,23 +22,6 @@ type Block =
   | { kind: 'table'; rows: string[][] }
   | { kind: 'p'; text: string }
 
-/**
- * `**bold**` and `*italic*` → elements. Bold is matched first, because a lazy
- * single-asterisk rule would otherwise swallow the inner text of a bold run and
- * leave stray asterisks on the page.
- */
-function inline(text: string, keyBase: string) {
-  return text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g).filter(Boolean).map((part, i) => {
-    const key = `${keyBase}-${i}`
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={key} className="font-semibold text-[var(--color-ink)]">{part.slice(2, -2)}</strong>
-    }
-    if (part.length > 2 && part.startsWith('*') && part.endsWith('*')) {
-      return <em key={key}>{part.slice(1, -1)}</em>
-    }
-    return <span key={key}>{part}</span>
-  })
-}
 
 function parse(md: string): Block[] {
   const out: Block[] = []
