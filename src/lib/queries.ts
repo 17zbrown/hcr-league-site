@@ -14,7 +14,7 @@ import type {
   RaceEvent,
   RaceResult,
   Season,
-  Team, TeamApplication } from './types'
+  Team, TeamApplication , TeamApplicationQueueRow } from './types'
 
 /** League-wide settings row (single row, id = 1). */
 export function useLeagueSettings() {
@@ -314,15 +314,12 @@ export function usePendingTeamApplications() {
     queryKey: ['team-applications', 'pending'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('team_applications')
-        .select('*, driver:drivers(name), votes:team_application_votes(voter_id, approve)')
+        .from('team_application_queue')
+        .select('*')
         .eq('status', 'pending')
         .order('created_at')
       if (error) throw error
-      return (data ?? []) as (TeamApplication & {
-        driver?: { name: string } | null
-        votes?: { voter_id: string; approve: boolean }[]
-      })[]
+      return (data ?? []) as TeamApplicationQueueRow[]
     },
   })
 }
@@ -344,17 +341,19 @@ export function usePendingChangeRequests() {
 }
 
 /**
- * How many stewards it takes to carry a team application: 50% + 1 of the stewarding
- * body. Read from the server rather than counted here, so the queue cannot disagree
- * with the rule the database actually enforces.
+ * Every vote cast on open applications. Race control only — RLS returns nothing to a
+ * member, which is deliberate: a driver knowing which steward voted against them is
+ * how a queue turns into a grudge.
  */
-export function useTeamVoteThreshold() {
+export function useTeamApplicationVotes() {
   return useQuery({
-    queryKey: ['team-applications', 'threshold'],
+    queryKey: ['team-applications', 'votes'],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('team_vote_threshold')
+      const { data, error } = await supabase
+        .from('team_application_votes')
+        .select('application_id, voter_id, approve')
       if (error) throw error
-      return (data as number) ?? 1
+      return (data ?? []) as { application_id: string; voter_id: string; approve: boolean }[]
     },
   })
 }

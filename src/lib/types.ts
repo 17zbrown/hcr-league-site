@@ -380,3 +380,12 @@ export interface TeamApplication {
   decision_note: string | null
   created_at: string
 }
+
+/** A row of the race-control queue: the application, its tally, and its threshold. */
+export interface TeamApplicationQueueRow extends TeamApplication {
+  driver_name: string | null
+  approvals: number
+  declines: number
+  /** 50% + 1 of the stewards eligible to vote — the applicant is not one of them. */
+  needed: number
+}

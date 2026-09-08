@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
-import { usePendingTeamApplications, useTeamVoteThreshold } from '../lib/queries'
+import { usePendingTeamApplications, useTeamApplicationVotes } from '../lib/queries'
 import { fmtTime } from '../lib/format'
 import { Skeleton } from './ui'
 
@@ -21,7 +21,7 @@ export function TeamApplicationQueue() {
   const qc = useQueryClient()
   const { profile } = useAuth()
   const { data: rows, isLoading } = usePendingTeamApplications()
-  const { data: needed } = useTeamVoteThreshold()
+  const { data: allVotes } = useTeamApplicationVotes()
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -82,11 +82,13 @@ export function TeamApplicationQueue() {
       {msg && <p role="status" className="rounded-lg bg-[var(--color-green)]/10 px-3 py-2 text-sm text-[var(--color-green)]">{msg}</p>}
 
       {list.map((a) => {
-        const votes = a.votes ?? []
-        const yes = votes.filter((v) => v.approve).length
-        const no = votes.filter((v) => !v.approve).length
-        const mine = votes.find((v) => v.voter_id === me)
-        const need = needed ?? 1
+        const yes = a.approvals
+        const no = a.declines
+        const need = a.needed
+        const mine = (allVotes ?? []).find((v) => v.application_id === a.id && v.voter_id === me)
+        // A steward's own application is decided without them — including the
+        // Commissioner's, whose override is refused on it server-side too.
+        const isMine = a.applied_by === me
 
         return (
           <div key={a.id} className="rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] p-4">
@@ -96,7 +98,7 @@ export function TeamApplicationQueue() {
               </span>
               <span className="text-lg font-semibold">{a.team_name}</span>
               <span className="text-sm text-[var(--color-muted)]">
-                founded by {a.driver?.name ?? 'unknown driver'}
+                founded by {a.driver_name ?? 'unknown driver'}
               </span>
             </div>
 
@@ -133,7 +135,7 @@ export function TeamApplicationQueue() {
             </div>
 
             <p className="mt-3 rounded-lg bg-[var(--color-cloud)] px-3 py-2 text-xs text-[var(--color-ink-2)]">
-              Carrying creates the team, moves {a.driver?.name ?? 'the applicant'} onto it,
+              Carrying creates the team, moves {a.driver_name ?? 'the applicant'} onto it,
               and makes them its manager.
             </p>
 
@@ -144,6 +146,12 @@ export function TeamApplicationQueue() {
               onChange={(e) => setNotes((n) => ({ ...n, [a.id]: e.target.value }))}
             />
 
+            {isMine ? (
+              <p className="mt-3 rounded-lg border border-dashed border-[var(--color-line-2)] px-3 py-2 text-sm text-[var(--color-muted)]">
+                This is your own application. The rest of race control decide it without you.
+              </p>
+            ) : (
+            <>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 onClick={() => vote(a.id, true)}
@@ -184,6 +192,8 @@ export function TeamApplicationQueue() {
                   Settles it immediately, whatever the tally.
                 </p>
               </div>
+            )}
+            </>
             )}
           </div>
         )
