@@ -14,8 +14,7 @@ import type {
   RaceEvent,
   RaceResult,
   Season,
-  Team,
-} from './types'
+  Team, TeamApplication } from './types'
 
 /** League-wide settings row (single row, id = 1). */
 export function useLeagueSettings() {
@@ -290,6 +289,44 @@ export function useMyChangeRequests() {
   })
 }
 
+/**
+ * The signed-in member's own team applications. RLS returns only theirs (race
+ * control sees everything, which is what the queue hook below relies on).
+ */
+export function useMyTeamApplications() {
+  return useQuery({
+    queryKey: ['team-applications', 'mine'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('team_applications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10)
+      if (error) throw error
+      return (data ?? []) as TeamApplication[]
+    },
+  })
+}
+
+/** Open team applications, for the race control queue. */
+export function usePendingTeamApplications() {
+  return useQuery({
+    queryKey: ['team-applications', 'pending'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('team_applications')
+        .select('*, driver:drivers(name), votes:team_application_votes(voter_id, approve)')
+        .eq('status', 'pending')
+        .order('created_at')
+      if (error) throw error
+      return (data ?? []) as (TeamApplication & {
+        driver?: { name: string } | null
+        votes?: { voter_id: string; approve: boolean }[]
+      })[]
+    },
+  })
+}
+
 /** Every open request, for the race control queue. */
 export function usePendingChangeRequests() {
   return useQuery({
@@ -302,6 +339,22 @@ export function usePendingChangeRequests() {
         .order('created_at')
       if (error) throw error
       return data ?? []
+    },
+  })
+}
+
+/**
+ * How many stewards it takes to carry a team application: 50% + 1 of the stewarding
+ * body. Read from the server rather than counted here, so the queue cannot disagree
+ * with the rule the database actually enforces.
+ */
+export function useTeamVoteThreshold() {
+  return useQuery({
+    queryKey: ['team-applications', 'threshold'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('team_vote_threshold')
+      if (error) throw error
+      return (data as number) ?? 1
     },
   })
 }

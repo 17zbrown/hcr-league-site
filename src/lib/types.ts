@@ -357,3 +357,26 @@ export interface StandingRow {
   poles: number
   bestFinish: number | null
 }
+
+/**
+ * A driver's application to found a team. The acknowledgement fields are a record,
+ * not a form flag: approving one promotes somebody to team manager, and the league
+ * has to be able to show what they accepted and when.
+ */
+export interface TeamApplication {
+  id: string
+  season_id: string
+  driver_id: string | null
+  applied_by: string
+  team_name: string
+  class_id: ClassId
+  car: string
+  number: string
+  terms_version: string
+  terms_accepted_at: string
+  status: 'pending' | 'approved' | 'declined'
+  decided_by: string | null
+  decided_at: string | null
+  decision_note: string | null
+  created_at: string
+}

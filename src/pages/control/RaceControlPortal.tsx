@@ -7,6 +7,7 @@ import { Section, Skeleton } from '../../components/ui'
 import { StatBand } from '../../components/editorial'
 import { StatusPill } from '../../components/ProtestThread'
 import { ChangeRequestQueue } from '../../components/ChangeRequestQueue'
+import { TeamApplicationQueue } from '../../components/TeamApplicationQueue'
 import { PenaltyPanel } from '../../components/Penalties'
 import type { ProtestStatus } from '../../lib/types'
 
@@ -58,6 +59,13 @@ export default function RaceControlPortal() {
       <div className="mb-10">
         <h2 className="mb-3 text-2xl">Change requests</h2>
         <ChangeRequestQueue />
+      </div>
+
+      {/* Founding a team hands somebody authority over other drivers, so it sits on
+          its own rather than in the change queue. */}
+      <div className="mb-10">
+        <h2 className="mb-3 text-2xl">Team applications</h2>
+        <TeamApplicationQueue />
       </div>
 
       {/* queue summary — real counts, not decoration */}

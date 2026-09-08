@@ -11,6 +11,7 @@ import { DriverReportBody } from '../../components/DriverReport'
 import { classColor, fmtDateLong } from '../../lib/format'
 import { Section, Skeleton } from '../../components/ui'
 import { ChangeRequestForm, ChangeRequestList } from '../../components/ChangeRequest'
+import { TeamApplicationCard } from '../../components/TeamApplication'
 import { LicenseBadge } from '../../components/LicenseBadge'
 import { EvidenceBox, type PendingEvidence } from '../../components/EvidenceBox'
 import { StatusPill } from '../../components/ProtestThread'
@@ -242,7 +243,7 @@ function ActionCenter({
   onFiled: () => void
   onDismissNote: () => void
 }) {
-  const { session } = useAuth()
+  const { session, profile } = useAuth()
   const { data: protests } = useProtests({ mine: true, userId: session?.user?.id })
   const { data: requests } = useMyChangeRequests()
 
@@ -304,6 +305,19 @@ function ActionCenter({
           and the standings are keyed to it — approving a request applies it for you.
         </p>
         <RequestChangeCard />
+      </section>
+
+      <section>
+        <h3 className="mb-1 text-2xl">Found a team</h3>
+        <p className="mb-4 max-w-xl text-sm text-[var(--color-muted)]">
+          Run your own entry under a team name, with your own drivers. Race control vote
+          on these as a group, because approving one makes you a team manager — read what
+          that puts on you before you tick it.
+        </p>
+        <TeamApplicationCard
+          managesTeam={!!profile?.managed_team_id}
+          hasDriver={!!profile?.driver_id}
+        />
       </section>
 
       <section>
