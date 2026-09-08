@@ -142,7 +142,7 @@ export default function CommissionerPortal() {
         {/* The console rail — black panel, grouped sections */}
         <nav
           aria-label="Dashboard sections"
-          className="on-navy self-start rounded-xl bg-[var(--color-deep)] p-3 lg:sticky lg:top-24"
+          className="on-navy min-w-0 self-start rounded-xl bg-[var(--color-deep)] p-3 lg:sticky lg:top-24"
         >
           <div className="flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
             {GROUPS.map((g) => (

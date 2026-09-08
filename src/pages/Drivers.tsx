@@ -215,7 +215,7 @@ export default function Drivers() {
               .filter(Boolean)
               .join(' · ')
             return (
-              <Reveal key={d.id} delay={Math.min(i * 0.03, 0.3)} className="h-full">
+              <Reveal key={d.id} delay={Math.min(i * 0.03, 0.3)} className="h-full min-w-0">
                 <Link
                   to={`/drivers/${d.id}`}
                   className="group flex h-full flex-col overflow-hidden rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] transition hover:-translate-y-0.5 hover:shadow-card"

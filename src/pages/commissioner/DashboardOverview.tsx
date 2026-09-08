@@ -218,7 +218,7 @@ export default function DashboardOverview({
             <Skeleton key={i} className="h-32 w-full" />
           ))}
         </div>
-        <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <div className="mt-4 grid gap-4 [&>*]:min-w-0 lg:grid-cols-2">
           <Skeleton className="h-72 w-full" />
           <Skeleton className="h-72 w-full" />
         </div>
@@ -292,7 +292,7 @@ export default function DashboardOverview({
       </div>
 
       {/* Row 2 — season progress + recent activity */}
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid gap-4 [&>*]:min-w-0 lg:grid-cols-2">
         <div className="on-navy rounded-xl border border-[var(--color-line)] bg-[var(--color-deep)] p-6">
           <h3 className="text-xl">Season progress</h3>
           <div className="mt-1 font-mono text-[11px] uppercase tracking-wider text-[var(--color-ink-2)]">
