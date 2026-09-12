@@ -1,9 +1,9 @@
 /**
  * The cars the league's iRacing session actually allows — read off the league
- * session's car list (one LMP2, six GTP, ten GT3) and spelled the way the grid
- * already stores them, so an existing entry always matches a dropdown option. The
- * Aston Martin Valkyrie is on the league list ahead of the iRacing session — add it
- * to each race's car list there before someone turns up in one.
+ * session's car list (one LMP2, six GTP, nine GT3 — iRacing caps a session at 16
+ * cars, so the Acura NSX made way for the Valkyrie on 12 Sep 2026) and spelled the
+ * way the grid already stores them, so an existing entry always matches a dropdown
+ * option.
  *
  * This is the source for the car dropdowns on the Signups and Grid tabs and the
  * season entry form. Every dropdown still preserves whatever value an entry already
@@ -21,7 +21,6 @@ export const CAR_SUGGESTIONS: Record<string, string[]> = {
   ],
   LMP2: ['Dallara P217'],
   GTD: [
-    'Acura NSX GT3 EVO 22',
     'Aston Martin Vantage GT3 EVO',
     'BMW M4 GT3 EVO',
     'Chevrolet Corvette Z06 GT3.R',
