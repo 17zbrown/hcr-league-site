@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
-import { useClasses, useCurrentSeason, useRegistrations, useTakenNumbers } from '../../lib/queries'
+import { useClasses, useCurrentSeason, useEntries, useRegistrations, useTakenNumbers } from '../../lib/queries'
 import { classColor } from '../../lib/format'
 import { Skeleton } from '../../components/ui'
 import { ColumnFilterRow, ColumnFilterToggle, SearchBox, useColumnFilters, useSearch } from '../../components/SearchBox'
+import { EntryEditor } from '../../components/EntryEditor'
 
 // 'withdrawn' is written by withdraw_from_season — either the driver pressing
 // withdraw in their portal, or the membership run noticing they left the Discord. It
@@ -68,6 +69,19 @@ export default function Registrations() {
   // is judged free or taken by one rule in both places. The server has the final
   // say either way — roster_registration lets entries_number_unique_trg fire.
   const { data: takenNumbers } = useTakenNumbers(season?.id)
+  // What each sign-up actually became. A registration and its car are two rows in
+  // two tables joined only by the driver, so the tab that shows what somebody ASKED
+  // for can also show — and change — what they GOT, without a trip to the Grid tab.
+  const { data: entries } = useEntries(season?.id)
+  const entryByDriver = useMemo(() => {
+    const m = new Map<string, NonNullable<typeof entries>[number]>()
+    for (const e of entries ?? []) {
+      for (const l of e.drivers ?? []) {
+        if (l.driver?.id && !l.withdrawn_at) m.set(l.driver.id, e)
+      }
+    }
+    return m
+  }, [entries])
 
   const [err, setErr] = useState<string | null>(null)
   const [seating, setSeating] = useState<Seating | null>(null)
@@ -83,10 +97,8 @@ export default function Registrations() {
     driver: (r) => r.driver?.name ?? r.display_name,
     iracing: (r) => r.iracing_name,
     custid: (r) => r.iracing_custid,
-    category: (r) => r.fia_category,
-    class: (r) => r.preferred_class,
-    car: (r) => r.preferred_car,
-    number: (r) => [r.preferred_number, r.preferred_number_alt].filter(Boolean).join(' '),
+    asked: (r) => [r.preferred_class, r.preferred_car, r.preferred_number, r.preferred_number_alt].filter(Boolean).join(' '),
+    grid: (r) => { const e = entryByDriver.get(r.driver_id); return e ? `${e.class_id} ${e.car ?? ''} ${e.number}` : '' },
     status: (r) => r.status,
   })
   const shown = cf.apply(filtered)
@@ -216,16 +228,14 @@ export default function Registrations() {
           <ColumnFilterToggle ctl={cf} />
         </div>
         <div className="overflow-x-auto rounded-2xl border border-[var(--color-line)]">
-          <table className="w-full min-w-[680px] border-collapse bg-[var(--color-paper)] text-sm">
+          <table className="w-full min-w-[1040px] border-collapse bg-[var(--color-paper)] text-sm">
             <thead>
               <tr className="border-b border-[var(--color-line)] bg-[var(--color-mist)] text-left font-mono text-xs uppercase tracking-wider text-[var(--color-muted)]">
                 <th className="px-4 py-3">Driver</th>
                 <th className="px-4 py-3">iRacing name</th>
                 <th className="px-4 py-3">Cust ID#</th>
-                <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3">Class</th>
-                <th className="px-4 py-3">Car</th>
-                <th className="px-4 py-3">No. wanted</th>
+                <th className="px-4 py-3">Asked for</th>
+                <th className="px-4 py-3">On the grid</th>
                 <th className="px-4 py-3">Status</th>
               </tr>
               <ColumnFilterRow
@@ -234,10 +244,8 @@ export default function Registrations() {
                   { key: 'driver', label: 'Driver' },
                   { key: 'iracing', label: 'iRacing name' },
                   { key: 'custid', label: 'Customer ID' },
-                  { key: 'category', label: 'Category' },
-                  { key: 'class', label: 'Class' },
-                  { key: 'car', label: 'Car' },
-                  { key: 'number', label: 'Number wanted' },
+                  { key: 'asked', label: 'Asked for' },
+                  { key: 'grid', label: 'On the grid' },
                   { key: 'status', label: 'Status' },
                 ]}
               />
@@ -245,7 +253,7 @@ export default function Registrations() {
             <tbody>
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-[var(--color-muted)]">
+                  <td colSpan={6} className="px-4 py-8 text-center text-[var(--color-muted)]">
                     No sign-ups match {cf.active > 0 && query.trim() ? 'the search and column filters' : cf.active > 0 ? 'these column filters' : 'that search'}.
                   </td>
                 </tr>
@@ -255,26 +263,47 @@ export default function Registrations() {
                   <td className="px-4 py-3 font-semibold">{r.driver?.name ?? r.display_name}</td>
                   <td className="px-4 py-3">{r.iracing_name ?? '—'}</td>
                   <td className="tabular px-4 py-3">{r.iracing_custid ?? '—'}</td>
-                  <td className="px-4 py-3">{r.fia_category ?? '—'}</td>
-                  <td className="px-4 py-3">
+                  {/* What they asked for on the form, in one breath. Both number choices,
+                      because the first is often gone by the time an entry is processed
+                      and the fallback is the actual decision. */}
+                  <td className="px-4 py-3 text-xs text-[var(--color-muted)]">
                     {r.preferred_class ? (
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="h-2.5 w-2.5 rounded-full" style={{ background: classColor(r.preferred_class) }} />
-                        {r.preferred_class}
+                        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: classColor(r.preferred_class) }} />
+                        <span className="text-[var(--color-ink)]">{r.preferred_class}</span>
                       </span>
-                    ) : '—'}
+                    ) : null}
+                    {r.preferred_car && <span> · {r.preferred_car}</span>}
+                    {r.preferred_number && (
+                      <span className="tabular"> · #{r.preferred_number}{r.preferred_number_alt ? ` / #${r.preferred_number_alt}` : ''}</span>
+                    )}
+                    {!r.preferred_class && !r.preferred_car && !r.preferred_number && '—'}
                   </td>
-                  <td className="px-4 py-3">{r.preferred_car ?? '—'}</td>
-                  {/* Both choices, because the first is often gone by the time an
-                      entry is processed and the fallback is the actual decision. */}
-                  <td className="tabular px-4 py-3">
-                    {r.preferred_number
-                      ? `#${r.preferred_number}${r.preferred_number_alt ? ` / #${r.preferred_number_alt}` : ''}`
-                      : '—'}
+                  {/* What they actually have — editable here, because this is the tab a
+                      commissioner opens to change somebody's car, and until now it could
+                      only show it. Saves through the same set_entry_details as the Grid. */}
+                  <td className="px-4 py-2">
+                    {(() => {
+                      const e = entryByDriver.get(r.driver_id)
+                      if (!e) {
+                        return <span className="text-xs text-[var(--color-faint)]">{r.status === 'rostered' ? 'no car found' : 'not on the grid'}</span>
+                      }
+                      const shared = (e.drivers ?? []).filter((l) => !l.withdrawn_at && l.driver?.id !== r.driver_id).map((l) => l.driver?.name).filter(Boolean)
+                      return (
+                        <div>
+                          <EntryEditor entry={e} classes={classes} onError={setErr} listId={`signup-cars-${r.id}`} />
+                          {shared.length > 0 && (
+                            <p className="mt-1 text-[11px] text-[var(--color-faint)]">
+                              Shared with {shared.join(', ')} — changes apply to the car.
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </td>
                   <td className="px-4 py-3">
                     <select
-                      className="hcr-select !py-1.5 !text-xs"
+                      className="hcr-select !min-w-[7.5rem] !py-1.5 !text-xs"
                       value={r.status}
                       onChange={(e) => {
                         const next = e.target.value
