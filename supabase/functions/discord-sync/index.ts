@@ -34,6 +34,20 @@ interface DiscordConfig {
 
 const rank = (t: License) => LICENSE_ORDER.indexOf(t)
 
+/**
+ * PostgREST on this project kills a thread now and then and answers "Gateway
+ * Timeout" to a trivial read. One retry after a short pause turns most of those
+ * into a normal run; a second failure is reported and the run ends unchanged.
+ */
+async function readTwice<F extends () => PromiseLike<{ error: { message: string } | null }>>(
+  read: F,
+): Promise<Awaited<ReturnType<F>>> {
+  const first = (await read()) as Awaited<ReturnType<F>>
+  if (!first.error || !/timeout|timed out|57014|502|503|504/i.test(first.error.message)) return first
+  await new Promise((r) => setTimeout(r, 1500))
+  return (await read()) as Awaited<ReturnType<F>>
+}
+
 async function discord(path: string, method: string, token: string, body?: unknown) {
   const res = await fetch(`${DISCORD}${path}`, {
     method,
@@ -96,7 +110,8 @@ Deno.serve(async (req) => {
 
   // --- data (service role bypasses RLS) ---
   const db = createClient(url, service)
-  const { data: cfg } = await db.from('discord_config').select('*').eq('id', 1).maybeSingle<DiscordConfig>()
+  const { data: cfg, error: cfgErr } = await readTwice(() => db.from('discord_config').select('*').eq('id', 1).maybeSingle<DiscordConfig>())
+  if (cfgErr) return json({ error: `Could not read the Discord config — ${cfgErr.message}. Nothing was changed.` }, 500)
   if (!cfg?.enabled) return json({ skipped: 'Discord integration is disabled in config.' })
   if (!botToken) return json({ error: 'DISCORD_BOT_TOKEN secret is not set.' }, 400)
 
@@ -107,16 +122,33 @@ Deno.serve(async (req) => {
     Platinum: cfg.role_platinum,
   }
 
-  const { data: drivers } = await db
+  // Both reads are load-bearing for REVOCATION, not only for grants: a failed
+  // results read used to fall through as "no results", which computed every
+  // driver to Bronze, wrote the demotion, and left the next good run to
+  // re-promote the same people — and re-announce it in #license-ups every time
+  // the API timed out (12 Sep 2026, three drivers, several posts). A read that
+  // fails ends the run with nothing changed.
+  const { data: drivers, error: drvErr } = await readTwice(() => db
     .from('drivers')
-    .select('id, name, discord_user_id, license_current, license_override')
-  const { data: results } = await db
+    .select('id, name, discord_user_id, license_current, license_override'))
+  if (drvErr) return json({ error: `Could not read the drivers — ${drvErr.message}. Nothing was changed.` }, 500)
+  const { data: results, error: resErr } = await readTwice(() => db
     .from('results')
     .select('drivers_text, event_id, class_id, cls_pos, quali_pos, grid, inc, laps, best_lap, status')
+    .limit(5000))
+  if (resErr) return json({ error: `Could not read the results — ${resErr.message}. Nothing was changed.` }, 500)
+  if (!results?.length) {
+    // An empty results table is possible on day one; after that it is a read
+    // that lied, and demoting the whole roster on it is the one thing this
+    // function must never do.
+    const anyTier = (drivers ?? []).some((d) => d.license_current && d.license_current !== 'Bronze')
+    if (anyTier) return json({ error: 'The results read came back empty while drivers already hold licences — refusing to demote everyone on it. Nothing was changed.' }, 500)
+  }
 
   const paceIndex = buildPaceIndex(results ?? [])
 
   const changed: { name: string; from: string | null; to: License; promoted: boolean; roleSynced: boolean }[] = []
+  const writeFailures: string[] = []
 
   for (const d of drivers ?? []) {
     const rows = resultsForDriver(results ?? [], d.name)
@@ -124,8 +156,13 @@ Deno.serve(async (req) => {
     const prev = d.license_current as License | null
     if (tier === prev) continue
 
-    // persist the new tier
-    await db.from('drivers').update({ license_current: tier }).eq('id', d.id)
+    // persist the new tier — and if that fails, do not act on a change the
+    // database does not know about, or the next run will announce it again.
+    const { error: writeErr } = await db.from('drivers').update({ license_current: tier }).eq('id', d.id)
+    if (writeErr) {
+      writeFailures.push(`${d.name}: ${writeErr.message}`)
+      continue
+    }
 
     // swap Discord roles if the driver is linked and the guild/roles are set
     let roleSynced = false
@@ -173,5 +210,6 @@ Deno.serve(async (req) => {
     changed: changed.length,
     promotions: promos.length,
     detail: changed,
+    write_failures: writeFailures,
   })
 })
