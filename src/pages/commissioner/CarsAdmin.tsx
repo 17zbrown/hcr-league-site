@@ -131,7 +131,7 @@ function CarRow({
 }) {
   const ctl = useEntryEdit(entry, onError)
   return (
-    <tr className="border-b border-[var(--color-line)] last:border-0">
+    <tr className="whitespace-nowrap border-b border-[var(--color-line)] last:border-0">
       <td className="px-4 py-2">
         <NumberField ctl={ctl} label={`Number for the car currently numbered ${entry.number}`} />
       </td>
@@ -139,8 +139,7 @@ function CarRow({
         <ClassField ctl={ctl} classes={classes} label={`Class for car #${entry.number}`} />
       </td>
       <td className="px-4 py-2">
-        {/* Wide enough for 'Lamborghini Huracan GT3 EVO' — the old width clipped it. */}
-        <CarField ctl={ctl} listId={`cars-${entry.id}`} label={`Car model for #${entry.number}`} className="!w-64" />
+        <CarField ctl={ctl} label={`Car model for #${entry.number}`} />
       </td>
       <td className="px-4 py-2">{who || <span className="text-[var(--color-faint)]">nobody assigned</span>}</td>
       <td className="px-4 py-2 text-right">

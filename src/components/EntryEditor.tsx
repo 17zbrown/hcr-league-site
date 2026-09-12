@@ -79,7 +79,7 @@ export function ClassField({ ctl, classes, label }: { ctl: EntryEditCtl; classes
     <span className="inline-flex items-center gap-2">
       <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: classColor(ctl.classId, classes) }} />
       <select
-        className="hcr-select !py-1.5 !text-xs"
+        className="hcr-select !w-auto !py-1.5 !pr-8 !text-sm"
         value={ctl.classId}
         // The select only ever offers ids that came from the classes table, so a value
         // outside the union is not reachable; the guard is here so a future stray
@@ -96,24 +96,58 @@ export function ClassField({ ctl, classes, label }: { ctl: EntryEditCtl; classes
   )
 }
 
-export function CarField({ ctl, listId, label, className = '' }: { ctl: EntryEditCtl; listId: string; label: string; className?: string }) {
+const OTHER = '__other__'
+
+/**
+ * A dropdown of the cars this class runs, sized to its longest name so nothing is
+ * ever clipped. The entry's current car is always an option even when it is not on
+ * the list — a car iRacing added mid-season, or one typed before this existed —
+ * because a dropdown that silently drops the value it was given would make saving
+ * anything ELSE on the row overwrite the car with the first list item.
+ *
+ * "Other…" swaps to a text box for a car not on the list; the list is a convenience,
+ * not a gate, and iRacing releases cars mid-season.
+ */
+export function CarField({ ctl, label }: { ctl: EntryEditCtl; label: string }) {
+  const listed = CAR_SUGGESTIONS[ctl.classId] ?? []
+  const current = ctl.car
+  const onList = listed.includes(current)
+  const [typing, setTyping] = useState(false)
+
+  if (typing) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <input
+          className="hcr-input !w-72 !py-1.5 !text-sm"
+          value={ctl.car}
+          onChange={(e) => ctl.setCar(e.target.value)}
+          maxLength={80}
+          placeholder="Car model, as iRacing names it"
+          aria-label={label}
+          autoFocus
+        />
+        <button type="button" onClick={() => setTyping(false)} className="text-xs text-[var(--color-muted)] underline-offset-2 hover:underline">
+          list
+        </button>
+      </span>
+    )
+  }
+
   return (
-    <>
-      <input
-        className={`hcr-input !py-1.5 !text-xs ${className}`}
-        value={ctl.car}
-        onChange={(e) => ctl.setCar(e.target.value)}
-        list={listId}
-        maxLength={80}
-        placeholder="Car model"
-        aria-label={label}
-      />
-      {/* Suggestions, not a fixed list: iRacing adds cars mid-season and a hard
-          dropdown would make a legal car impossible to enter. */}
-      <datalist id={listId}>
-        {(CAR_SUGGESTIONS[ctl.classId] ?? []).map((c) => <option key={c} value={c} />)}
-      </datalist>
-    </>
+    <select
+      className="hcr-select !w-auto !py-1.5 !pr-8 !text-sm"
+      value={current}
+      onChange={(e) => {
+        if (e.target.value === OTHER) { setTyping(true); return }
+        ctl.setCar(e.target.value)
+      }}
+      aria-label={label}
+    >
+      {current === '' && <option value="">— pick a car —</option>}
+      {!onList && current !== '' && <option value={current}>{current}</option>}
+      {listed.map((c) => <option key={c} value={c}>{c}</option>)}
+      <option value={OTHER}>Other…</option>
+    </select>
   )
 }
 
@@ -140,22 +174,21 @@ export function SaveButton({ ctl }: { ctl: EntryEditCtl }) {
  * broken form rather than a small one.
  */
 export function EntryEditor({
-  entry, classes, onError, listId,
+  entry, classes, onError,
 }: {
   entry: Entry
   classes?: LeagueClass[]
   onError: (m: string | null) => void
-  listId: string
 }) {
   const ctl = useEntryEdit(entry, onError)
   return (
-    <div className="flex min-w-[17rem] flex-col gap-1.5">
+    <div className="flex flex-col gap-1.5 whitespace-nowrap">
       <div className="flex items-center gap-2">
         <NumberField ctl={ctl} label={`Number for car #${entry.number}`} />
         <ClassField ctl={ctl} classes={classes} label={`Class for car #${entry.number}`} />
       </div>
       <div className="flex items-center gap-2">
-        <CarField ctl={ctl} listId={listId} label={`Car model for #${entry.number}`} className="min-w-0 flex-1" />
+        <CarField ctl={ctl} label={`Car model for #${entry.number}`} />
         <SaveButton ctl={ctl} />
       </div>
     </div>

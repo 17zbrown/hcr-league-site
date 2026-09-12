@@ -291,7 +291,7 @@ export default function Registrations() {
                       const shared = (e.drivers ?? []).filter((l) => !l.withdrawn_at && l.driver?.id !== r.driver_id).map((l) => l.driver?.name).filter(Boolean)
                       return (
                         <div>
-                          <EntryEditor entry={e} classes={classes} onError={setErr} listId={`signup-cars-${r.id}`} />
+                          <EntryEditor entry={e} classes={classes} onError={setErr} />
                           {shared.length > 0 && (
                             <p className="mt-1 text-[11px] text-[var(--color-faint)]">
                               Shared with {shared.join(', ')} — changes apply to the car.
@@ -303,7 +303,7 @@ export default function Registrations() {
                   </td>
                   <td className="px-4 py-3">
                     <select
-                      className="hcr-select !min-w-[7.5rem] !py-1.5 !text-xs"
+                      className="hcr-select !w-auto !py-1.5 !pr-8 !text-sm"
                       value={r.status}
                       onChange={(e) => {
                         const next = e.target.value
