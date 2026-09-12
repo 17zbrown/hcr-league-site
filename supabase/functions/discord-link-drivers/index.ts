@@ -13,9 +13,18 @@
 // (GTP/LMP2/GTD) are owned by discord-driver-roles and are not touched here. This
 // function owns exactly one role — Spectator, "in the server but not entered this
 // season" — and it derives that from the ENTRY LIST (entries + entry_drivers for the
-// current season), which is the single source of truth for who runs what. It used to
+// current season) plus the SIGN-UP LIST (season_registrations not withdrawn): a
+// driver who has entered on the site and is waiting for race control to seat them
+// has entered, and discord-driver-roles gives them the class they asked for. The two
+// functions read the same two tables so they never fight over Spectator. It used to
 // grant a League Member role to everyone who had raced; that role is deleted and the
 // concept is gone.
+//
+// SITE ACCOUNTS LINK THEMSELVES. Since 12 Sep 2026 a Discord sign-in copies the id
+// from profiles to drivers in the database (trg_profile_discord_to_driver), so the
+// name matching below is for the roster-only driver with no site account. When this
+// run links anybody, it asks for a discord-driver-roles run straight away rather
+// than leaving them on the wrong roles until the next cron tick.
 //
 // WRITE DISCIPLINE. Linking only ever ADDS: a null discord_user_id can be filled,
 // never changed. Roles are two writes and no more: PUT Spectator onto a member with
@@ -683,7 +692,8 @@ Deno.serve(async (req) => {
     // The entry list, not the results, decides who is on the grid: entries +
     // entry_drivers for the current season is the single source of truth for who runs
     // what, and it covers a driver who has entered but not yet raced — exactly the
-    // person the old "has raced" test wrongly left out.
+    // person the old "has raced" test wrongly left out. A sign-up still waiting for
+    // its seat counts too; discord-driver-roles reads the same list.
     const enteredDriverIds = new Set<string>()
     let entryErr: { message: string } | null = null
     {
@@ -706,6 +716,19 @@ Deno.serve(async (req) => {
           .neq('entries.status', 'withdrawn')
         if (edErr) entryErr = edErr
         else for (const r of (entryRows ?? []) as { driver_id?: string | null }[]) {
+          const id = String(r?.driver_id ?? '').trim()
+          if (id) enteredDriverIds.add(id)
+        }
+        // Live while pending, approved or rostered — the same allow-list
+        // discord-driver-roles uses, so a declined sign-up is not entered anywhere.
+        const { data: regRows, error: regErr } = await db
+          .from('season_registrations')
+          .select('driver_id')
+          .eq('season_id', season.id)
+          .in('status', ['pending', 'approved', 'rostered'])
+          .not('driver_id', 'is', null)
+        if (regErr) entryErr = entryErr ?? regErr
+        else for (const r of (regRows ?? []) as { driver_id?: string | null }[]) {
           const id = String(r?.driver_id ?? '').trim()
           if (id) enteredDriverIds.add(id)
         }
@@ -844,6 +867,28 @@ Deno.serve(async (req) => {
       }
     }
 
+    // --- 8b. hand over to the role reconciler when somebody new was linked ---
+    // Each link's own row trigger on drivers.discord_user_id already asked for a
+    // run, and the first ask starts one that may have read `drivers` before the
+    // later links landed. discord_cron_invoke DROPS an ask that arrives while a run
+    // is in flight rather than queueing it, so this trailing call covers the case
+    // where that run has already finished; when it has not, the 5-minute backstop
+    // is what reconciles the tail of a multi-link batch, and the report says so.
+    let rolesNudged: boolean | 'in_flight' = false
+    if (linked.length > 0) {
+      const { data: auto } = await db
+        .from('discord_automations').select('last_status, pending_request_id, last_run_at')
+        .eq('key', 'discord-driver-roles').maybeSingle()
+      const inFlight = auto?.last_status === 'running' && auto?.pending_request_id != null
+        && auto?.last_run_at && Date.now() - new Date(String(auto.last_run_at)).getTime() < 3 * 60 * 1000
+      const { error: nudgeErr } = await db.rpc('discord_cron_invoke', { fn: 'discord-driver-roles' })
+      if (nudgeErr) notes.push(`Linked ${linked.length} driver${linked.length === 1 ? '' : 's'} but could not ask for a role run — ${nudgeErr.message}. The cron will catch it.`)
+      else if (inFlight) {
+        rolesNudged = 'in_flight'
+        notes.push(`A class-role run was already in progress while ${linked.length} driver${linked.length === 1 ? ' was' : 's were'} linked; anyone it read before the link landed is reconciled by the next 5-minute tick.`)
+      } else rolesNudged = true
+    }
+
     // --- 9. report ---
     return json({
       ok: true,
@@ -861,6 +906,7 @@ Deno.serve(async (req) => {
       scan_capped: scanCapped,
       profiles_linked: profilesLinked,
       log_rows_written: toLog.length,
+      roles_nudged: rolesNudged,
       notes,
       warnings,
     })

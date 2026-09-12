@@ -514,7 +514,7 @@ async function handleNext(
     return reply('There is no race on the calendar right now. The schedule lives at ' + `${SITE}/schedule`)
   }
 
-  const [{ data: track }, { data: answer }, { data: seats }] = await Promise.all([
+  const [{ data: track }, { data: answer }, { data: seats }, { data: signups }] = await Promise.all([
     ev.track_id
       ? db.from('tracks').select('name, config').eq('id', ev.track_id).maybeSingle()
       : Promise.resolve({ data: null }),
@@ -529,6 +529,14 @@ async function handleNext(
       // ask whether the link is still live rather than merely whether it exists.
       .is('withdrawn_at', null)
       .neq('entries.status', 'withdrawn')
+      .limit(1),
+    // A sign-up waiting for its seat wears a class role now (discord-driver-roles),
+    // so "not on the entry list" alone would read as a contradiction to them.
+    db.from('season_registrations')
+      .select('preferred_class, preferred_number, drivers!inner(discord_user_id)')
+      .eq('drivers.discord_user_id', clicker)
+      .eq('season_id', ev.season_id)
+      .in('status', ['pending', 'approved', 'rostered'])
       .limit(1),
   ])
 
@@ -545,9 +553,13 @@ async function handleNext(
     .select('channel_race_attendance').eq('id', 1).maybeSingle()
   const attendChannel = String((cfgRow as { channel_race_attendance?: string } | null)?.channel_race_attendance ?? '').trim()
 
+  const signup = (signups ?? [])[0] as { preferred_class?: string | null; preferred_number?: string | null } | undefined
   const you = !seat
-    ? 'You are **not on this season\'s entry list**, so nothing has been counted for you. ' +
-      `Two minutes to fix: ${SITE}/signup`
+    ? signup
+      ? `You have **entered this season** (${signup.preferred_class ?? '—'}${signup.preferred_number ? ` #${signup.preferred_number}` : ''}) and race control has not confirmed your seat yet, so nothing is counted for you until they do. ` +
+        `The usual hold-up is the iRacing side — make sure you have joined **HCR League** (league ID ${IRACING_LEAGUE_ID}).`
+      : 'You are **not on this season\'s entry list**, so nothing has been counted for you. ' +
+        `Two minutes to fix: ${SITE}/signup`
     : answer == null
       ? `You have **not answered yet** — the attendance post in ${attendChannel ? `<#${attendChannel}>` : 'the attendance channel'} has the buttons.`
       : answer.planned
@@ -762,6 +774,26 @@ Deno.serve(async (req) => {
         .limit(1)
 
       if (!seats?.length) {
+        // A sign-up waiting for its seat already wears a class role, so they have
+        // done steps 1 and 2 — telling them to enter the season again would be the
+        // contradiction this change set out to remove. Step 3 is the one to name.
+        const { data: signups } = await db
+          .from('season_registrations')
+          .select('preferred_class, preferred_number, drivers!inner(discord_user_id)')
+          .eq('drivers.discord_user_id', clicker)
+          .eq('season_id', ev.season_id)
+          .in('status', ['pending', 'approved', 'rostered'])
+          .limit(1)
+        const signup = (signups ?? [])[0] as { preferred_class?: string | null; preferred_number?: string | null } | undefined
+        if (signup) {
+          return reply([
+            `You have entered this season (${signup.preferred_class ?? '—'}${signup.preferred_number ? ` #${signup.preferred_number}` : ''}) ` +
+            `and race control has not confirmed your seat yet, so attendance for Round ${ev.round} is not open to you — nothing has been recorded.`,
+            '',
+            `While you wait, make sure you have joined **HCR League** on iRacing (league ID **${IRACING_LEAGUE_ID}**) — ` +
+            'that is the usual hold-up. Once race control seats you these buttons start working.',
+          ].join('\n'))
+        }
         // Nothing is written. The reply is the whole response, so it carries the way
         // out rather than just the refusal — a door with no handle is what makes
         // somebody give up and say nothing to anyone.

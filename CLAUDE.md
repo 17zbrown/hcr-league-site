@@ -118,6 +118,30 @@ iRacing invites are the usual cause of a short grid.
 Anything answering "is this person on the grid?" must read both — reading `entries`
 alone tells a driver who registered minutes ago that they did nothing.
 
+**Discord class roles follow the SIGN-UP, not only the seat** (12 Sep 2026). A live
+registration (`season_registrations.status <> 'withdrawn'`) counts as entered:
+`discord-driver-roles` gives its `preferred_class` role and a `Name #preferred_number`
+nickname until a seat exists, and `discord-link-drivers` reads the same list so the
+two never fight over Spectator. A seat always wins. Fourteen people had entered on
+the site and sat on Spectator for weeks before this; "roles don't match the website"
+means check the sign-up list first. Attendance (`race_attendance_tally`, the
+`@Attendance Pending` role) is still seat-only — a sign-up cannot answer for a race
+they have no car in.
+
+**A Discord sign-in links the driver row by itself.** `trg_profile_discord_to_driver`
+copies `profiles.discord_user_id` into `drivers.discord_user_id` (fill-only,
+snowflake-shaped, never an id another driver holds) whenever a profile gains a
+Discord id or a driver. Before it, sign-in wrote the id to `profiles` while every
+role function read `drivers`, and the only bridge was a name matcher that a Discord
+username like `livs4lyfer` defeats forever. Name matching is now for roster-only
+drivers with no site account. `enter_season` also adopts an existing roster driver by
+iRacing customer id instead of creating a custid-less duplicate. Roles move within
+seconds because statement triggers on `season_registrations`, `entry_drivers`,
+`entries` and `drivers` call `discord_cron_invoke('discord-driver-roles')`; the cron
+(every 5 minutes) is the backstop. `supabase/migrations/` holds the SQL — the repo
+had no record of the database before it, and an ad-hoc CREATE FUNCTION once became a
+second overload nobody could see.
+
 **Attendance lives in #race-attendance, and the chase is a ROLE, not a roll call.**
 The ask posts to `channel_race_attendance` (read-only for members — pressing a button
 needs only VIEW_CHANNEL, so the room stays one post per race), falling back to

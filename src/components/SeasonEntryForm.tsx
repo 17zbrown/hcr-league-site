@@ -183,7 +183,9 @@ export function SeasonEntryForm() {
     if (error) {
       setError(error.message)
     } else {
-      setMsg(reg ? 'Registration updated.' : "You're entered. The commissioner will confirm your grid slot.")
+      setMsg(reg
+        ? 'Registration updated — race control sees the new class, car and number on the sign-up list, and your Discord role follows within a minute.'
+        : "You're entered. Your Discord role follows within a minute; the commissioner will confirm your grid slot.")
       await refreshProfile()
     }
     setBusy(false)

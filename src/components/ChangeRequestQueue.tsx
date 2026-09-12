@@ -37,7 +37,7 @@ interface QueueRow {
  */
 export function ChangeRequestQueue() {
   const qc = useQueryClient()
-  const { data: rows, isLoading } = usePendingChangeRequests()
+  const { data: rows, isLoading, error: loadError } = usePendingChangeRequests()
   const { data: drivers } = useDrivers()
   // Resolved once rather than per row: a queue of twenty team requests would otherwise
   // scan the roster twenty times over.
@@ -67,12 +67,21 @@ export function ChangeRequestQueue() {
   }
 
   if (isLoading) return <Skeleton className="h-40 w-full" />
+  // A failed read must not look like an empty queue — that is exactly how a broken
+  // policy or embed would hide a real request from the stewards.
+  if (loadError) {
+    return (
+      <p className="rounded-xl border border-[var(--color-brand)]/40 bg-[var(--color-paper)] p-6 text-sm text-[var(--color-brand)]">
+        The change-request queue could not be read — {loadError.message}. Reload; if it persists, the requests are still in the database and nothing has been lost.
+      </p>
+    )
+  }
 
   const list = (rows ?? []) as QueueRow[]
   if (!list.length) {
     return (
       <p className="rounded-xl border border-dashed border-[var(--color-line-2)] bg-[var(--color-paper)] p-6 text-sm text-[var(--color-muted)]">
-        No change requests waiting. Drivers and team managers file these from their own portals.
+        No change requests waiting. Seated drivers and team managers file these from their portals; a driver still waiting for a seat changes their ask by re-submitting the entry form, which shows under Sign-ups waiting for a seat below.
       </p>
     )
   }

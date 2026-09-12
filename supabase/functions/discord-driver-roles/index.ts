@@ -1,14 +1,19 @@
-// discord-driver-roles — keeps every LINKED member's Discord presence matching the
-// entry list: exactly one class role, Spectator only when seatless, and a nickname
-// of "Name #car".
+// discord-driver-roles — keeps every LINKED member's Discord presence matching what
+// they run this season: exactly one class role, Spectator only when they have not
+// entered, and a nickname of "Name #car".
 //
-// THE ENTRY LIST IS THE TRUTH, NOT RACE HISTORY. The first version of this derived
-// classes from results.class_id, which meant a driver kept a role for every class
-// they had ever raced and the function could never remove anything — by the fourth
-// round the server showed 50 class-role holders against a 37-car grid, with GTD's
-// role alone exceeding the entire GTD roster. What a member's roles should say is
-// what they run NOW, and entries + entry_drivers for the current season is the one
-// table that knows.
+// THE ENTRY LIST AND THE SIGN-UP LIST ARE THE TRUTH, NOT RACE HISTORY. The first
+// version of this derived classes from results.class_id, which meant a driver kept
+// a role for every class they had ever raced and the function could never remove
+// anything — by the fourth round the server showed 50 class-role holders against a
+// 37-car grid, with GTD's role alone exceeding the entire GTD roster. What a
+// member's roles should say is what they run NOW. A seat (entries + entry_drivers
+// for the current season) is the first word on that; a season sign-up that is still
+// waiting for its seat is the second — the driver told the site their class, car
+// and number, and until race control seats them that is the best answer anyone has.
+// Before 12 Sep 2026 only seats counted, and fourteen people who had entered on the
+// site sat on Spectator for up to three weeks wondering why. A seat always wins over
+// a sign-up when both exist, and a withdrawn sign-up counts for nothing.
 //
 // SCOPED TO LINKED DRIVERS, DELIBERATELY. A member with no drivers.discord_user_id
 // pointing at them is never touched — not renamed, not stripped, not granted. Their
@@ -19,12 +24,15 @@
 // contradictory roles are REPORTED, so the queue is visible while it drains.
 //
 // WHAT RECONCILE MEANS, per linked driver in the server:
-//   seated  → their entry's class role ON, every other class role OFF, Spectator
-//             OFF, nickname "Name #car" (registration iRacing name first, roster
-//             name as fallback; the name is trimmed to Discord's 32, never the
-//             number).
-//   seatless → every class role OFF, Spectator ON. No nickname change — there is
-//             no number to show, and stripping a name is not this function's call.
+//   entered  → their class role ON (the seat's class, or the sign-up's preferred
+//              class while no seat exists), every other class role OFF, Spectator
+//              OFF, nickname "Name #car" (registration iRacing name first, roster
+//              name as fallback; the number is the seat's, or the sign-up's
+//              preferred number; the name is trimmed to Discord's 32, never the
+//              number).
+//   not entered → every class role OFF, Spectator ON. No nickname change — there
+//              is no number to show, and stripping a name is not this function's
+//              call.
 //
 // Licence tiers are still NOT handled here. discord-sync owns those.
 //
@@ -57,6 +65,8 @@ const MAX_DRIVERS = 5000
 const NICK_MAX = 32
 
 const SNOWFLAKE = /^\d{5,25}$/
+/** The season_registrations.status values that mean "has entered". Mirrored in discord-link-drivers. */
+const LIVE_SIGNUP_STATUSES = ['pending', 'approved', 'rostered']
 /** "Has never taken a start, in any season." See the block that maintains it. */
 const NEVER_RACED_NAME = 'Never Raced'
 /** Muted slate — a fact about someone new, not a warning about them. */
@@ -118,6 +128,22 @@ const badToken = 'Discord rejected the bot token — check the DISCORD_BOT_TOKEN
 const quote = (s: string) => `"${s}"`
 
 /**
+ * PostgREST on this project kills a thread now and then and answers "Gateway
+ * Timeout" to a trivial read — 26 of 96 runs died that way on 11 Sep 2026, each one
+ * before it had touched anything. One retry after a short pause is the difference
+ * between a lost tick and a normal one; anything more persistent is reported as
+ * before.
+ */
+async function readTwice<F extends () => PromiseLike<{ error: { message: string } | null }>>(
+  read: F,
+): Promise<Awaited<ReturnType<F>>> {
+  const first = (await read()) as Awaited<ReturnType<F>>
+  if (!first.error || !/timeout|timed out|57014|502|503|504/i.test(first.error.message)) return first
+  await new Promise((r) => setTimeout(r, 1500))
+  return (await read()) as Awaited<ReturnType<F>>
+}
+
+/**
  * "Name #car", capped at Discord's 32 characters by trimming the NAME, never the
  * number — "Francisco Morales Rodrig… #16" still identifies the car, which is the
  * half race control actually greps for. Mirrors public.discord_nickname_for; if one
@@ -177,7 +203,7 @@ Deno.serve(async (req) => {
     }
 
     const db = createClient(url, service)
-    const { data: cfgRow, error: cfgErr } = await db.from('discord_config').select('*').eq('id', 1).maybeSingle()
+    const { data: cfgRow, error: cfgErr } = await readTwice(() => db.from('discord_config').select('*').eq('id', 1).maybeSingle())
     if (cfgErr) return json({ error: `Could not read the Discord config — ${cfgErr.message}` }, 500)
     const cfg = (cfgRow ?? null) as Record<string, unknown> | null
     if (!cfg?.enabled) return json({ skipped: 'Discord integration is disabled in config.' })
@@ -193,13 +219,14 @@ Deno.serve(async (req) => {
       ? String(cfg.role_spectator).trim()
       : ''
     if (!spectatorRole) {
-      warnings.push('No Spectator role id is saved in config, so seatless linked drivers keep whatever they hold.')
+      warnings.push('No Spectator role id is saved in config, so Spectator is left as it is on every linked driver — nobody who has not entered gets it, and nobody who has entered loses it.')
     }
 
     // NEVER RACED — a different question from Spectator, and easy to conflate.
     //
-    //   Spectator   = not on THIS season's grid. Comes off the moment race control
-    //                 seats them, whether or not they have ever driven.
+    //   Spectator   = not entered THIS season. Comes off the moment they sign up
+    //                 on the site or race control seats them, whether or not they
+    //                 have ever driven.
     //   Never Raced = no classified result in ANY season. Survives being seated and
     //                 comes off only when their first result lands.
     //
@@ -242,7 +269,7 @@ Deno.serve(async (req) => {
     // --- class -> role ---
     const classRoles = new Map<string, string>()
     {
-      const { data: rows, error } = await db.from('discord_class_roles').select('class_id, role_id')
+      const { data: rows, error } = await readTwice(() => db.from('discord_class_roles').select('class_id, role_id'))
       if (error) return json({ error: `Could not read the class-role mapping — ${error.message}. Nothing was changed.` }, 500)
       for (const r of (rows ?? []) as { class_id?: string | null; role_id?: string | null }[]) {
         const cid = String(r?.class_id ?? '').trim()
@@ -258,17 +285,19 @@ Deno.serve(async (req) => {
     const classRoleIds = new Set(classRoles.values())
 
     // --- the season, the seats, and the names to show ---
-    const { data: season, error: seasonErr } = await db
-      .from('seasons').select('id').eq('is_current', true).limit(1).maybeSingle()
+    const { data: season, error: seasonErr } = await readTwice(() => db
+      .from('seasons').select('id').eq('is_current', true).limit(1).maybeSingle())
     if (seasonErr || !season?.id) {
       return json({ error: `Could not find the current season — ${seasonErr?.message ?? 'no season is marked current'}. Nothing was changed.` }, 500)
     }
 
     // driver id -> their car this season. One seat per driver is an invariant the
     // site enforces; if data ever breaks it, first seat wins and it is reported.
-    const seatOf = new Map<string, { class_id: string; number: string }>()
+    // A driver with no seat yet but a live sign-up is entered too — see the header —
+    // and takes the class and number they asked for until race control seats them.
+    const seatOf = new Map<string, { class_id: string; number: string; from: 'seat' | 'signup' }>()
     {
-      const { data: seatRows, error } = await db
+      const { data: seatRows, error } = await readTwice(() => db
         .from('entry_drivers')
         .select('driver_id, withdrawn_at, entries!inner(season_id, class_id, number, status)')
         .eq('entries.season_id', season.id)
@@ -276,7 +305,7 @@ Deno.serve(async (req) => {
         // their finished races still read true, so presence alone no longer means
         // "races this season".
         .is('withdrawn_at', null)
-        .neq('entries.status', 'withdrawn')
+        .neq('entries.status', 'withdrawn'))
       if (error) return json({ error: `Could not read the entry list — ${error.message}. Nothing was changed.` }, 500)
       for (const r of (seatRows ?? []) as { driver_id?: string | null; entries?: { class_id?: string | null; number?: string | null } | null }[]) {
         const did = String(r?.driver_id ?? '').trim()
@@ -287,7 +316,38 @@ Deno.serve(async (req) => {
           warnings.push(`Driver ${did} appears on more than one current-season entry; the first seat read was used.`)
           continue
         }
-        seatOf.set(did, { class_id: cls, number: num })
+        seatOf.set(did, { class_id: cls, number: num, from: 'seat' })
+      }
+    }
+    // A sign-up is live while it is pending, approved or rostered — an allow-list,
+    // because status is free text and an unknown word must default to "not
+    // entered", never to a class role. discord-link-drivers uses the same three.
+    // This read decides REVOCATION as much as grants: with it missing every
+    // sign-up-only driver would read as not entered and lose their role until the
+    // next good run, so a failure here ends the run like the seat read does.
+    let signupsCounted = 0
+    {
+      const { data: regRows, error } = await readTwice(() => db
+        .from('season_registrations')
+        .select('driver_id, preferred_class, preferred_number, status')
+        .eq('season_id', season.id)
+        .in('status', LIVE_SIGNUP_STATUSES)
+        .not('driver_id', 'is', null))
+      if (error) return json({ error: `Could not read the sign-up list — ${error.message}. Nothing was changed.` }, 500)
+      for (const r of (regRows ?? []) as { driver_id?: string | null; preferred_class?: string | null; preferred_number?: string | null }[]) {
+        const did = String(r?.driver_id ?? '').trim()
+        const cls = String(r?.preferred_class ?? '').trim().toUpperCase()
+        const num = String(r?.preferred_number ?? '').trim()
+        if (!did || seatOf.has(did)) continue
+        // Entered either way — the linker counts them, so Spectator must come off
+        // here too — but a class nobody mapped earns no class role, only a warning.
+        if (!classRoles.has(cls)) {
+          warnings.push(cls
+            ? `A sign-up asks for class ${quote(cls)}, which has no Discord role mapped, so driver ${did} is entered but holds no class role.`
+            : `A sign-up for driver ${did} names no class, so they are entered but hold no class role.`)
+        }
+        seatOf.set(did, { class_id: cls, number: num, from: 'signup' })
+        signupsCounted++
       }
     }
 
@@ -310,11 +370,11 @@ Deno.serve(async (req) => {
     }
 
     // --- drivers who already have a Discord account attached ---
-    const { data: driverRows, error: drvErr } = await db
+    const { data: driverRows, error: drvErr } = await readTwice(() => db
       .from('drivers')
       .select('id, name, discord_user_id')
       .not('discord_user_id', 'is', null)
-      .limit(MAX_DRIVERS)
+      .limit(MAX_DRIVERS))
     if (drvErr) return json({ error: `Could not read the drivers — ${drvErr.message}. Nothing was changed.` }, 500)
     const drivers = ((driverRows ?? []) as DriverRow[]).filter((d) => SNOWFLAKE.test(String(d.discord_user_id ?? '')))
 
@@ -322,27 +382,39 @@ Deno.serve(async (req) => {
     // different routes: entry_id is set by the importer and the commissioner grid,
     // while hand-written SQL has historically only filled drivers_text. Trusting one
     // alone would hand the role to somebody with a full season behind them.
+    // A read that fails here must NOT leave the set empty and continue — an empty
+    // set says "nobody has ever raced", and the loop below would hand Never Raced
+    // to the whole roster. On any failure the role is left alone this run, the
+    // same way it is when the guild's role list cannot be read.
     const hasRaced = new Set<string>()
     {
-      const { data: linked } = await db
+      let raceHistoryErr: string | null = null
+      const { data: linked, error: linkedErr } = await readTwice(() => db
         .from('results')
         .select('entry_id, drivers_text, entries!inner(id)')
         .not('entry_id', 'is', null)
-        .limit(5000)
+        .limit(5000))
+      if (linkedErr) raceHistoryErr = linkedErr.message
       const entryIds = new Set((linked ?? []).map((r) => String((r as { entry_id?: string }).entry_id ?? '')))
       if (entryIds.size) {
-        const { data: links } = await db
-          .from('entry_drivers').select('entry_id, driver_id').limit(5000)
+        const { data: links, error: linksErr } = await readTwice(() => db
+          .from('entry_drivers').select('entry_id, driver_id').limit(5000))
+        if (linksErr) raceHistoryErr = raceHistoryErr ?? linksErr.message
         for (const l of (links ?? []) as { entry_id?: string; driver_id?: string }[]) {
           if (entryIds.has(String(l.entry_id ?? ''))) hasRaced.add(String(l.driver_id ?? ''))
         }
       }
-      const { data: byName } = await db.from('results').select('drivers_text').limit(5000)
+      const { data: byName, error: byNameErr } = await readTwice(() => db.from('results').select('drivers_text').limit(5000))
+      if (byNameErr) raceHistoryErr = raceHistoryErr ?? byNameErr.message
       const names = new Set(
         (byName ?? []).map((r) => String((r as { drivers_text?: string }).drivers_text ?? '').trim().toLowerCase())
           .filter(Boolean))
       for (const d of drivers) {
         if (names.has(String(d.name ?? '').trim().toLowerCase())) hasRaced.add(String(d.id))
+      }
+      if (raceHistoryErr && neverRacedRole) {
+        warnings.push(`Could not read race history — ${raceHistoryErr}. ${NEVER_RACED_NAME} was left alone this run.`)
+        neverRacedRole = ''
       }
     }
     if (drivers.length === 0) {
@@ -439,10 +511,12 @@ Deno.serve(async (req) => {
 
       const seat = seatOf.get(d.id) ?? null
       const wantRole = seat ? (classRoles.get(seat.class_id) ?? '') : ''
-      if (seat && !wantRole) {
+      if (seat && !wantRole && seat.from === 'seat') {
         warnings.push(`Class ${seat.class_id} has no Discord role mapped, so ${quote(name)} could not be reconciled.`)
         continue
       }
+      // A sign-up naming no mapped class was warned about above; it still counts
+      // as entered (no Spectator) and simply holds no class role.
 
       let touched = false
 
@@ -458,7 +532,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Spectator: the exact inverse of having a seat THIS season.
+      // Spectator: the exact inverse of having entered THIS season — a seat or a sign-up.
       if (spectatorRole) {
         const has = member.roles.has(spectatorRole)
         const want = !seat
@@ -482,9 +556,11 @@ Deno.serve(async (req) => {
         }
       }
 
-      // The nickname, for seated drivers only. Seatless drivers keep whatever they
-      // have — there is no number to show and stripping a name is not our call.
-      if (seat) {
+      // The nickname, for entered drivers only — a sign-up's preferred number counts
+      // as a number to show. Anyone not entered keeps whatever they have: there is
+      // no number, and stripping a name is not our call. A sign-up with no number
+      // yet is left alone for the same reason.
+      if (seat && (seat.from === 'seat' || seat.number)) {
         const displayName = iracingNameOf.get(d.id) ?? name
         const want = nicknameFor(displayName, seat.number)
         if ((member.nick ?? '') !== want) {
@@ -541,7 +617,8 @@ Deno.serve(async (req) => {
       ok: true,
       dryRun,
       drivers_linked: drivers.length,
-      seats: seatOf.size,
+      seats: seatOf.size - signupsCounted,
+      signups_awaiting_seat: signupsCounted,
       classes_mapped: classRoles.size,
       granted,
       revoked,

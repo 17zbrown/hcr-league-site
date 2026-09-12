@@ -8,6 +8,7 @@ import { StatBand } from '../../components/editorial'
 import { StatusPill } from '../../components/ProtestThread'
 import { ChangeRequestQueue } from '../../components/ChangeRequestQueue'
 import { TeamApplicationQueue } from '../../components/TeamApplicationQueue'
+import { SignupQueue } from '../../components/SignupQueue'
 import { PenaltyPanel } from '../../components/Penalties'
 import type { ProtestStatus } from '../../lib/types'
 
@@ -59,6 +60,13 @@ export default function RaceControlPortal() {
       <div className="mb-10">
         <h2 className="mb-3 text-2xl">Change requests</h2>
         <ChangeRequestQueue />
+      </div>
+
+      {/* Drivers who entered on the site and are waiting for a seat. Their re-submitted
+          entry form is the "change request" they think they sent — see SignupQueue. */}
+      <div className="mb-10">
+        <h2 className="mb-3 text-2xl">Sign-ups waiting for a seat</h2>
+        <SignupQueue />
       </div>
 
       {/* Founding a team hands somebody authority over other drivers, so it sits on

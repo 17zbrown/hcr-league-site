@@ -341,6 +341,8 @@ export interface SeasonRegistration {
   notes: string | null
   status: string
   created_at: string
+  /** Bumped by enter_season on a re-submission — an "Update Registration" shows as a change. */
+  updated_at: string
 }
 
 // Computed standings row (driver or team) — derived client-side from results.
