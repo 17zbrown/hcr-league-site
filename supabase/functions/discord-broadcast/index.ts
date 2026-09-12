@@ -234,6 +234,22 @@ const isDnf = (r: ResultRow) => DNF_STATUS.has(String(r.status ?? '').toUpperCas
 const who = (r: ResultRow) => (r.drivers_text || `#${r.number ?? '?'}`).trim()
 
 /**
+ * PostgREST on this project kills a thread now and then and answers "Gateway
+ * Timeout" to a trivial read. One retry after a short pause turns most of those
+ * into a normal run; a second failure is handed back to the caller, which must
+ * treat it as "could not read" and never as "nothing there". The same helper
+ * lives in discord-sync and discord-driver-roles.
+ */
+async function readTwice<F extends () => PromiseLike<{ error: { message: string } | null }>>(
+  read: F,
+): Promise<Awaited<ReturnType<F>>> {
+  const first = (await read()) as Awaited<ReturnType<F>>
+  if (!first.error || !/timeout|timed out|57014|502|503|504/i.test(first.error.message)) return first
+  await new Promise((r) => setTimeout(r, 1500))
+  return (await read()) as Awaited<ReturnType<F>>
+}
+
+/**
  * Is this a legacy service-role JWT? Only consulted for a token the gateway has
  * already accepted — verify_jwt is on, so the signature was checked before this ran.
  */
@@ -358,6 +374,26 @@ Deno.serve(async (req) => {
     const skipped: { key: string; reason: string }[] = []
     const failed: { key: string; reason: string }[] = []
 
+    // A read that fails is NOT a row that has nothing to say. Every renderer below
+    // decides 'skipped' from what it reads — no result rows, article deleted, no
+    // season — and 'skipped' is terminal: the drain only selects 'pending', editSent
+    // only touches 'sent', and the enqueue is ON CONFLICT DO NOTHING, so nothing ever
+    // re-reads a skipped row. On 12 Sep 2026 the API answered Gateway Timeout to
+    // trivial reads and an unchecked `data ?? []` looked exactly like an empty race,
+    // which parked real race reports for good. So a read error is treated exactly
+    // like a failed delivery: leave the row pending, count the attempt, park it as
+    // 'failed' after MAX_ATTEMPTS so a long outage is visible rather than silent.
+    const readFailed = async (row: OutboxRow, what: string, err: { message: string }) => {
+      const attempts = row.attempts + 1
+      const giveUp = attempts >= MAX_ATTEMPTS
+      failed.push({ key: row.dedupe_key, reason: `Could not read ${what} — ${err.message}${giveUp ? ' — parked after too many attempts' : ''}` })
+      if (!dryRun && !editSent) {
+        await db.from('discord_outbox')
+          .update({ status: giveUp ? 'failed' : 'pending', attempts, last_error: clip(`read ${what}: ${err.message}`, 500) })
+          .eq('id', row.id)
+      }
+    }
+
     for (const row of rows) {
       const channelId = channelFor[row.channel_key] ?? ''
       if (!SNOWFLAKE.test(channelId)) {
@@ -374,17 +410,29 @@ Deno.serve(async (req) => {
       // ------------------------------------------------------------ result ----
       if (row.kind === 'result') {
         const eventId = String(row.payload?.event_id ?? '')
-        const { data: ev } = await db
+        const { data: ev, error: evErr } = await readTwice(() => db
           .from('events').select('id, round, name, date, track_id, season_id, duration_h, duration_min')
-          .eq('id', eventId).maybeSingle()
-        const { data: track } = ev?.track_id
-          ? await db.from('tracks').select('name, config').eq('id', ev.track_id).maybeSingle()
-          : { data: null }
-        const { data: res } = await db
+          .eq('id', eventId).maybeSingle())
+        if (evErr) { await readFailed(row, 'the race', evErr); continue }
+        // The read succeeded and found nothing. An events row cannot legitimately
+        // vanish while its results remain, so this is a deleted race — not a reason
+        // to post a degraded "Race" report with no round and no venue.
+        if (!ev) {
+          skipped.push({ key: row.dedupe_key, reason: 'The race no longer exists.' })
+          if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'event deleted' }).eq('id', row.id)
+          continue
+        }
+        const { data: track, error: trackErr } = ev.track_id
+          ? await readTwice(() => db.from('tracks').select('name, config').eq('id', ev.track_id).maybeSingle())
+          : { data: null, error: null }
+        if (trackErr) { await readFailed(row, 'the track', trackErr); continue }
+        const { data: res, error: resErr } = await readTwice(() => db
           .from('results')
           .select('class_id, number, drivers_text, pos, cls_pos, grid, quali_pos, inc, laps, best_lap, best_on, gap, total_time, fill_in, status, car')
-          .eq('event_id', eventId)
+          .eq('event_id', eventId))
+        if (resErr) { await readFailed(row, 'the results', resErr); continue }
 
+        // Only a read that SUCCEEDED and came back empty means the race has no rows.
         const all = (res ?? []) as ResultRow[]
         if (all.length === 0) {
           skipped.push({ key: row.dedupe_key, reason: 'The race has no result rows any more.' })
@@ -489,14 +537,21 @@ Deno.serve(async (req) => {
         // Folded in here instead, and it reads better for it: who won today, and
         // what that did to the title. Top three rather than five, in one field, so
         // the post stays scannable — the full table is a tap away on the site.
+        //
+        // A read failure here ends the row rather than posting without the table:
+        // this post pings @everyone, and an edit that adds the table later notifies
+        // nobody, so a partial post is the one that sixty people actually read.
         if (ev?.season_id) {
-          const { data: seasonEvents } = await db.from('events').select('id, round').eq('season_id', ev.season_id)
+          const { data: seasonEvents, error: seErr } = await readTwice(() =>
+            db.from('events').select('id, round').eq('season_id', ev.season_id))
+          if (seErr) { await readFailed(row, "the season's rounds", seErr); continue }
           const eventIds = (seasonEvents ?? []).map((e) => String(e.id))
           const roundByEvent = new Map<string, number>((seasonEvents ?? []).map((e) => [String(e.id), Number(e.round)]))
-          const { data: seasonRes } = await db
+          const { data: seasonRes, error: srErr } = await readTwice(() => db
             .from('results')
             .select('event_id, class_id, number, drivers_text, cls_pos, points, quali_points, adjust, fill_in')
-            .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000'])
+            .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000']))
+          if (srErr) { await readFailed(row, "the season's results", srErr); continue }
 
           const champ = new Map<string, Map<string, { key: string; name: string; points: number; best: number | null } & CountBack>>()
           for (const r of ((seasonRes ?? []) as ResultRow[])) {
@@ -539,8 +594,10 @@ Deno.serve(async (req) => {
       // -------------------------------------------------------------- news ----
       } else if (row.kind === 'news') {
         const newsId = String(row.payload?.news_id ?? '')
-        const { data: article } = await db
-          .from('news').select('id, slug, title, dek, author, cover_url, is_published, category').eq('id', newsId).maybeSingle()
+        const { data: article, error: artErr } = await readTwice(() => db
+          .from('news').select('id, slug, title, dek, author, cover_url, is_published, category').eq('id', newsId).maybeSingle())
+        if (artErr) { await readFailed(row, 'the article', artErr); continue }
+        // From here on a null article means the read succeeded and found none.
         if (!article) {
           skipped.push({ key: row.dedupe_key, reason: 'The article no longer exists.' })
           if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'article deleted' }).eq('id', row.id)
@@ -558,13 +615,18 @@ Deno.serve(async (req) => {
         // attached image leads. Video is deliberately not embedded — Discord will not
         // play a 50MB file inline, and a second link under the embed reads as clutter,
         // so the "read it on the site" link stays the way to the video.
-        const { data: shots } = await db
+        const { data: shots, error: shotsErr } = await readTwice(() => db
           .from('news_media')
           .select('kind, url, sort')
           .eq('news_id', newsId)
           .eq('kind', 'image')
           .order('sort')
-          .limit(1)
+          .limit(1))
+        // A story with no hand-set cover leads with its first attached image. A read
+        // failure here would post the article to #news with an @everyone ping and no
+        // picture, marked sent — and the edit that adds it later notifies nobody — so
+        // the row fails before anything reaches Discord and the next drain retries.
+        if (shotsErr && !String(article.cover_url ?? '').trim()) { await readFailed(row, "the article's images", shotsErr); continue }
         const lead = String(article.cover_url ?? '').trim() || String((shots ?? [])[0]?.url ?? '').trim()
 
         embed = {
@@ -582,21 +644,28 @@ Deno.serve(async (req) => {
       // --------------------------------------------------------- standings ----
       } else if (row.kind === 'standings') {
         const eventId = String(row.payload?.after_event_id ?? '')
-        const { data: ev } = await db.from('events').select('id, round, season_id').eq('id', eventId).maybeSingle()
+        const { data: ev, error: evErr } = await readTwice(() =>
+          db.from('events').select('id, round, season_id').eq('id', eventId).maybeSingle())
+        if (evErr) { await readFailed(row, 'the race', evErr); continue }
+        // Only a successful read may say the race has no season.
         const seasonId = ev?.season_id ?? null
         if (!seasonId) {
           skipped.push({ key: row.dedupe_key, reason: 'That race is not attached to a season.' })
           if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'no season' }).eq('id', row.id)
           continue
         }
-        const { data: seasonEvents } = await db.from('events').select('id, round').eq('season_id', seasonId)
+        const { data: seasonEvents, error: seErr } = await readTwice(() =>
+          db.from('events').select('id, round').eq('season_id', seasonId))
+        if (seErr) { await readFailed(row, "the season's rounds", seErr); continue }
         const eventIds = (seasonEvents ?? []).map((e) => String(e.id))
         const roundByEvent = new Map<string, number>((seasonEvents ?? []).map((e) => [String(e.id), Number(e.round)]))
-        const { data: res } = await db
+        const { data: res, error: resErr } = await readTwice(() => db
           .from('results')
           .select('event_id, class_id, number, drivers_text, cls_pos, points, quali_points, adjust, fill_in')
-          .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000'])
+          .in('event_id', eventIds.length ? eventIds : ['00000000-0000-0000-0000-000000000000']))
+        if (resErr) { await readFailed(row, "the season's results", resErr); continue }
 
+        // Both reads succeeded, so an empty table below genuinely means no points yet.
         const perClass = new Map<string, Map<string, { key: string; name: string; points: number; best: number | null; starts: number } & CountBack>>()
         for (const r of ((res ?? []) as ResultRow[])) {
           if (r.fill_in) continue
@@ -643,18 +712,26 @@ Deno.serve(async (req) => {
       // ----------------------------------------------------------- penalty ----
       } else if (row.kind === 'penalty') {
         const penaltyId = String(row.payload?.penalty_id ?? '')
-        const { data: pen } = await db.from('penalties')
+        const { data: pen, error: penErr } = await readTwice(() => db.from('penalties')
           .select('id, kind, value, reason, status, rescind_reason, issued_at, driver_id, event_id')
-          .eq('id', penaltyId).maybeSingle()
+          .eq('id', penaltyId).maybeSingle())
+        if (penErr) { await readFailed(row, 'the penalty', penErr); continue }
+        // A successful read with no row: the penalty really is gone.
         if (!pen) {
           skipped.push({ key: row.dedupe_key, reason: 'The penalty no longer exists.' })
           if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'penalty deleted' }).eq('id', row.id)
           continue
         }
-        const { data: pd } = await db.from('drivers').select('name').eq('id', pen.driver_id).maybeSingle()
-        const { data: pev } = pen.event_id
-          ? await db.from('events').select('round, name').eq('id', pen.event_id).maybeSingle()
-          : { data: null }
+        // These two only decorate the notice, but a real sanction posted against
+        // "Unknown" with no round in the title is a wrong post marked sent, and a
+        // sanction is not something to publish twice. Fail the row and try again.
+        const { data: pd, error: pdErr } = await readTwice(() =>
+          db.from('drivers').select('name').eq('id', pen.driver_id).maybeSingle())
+        if (pdErr) { await readFailed(row, "the penalty's driver", pdErr); continue }
+        const { data: pev, error: pevErr } = pen.event_id
+          ? await readTwice(() => db.from('events').select('round, name').eq('id', pen.event_id).maybeSingle())
+          : { data: null, error: null }
+        if (pevErr) { await readFailed(row, "the penalty's race", pevErr); continue }
 
         // Wording follows rulebook §27.3 so the channel and the rules match.
         const PEN_LABEL: Record<string, string> = {
@@ -699,9 +776,11 @@ Deno.serve(async (req) => {
       // ------------------------------------------------------------ ruling ----
       } else if (row.kind === 'ruling') {
         const protestId = String(row.payload?.protest_id ?? '')
-        const { data: pr } = await db.from('protests')
+        const { data: pr, error: prErr } = await readTwice(() => db.from('protests')
           .select('id, status, verdict, penalty, category, summary, incident_lap, against_driver_id, against_text, event_id')
-          .eq('id', protestId).maybeSingle()
+          .eq('id', protestId).maybeSingle())
+        if (prErr) { await readFailed(row, 'the protest', prErr); continue }
+        // A successful read with no row: the protest really is gone.
         if (!pr) {
           skipped.push({ key: row.dedupe_key, reason: 'The protest no longer exists.' })
           if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'protest deleted' }).eq('id', row.id)
@@ -717,14 +796,20 @@ Deno.serve(async (req) => {
 
         // Prefer the linked driver's real name; against_text is the free-text
         // fallback for somebody who has no driver profile yet.
+        // Same reasoning as the penalty notice: a decision published with the wrong
+        // name or no round is a wrong post marked sent, so a failed lookup fails the
+        // row rather than degrading it.
         let against = String(pr.against_text ?? '').trim()
         if (pr.against_driver_id) {
-          const { data: d } = await db.from('drivers').select('name').eq('id', pr.against_driver_id).maybeSingle()
+          const { data: d, error: dErr } = await readTwice(() =>
+            db.from('drivers').select('name').eq('id', pr.against_driver_id).maybeSingle())
+          if (dErr) { await readFailed(row, "the protest's driver", dErr); continue }
           if (d?.name) against = String(d.name)
         }
-        const { data: ev } = pr.event_id
-          ? await db.from('events').select('round, name').eq('id', pr.event_id).maybeSingle()
-          : { data: null }
+        const { data: ev, error: evErr } = pr.event_id
+          ? await readTwice(() => db.from('events').select('round, name').eq('id', pr.event_id).maybeSingle())
+          : { data: null, error: null }
+        if (evErr) { await readFailed(row, "the protest's race", evErr); continue }
 
         const dismissed = pr.status === 'dismissed'
         const penalty = String(pr.penalty ?? '').trim()
@@ -766,9 +851,13 @@ Deno.serve(async (req) => {
         // everything on the website still cannot join the session until somebody
         // sends them an invite. Nothing used to say there was one to send.
         const regId = String(row.payload?.registration_id ?? '')
-        const { data: reg } = await db.from('season_registrations')
+        const { data: reg, error: regErr } = await readTwice(() => db.from('season_registrations')
           .select('id, display_name, preferred_class, preferred_car, preferred_number, preferred_number_alt, iracing_name, iracing_custid, nationality, notes, status')
-          .eq('id', regId).maybeSingle()
+          .eq('id', regId).maybeSingle())
+        // Parking this as 'skipped' on a timeout would lose the only notice race
+        // control ever gets that there is an iRacing invite to send — the enqueue
+        // is one notice per registration, ever.
+        if (regErr) { await readFailed(row, 'the registration', regErr); continue }
         if (!reg) {
           skipped.push({ key: row.dedupe_key, reason: 'That registration no longer exists.' })
           if (!dryRun && !editSent) await db.from('discord_outbox').update({ status: 'skipped', last_error: 'registration deleted' }).eq('id', row.id)

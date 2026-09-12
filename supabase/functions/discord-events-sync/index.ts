@@ -42,6 +42,20 @@ const PRIVACY_GUILD_ONLY = 2 // privacy_level: the only value Discord accepts
 const STATUS_SCHEDULED = 1 // scheduled_event_status: not yet started
 const DEFAULT_DURATION_MIN = 90
 
+/**
+ * PostgREST on this project kills a thread now and then and answers "Gateway
+ * Timeout" to a trivial read. One retry after a short pause turns most of those
+ * into a normal run; a second failure is reported and the run ends unchanged.
+ */
+async function readTwice<F extends () => PromiseLike<{ error: { message: string } | null }>>(
+  read: F,
+): Promise<Awaited<ReturnType<F>>> {
+  const first = (await read()) as Awaited<ReturnType<F>>
+  if (!first.error || !/timeout|timed out|57014|502|503|504/i.test(first.error.message)) return first
+  await new Promise((r) => setTimeout(r, 1500))
+  return (await read()) as Awaited<ReturnType<F>>
+}
+
 interface DiscordConfig {
   enabled: boolean
   guild_id: string | null
@@ -176,7 +190,8 @@ Deno.serve(async (req) => {
 
   // --- config (service role bypasses RLS) ---
   const db = createClient(url, service)
-  const { data: cfg } = await db.from('discord_config').select('*').eq('id', 1).maybeSingle<DiscordConfig>()
+  const { data: cfg, error: cfgErr } = await readTwice(() => db.from('discord_config').select('*').eq('id', 1).maybeSingle<DiscordConfig>())
+  if (cfgErr) return json({ error: `Could not read the Discord config — ${cfgErr.message}. Nothing was changed.` }, 500)
   if (!cfg?.enabled) return json({ skipped: 'Discord integration is disabled in config.' })
   if (!cfg.guild_id) return json({ skipped: 'No Discord server is configured yet.' })
   if (!botToken) return json({ error: 'DISCORD_BOT_TOKEN secret is not set.' }, 400)
@@ -214,10 +229,18 @@ Deno.serve(async (req) => {
   }
 
   // Session rows for every upcoming round, one read — these define the event window.
-  const { data: sessRows } = await db
+  //
+  // This read is load-bearing for the PATCH below, not only for creates: a failed
+  // read used to fall through as "no sessions", which put every round on the
+  // race-only fallback window, and the loop then moved each live Discord event's
+  // start from practice-open to the green flag — and the next good run moved it
+  // back. Members' reminders fired on whichever window was written last. A read
+  // that fails ends the run with nothing changed.
+  const { data: sessRows, error: sessErr } = await readTwice(() => db
     .from('sessions')
     .select('event_id, start, dur_min')
-    .in('event_id', upcoming.map((e) => e.id))
+    .in('event_id', upcoming.map((e) => e.id)))
+  if (sessErr) return json({ error: `Could not read the session times — ${sessErr.message}. Nothing was changed.` }, 500)
   const sessionsByEvent = new Map<string, SessionRow[]>()
   for (const s of (sessRows ?? []) as SessionRow[]) {
     const list = sessionsByEvent.get(s.event_id) ?? []

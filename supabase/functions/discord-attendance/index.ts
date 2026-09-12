@@ -125,6 +125,22 @@ async function discord(path: string, method: string, token: string, body?: unkno
            message: (parsed as { message?: string } | null)?.message ?? text.slice(0, 200) }
 }
 
+/**
+ * PostgREST on this project kills a thread now and then and answers "Gateway
+ * Timeout" to a trivial read — 26 of 96 runs died that way on 11 Sep 2026, each one
+ * before it had touched anything. One retry after a short pause is the difference
+ * between a lost tick and a normal one; anything more persistent is reported as
+ * before.
+ */
+async function readTwice<F extends () => PromiseLike<{ error: { message: string } | null }>>(
+  read: F,
+): Promise<Awaited<ReturnType<F>>> {
+  const first = (await read()) as Awaited<ReturnType<F>>
+  if (!first.error || !/timeout|timed out|57014|502|503|504/i.test(first.error.message)) return first
+  await new Promise((r) => setTimeout(r, 1500))
+  return (await read()) as Awaited<ReturnType<F>>
+}
+
 /** Calendar date and weekday as the league experiences them, not as UTC does. */
 function leagueDay(d: Date): { ymd: string; weekday: string } {
   const parts = Object.fromEntries(
@@ -436,8 +452,18 @@ Deno.serve(async (req) => {
     // started early (with force) went unserviced until its nominal Wednesday — no
     // tally refresh, no nudge — which is exactly the window where somebody has
     // just been asked and is most likely to answer.
-    const { data: post } = await db.from('race_attendance_posts')
-      .select('*').eq('event_id', String(next.id)).maybeSingle()
+    //
+    // And it FAILS CLOSED. This row is the only record that the race has been asked
+    // about, and a timed-out read comes back as null — the same null as "never
+    // asked". Inside the send window that null re-posts the @everyone ask with fresh
+    // buttons, opens a second staff tally, and writes over the first ask's ids
+    // (12 Sep 2026: the API was answering Gateway Timeout to one read in four).
+    // A read that did not happen is not a row that does not exist.
+    const { data: post, error: postErr } = await readTwice(() => db.from('race_attendance_posts')
+      .select('*').eq('event_id', String(next.id)).maybeSingle())
+    if (postErr) {
+      return json({ error: `Could not read the attendance drive for ${label} — ${postErr.message}. Nothing was changed.`, applied, warnings }, 500)
+    }
 
     if (!post && !inSendWindow && !force) {
       notes.push(`${label} opens today, but not until ${sendFrom}:00 ${LEAGUE_TZ.split('/')[1].replace('_',' ')} time.`)
@@ -452,9 +478,17 @@ Deno.serve(async (req) => {
       return json({ ok: true, dryRun, next: label, applied, notes, warnings })
     }
 
-    const { data: trackRow } = next.track_id
-      ? await db.from('tracks').select('name, config').eq('id', next.track_id).maybeSingle()
-      : { data: null }
+    // Two decorative reads, but every message below is painted with them — the
+    // staff tally's venue line, the ask's title, the nudge's "track opens" line — and
+    // on the tick that posts the first ask that is the @everyone post, permanently.
+    // A timed-out read is null, the same null as "no track set", so they retry and
+    // fail closed; a genuinely absent track or session list still falls through.
+    const { data: trackRow, error: trackErr } = next.track_id
+      ? await readTwice(() => db.from('tracks').select('name, config').eq('id', next.track_id).maybeSingle())
+      : { data: null, error: null }
+    if (trackErr) {
+      return json({ error: `Could not read the venue for ${label} — ${trackErr.message}. Nothing was changed.`, applied, warnings }, 500)
+    }
     const where = [trackRow?.name, trackRow?.config].filter(Boolean).join(' · ')
     // THE TIME MEMBERS ARE TOLD IS WHEN THE TRACK OPENS, NOT THE GREEN FLAG.
     //
@@ -465,9 +499,12 @@ Deno.serve(async (req) => {
     //
     // Falls back to the green flag for an event with no sessions filled in, so the ask
     // still names a time rather than nothing.
-    const { data: sessRows } = await db
+    const { data: sessRows, error: sessErr } = await readTwice(() => db
       .from('sessions').select('start').eq('event_id', String(next.id))
-      .order('start', { ascending: true }).limit(1)
+      .order('start', { ascending: true }).limit(1))
+    if (sessErr) {
+      return json({ error: `Could not read the sessions for ${label} — ${sessErr.message}. Nothing was changed.`, applied, warnings }, 500)
+    }
     const firstSession = String((sessRows ?? [])[0]?.start ?? '')
     const startAt = firstSession ? new Date(firstSession) : raceAt
     // THE HEADLINE TIME IS THE GREEN FLAG — 8pm ET, which Discord's <t:unix:F>
@@ -480,7 +517,12 @@ Deno.serve(async (req) => {
       (startUnix < raceUnix ? `\nTrack opens <t:${startUnix}:t>` : '')
 
     // --- the tally, rebuilt from live data every run ----------------------------
-    const { data: tallyRows } = await db.rpc('race_attendance_tally', { p_event: String(next.id) })
+    // Same rule: an RPC that timed out is not an empty grid. Letting it through
+    // repainted the staff tally with zeros and reported "everybody has answered".
+    const { data: tallyRows, error: tallyErr } = await readTwice(() => db.rpc('race_attendance_tally', { p_event: String(next.id) }))
+    if (tallyErr) {
+      return json({ error: `Could not read the attendance tally for ${label} — ${tallyErr.message}. Nothing was changed.`, applied, warnings }, 500)
+    }
     const all = (tallyRows ?? []) as TallyRow[]
 
     // Split the grid from the strays BEFORE counting anything. An off-grid answer
@@ -592,12 +634,48 @@ Deno.serve(async (req) => {
         else warnings.push(`Posted the ask but could not open the race-control tally — ${c.message}`)
       }
 
-      await db.from('race_attendance_posts').upsert({
+      // A plain INSERT, not an upsert, so "posted once, ever, per race" is enforced
+      // by the primary key on event_id rather than by the read above being right.
+      //
+      // BUT THE TABLE, NOT THE ERROR, DECIDES WHAT HAPPENS TO THE POST JUST MADE. A
+      // write that answers Gateway Timeout may or may not have committed, and taking
+      // down the @everyone ask on the strength of an error whose meaning is unknown
+      // is how sixty people get pinged and then watch the post vanish — with a row
+      // pointing at the deleted message for the rest of the week if the write DID
+      // land. The bot's own post only comes down when the table shows a DIFFERENT
+      // ask on record for this race.
+      const row = {
         event_id: String(next.id),
         channel_id: askChannel, message_id: askId,
         last_reminded_on: today.ymd, reminders_sent: 0,
         control_channel_id: controlChannel || null, control_message_id: controlId || null,
-      }, { onConflict: 'event_id' })
+      }
+      const transient = (m: string) => /timeout|timed out|57014|502|503|504/i.test(m)
+      let { error: insErr } = await db.from('race_attendance_posts').insert(row)
+      if (insErr && insErr.code !== '23505' && transient(insErr.message)) {
+        await new Promise((r) => setTimeout(r, 1500))
+        ;({ error: insErr } = await db.from('race_attendance_posts').insert(row))
+      }
+      if (insErr) {
+        const { data: onRecord } = await readTwice(() => db.from('race_attendance_posts')
+          .select('message_id').eq('event_id', String(next.id)).maybeSingle())
+        if (onRecord && String(onRecord.message_id ?? '') === askId) {
+          // The first attempt landed after all; the retry's 23505 was our own row.
+          warnings.push(`Recording the ask for ${label} answered "${insErr.message}" but the row is on record — carried on.`)
+        } else if (onRecord) {
+          // A different ask is on record: this race HAS been asked about and the read
+          // above lied. That record stays; the duplicate just posted — the bot's own,
+          // seconds old — comes down.
+          for (const [ch, id] of [[askChannel, askId], [controlChannel, controlId]] as const) {
+            if (SNOWFLAKE.test(ch) && SNOWFLAKE.test(id)) await discord(`/channels/${ch}/messages/${id}`, 'DELETE', botToken)
+          }
+          return json({ error: `Could not record the ask for ${label} — ${insErr.message}. An earlier ask is on record, so the duplicate post was removed.`, applied, warnings }, 500)
+        } else {
+          // Nothing on record and the write would not go in: the post stays up, and
+          // the ids are in the report so the row can be written by hand.
+          return json({ error: `The ask for ${label} was posted (message ${askId}${controlId ? `, tally ${controlId}` : ''}) but could not be recorded — ${insErr.message}. It has been left up; record it by hand before the next run or the bot will not know it exists.`, applied, warnings }, 500)
+        }
+      }
 
       applied.push(`asked the server about ${label}`)
       return json({ ok: warnings.length === 0, next: label, posted: true, grid: tally.length, applied, notes, warnings })
@@ -619,12 +697,19 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Already asked. Refresh the staff tally in place, every run.
+    // Already asked. Refresh the staff tally in place, every run — unless the grid
+    // came back empty. A seated grid does not empty itself between ticks, so nothing
+    // on the grid means the read is wrong, not the roster, and the picture race
+    // control already has is left alone rather than painted over with zeros.
     if (!dryRun && post.control_message_id && SNOWFLAKE.test(String(post.control_channel_id ?? ''))) {
-      const up = await discord(
-        `/channels/${post.control_channel_id}/messages/${post.control_message_id}`, 'PATCH', botToken,
-        { embeds: [controlEmbed] })
-      if (!up.ok) warnings.push(`Could not refresh the race-control tally — ${up.message}`)
+      if (tally.length === 0) {
+        warnings.push(`The tally for ${label} came back with nobody on the grid — left the race-control tally as it was.`)
+      } else {
+        const up = await discord(
+          `/channels/${post.control_channel_id}/messages/${post.control_message_id}`, 'PATCH', botToken,
+          { embeds: [controlEmbed] })
+        if (!up.ok) warnings.push(`Could not refresh the race-control tally — ${up.message}`)
+      }
     }
 
     const sentSoFar = Number(post.reminders_sent ?? 0)

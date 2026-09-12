@@ -25,6 +25,21 @@ const CORS = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
+/**
+ * PostgREST on this project kills a thread now and then and answers "Gateway
+ * Timeout" to a trivial read. One retry after a short pause is the difference
+ * between a lost sync and a normal one; anything more persistent is reported as
+ * before.
+ */
+async function readTwice<F extends () => PromiseLike<{ error: { message: string } | null }>>(
+  read: F,
+): Promise<Awaited<ReturnType<F>>> {
+  const first = (await read()) as Awaited<ReturnType<F>>
+  if (!first.error || !/timeout|timed out|57014|502|503|504/i.test(first.error.message)) return first
+  await new Promise((r) => setTimeout(r, 1500))
+  return (await read()) as Awaited<ReturnType<F>>
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
@@ -133,8 +148,20 @@ Deno.serve(async (req) => {
   // never derived from Discord. If a misconfigured guild/role id would demote a
   // permanent admin, leave their role alone — otherwise a bad id in the panel
   // could strip the league owner of the portal that fixes it.
-  const { data: me } = await db.from('profiles').select('is_admin').eq('id', user.id).maybeSingle()
-  if (me?.is_admin && role !== 'admin') {
+  const { data: me, error: meErr } = await readTwice(() => db
+    .from('profiles').select('is_admin').eq('id', user.id).maybeSingle())
+  if (meErr) {
+    // The guard's input is missing, so nothing below may run: a timed-out read
+    // must not turn into a demotion. Sign-in is unaffected — the client ignores
+    // this function's failures and reads whatever role is already stored.
+    return json({ error: `Could not read your profile — ${meErr.message}. Your site role was not changed.`, nickname }, 500)
+  }
+  if (!me) {
+    // Every auth user has a profiles row, and the update above just touched this
+    // one — an empty read here is a read that lied, and the guard cannot run on it.
+    return json({ error: 'Could not read your profile — no row came back. Your site role was not changed.', nickname }, 500)
+  }
+  if (me.is_admin && role !== 'admin') {
     return json({ ok: true, role: 'admin', protected: true, discord_roles: roles.length, nickname })
   }
 

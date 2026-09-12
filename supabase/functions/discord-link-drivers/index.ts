@@ -56,6 +56,20 @@ const CORS = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
+/**
+ * PostgREST on this project kills a thread now and then and answers "Gateway
+ * Timeout" to a trivial read. One retry after a short pause turns most of those
+ * into a normal run; a second failure is reported and the pass it feeds is skipped.
+ */
+async function readTwice<F extends () => PromiseLike<{ error: { message: string } | null }>>(
+  read: F,
+): Promise<Awaited<ReturnType<F>>> {
+  const first = (await read()) as Awaited<ReturnType<F>>
+  if (!first.error || !/timeout|timed out|57014|502|503|504/i.test(first.error.message)) return first
+  await new Promise((r) => setTimeout(r, 1500))
+  return (await read()) as Awaited<ReturnType<F>>
+}
+
 // A big server shouldn't be able to hang the job, so the member walk is capped —
 // same ceiling the audit and the role reconcile use.
 const MEMBER_PAGE = 1000
@@ -248,7 +262,8 @@ Deno.serve(async (req) => {
 
     // --- 1. config (service role bypasses RLS) ---
     const db = createClient(url, service)
-    const { data: cfgRow } = await db.from('discord_config').select('*').eq('id', 1).maybeSingle()
+    const { data: cfgRow, error: cfgErr } = await readTwice(() => db.from('discord_config').select('*').eq('id', 1).maybeSingle())
+    if (cfgErr) return json({ error: `Could not read the Discord config — ${cfgErr.message}. Nothing was changed.` }, 500)
     const cfg = (cfgRow ?? null) as Record<string, unknown> | null
     if (!cfg?.enabled) return json({ skipped: 'Discord integration is disabled in config.' })
     // Honour the same switch discord-role-reconcile does. It is worded as "set roles
@@ -319,11 +334,24 @@ Deno.serve(async (req) => {
     // unlinked member is a human's claim that this person races, and the answer to a
     // contradiction is the link that settles it, not a Spectator grant racing it.
     const classRoleIds = new Set<string>()
+    let classRolesErr: { message: string } | null = null
     {
-      const { data: crRows } = await db.from('discord_class_roles').select('role_id')
-      for (const r of (crRows ?? []) as { role_id?: string | null }[]) {
-        const rid = String(r?.role_id ?? '').trim()
-        if (SNOWFLAKE.test(rid)) classRoleIds.add(rid)
+      const { data: crRows, error: crErr } = await readTwice(() => db.from('discord_class_roles').select('role_id'))
+      if (crErr) {
+        // An empty set here is indistinguishable from "no class roles are mapped",
+        // and on that reading the guard below would stamp Spectator onto members the
+        // server already marks as racers — a wrong write that a later good run never
+        // undoes. So a failed read closes the Spectator pass, exactly as a failed
+        // entry-list read does. Linking is unaffected.
+        classRolesErr = crErr
+        warnings.push(
+          `Could not read the class roles — ${crErr.message}. The Spectator role was not touched this run; linking was unaffected.`,
+        )
+      } else {
+        for (const r of (crRows ?? []) as { role_id?: string | null }[]) {
+          const rid = String(r?.role_id ?? '').trim()
+          if (SNOWFLAKE.test(rid)) classRoleIds.add(rid)
+        }
       }
     }
 
@@ -424,11 +452,11 @@ Deno.serve(async (req) => {
     }
 
     // --- 3. the roster ---
-    const { data: driverRows, error: drvErr } = await db
+    const { data: driverRows, error: drvErr } = await readTwice(() => db
       .from('drivers')
       .select('id, name, discord_user_id')
-      .limit(MAX_DRIVERS)
-    if (drvErr) return json({ error: `Could not read the drivers — ${drvErr.message}` }, 500)
+      .limit(MAX_DRIVERS))
+    if (drvErr) return json({ error: `Could not read the drivers — ${drvErr.message}. Nothing was changed.` }, 500)
 
     // Sorted so two runs over the same data produce the same report and the same log.
     const drivers = ((driverRows ?? []) as DriverRow[])
@@ -697,23 +725,23 @@ Deno.serve(async (req) => {
     const enteredDriverIds = new Set<string>()
     let entryErr: { message: string } | null = null
     {
-      const { data: season, error: seasonErr } = await db
+      const { data: season, error: seasonErr } = await readTwice(() => db
         .from('seasons')
         .select('id')
         .eq('is_current', true)
         .limit(1)
-        .maybeSingle()
+        .maybeSingle())
       if (seasonErr || !season?.id) {
         entryErr = seasonErr ?? { message: 'no season is marked current' }
       } else {
-        const { data: entryRows, error: edErr } = await db
+        const { data: entryRows, error: edErr } = await readTwice(() => db
           .from('entry_drivers')
           .select('driver_id, withdrawn_at, entries!inner(season_id, status)')
           .eq('entries.season_id', season.id)
           // Withdrawn drivers go back to Spectator: they are no longer racing this
           // season, even though the crew link survives to keep their results honest.
           .is('withdrawn_at', null)
-          .neq('entries.status', 'withdrawn')
+          .neq('entries.status', 'withdrawn'))
         if (edErr) entryErr = edErr
         else for (const r of (entryRows ?? []) as { driver_id?: string | null }[]) {
           const id = String(r?.driver_id ?? '').trim()
@@ -721,12 +749,12 @@ Deno.serve(async (req) => {
         }
         // Live while pending, approved or rostered — the same allow-list
         // discord-driver-roles uses, so a declined sign-up is not entered anywhere.
-        const { data: regRows, error: regErr } = await db
+        const { data: regRows, error: regErr } = await readTwice(() => db
           .from('season_registrations')
           .select('driver_id')
           .eq('season_id', season.id)
           .in('status', ['pending', 'approved', 'rostered'])
-          .not('driver_id', 'is', null)
+          .not('driver_id', 'is', null))
         if (regErr) entryErr = entryErr ?? regErr
         else for (const r of (regRows ?? []) as { driver_id?: string | null }[]) {
           const id = String(r?.driver_id ?? '').trim()
@@ -764,7 +792,7 @@ Deno.serve(async (req) => {
     let hierarchyBlocked = false
     let staleRoleWarned = false
 
-    if (roleId && !entryErr) {
+    if (roleId && !entryErr && !classRolesErr) {
       for (const m of membersById.values()) {
         if (m.isBot) continue // software does not spectate
         const label = m.labels[0] ?? m.id
@@ -848,9 +876,15 @@ Deno.serve(async (req) => {
     // differs. A steady state is silence; a transition is a row.
     let toLog = logRows
     {
-      const { data: latest, error: latestErr } = await db.rpc('discord_link_log_latest')
+      // The read that decides what is a transition. A "Gateway Timeout" here used to
+      // fall through to logging EVERY driver — 49 duplicate rows in one run on 9 Sep
+      // — so it is retried once, and on a second failure only the rows this run
+      // itself wrote are logged: a link is only ever made from a null, so those are
+      // transitions by construction. Everything else is judged next run.
+      const { data: latest, error: latestErr } = await readTwice(() => db.rpc('discord_link_log_latest'))
       if (latestErr) {
-        warnings.push(`Could not read the log's last state, so this run logged every driver — ${latestErr.message}`)
+        toLog = logRows.filter((r) => r.outcome === 'linked')
+        warnings.push(`Could not read the log's last state — ${latestErr.message}. Only this run's ${toLog.length} new link${toLog.length === 1 ? '' : 's'} ${toLog.length === 1 ? 'was' : 'were'} logged; the rest of the roster is left for the next run to judge.`)
       } else {
         const prev = new Map(
           ((latest ?? []) as { driver_id: string; outcome: string; discord_user_id: string | null }[])

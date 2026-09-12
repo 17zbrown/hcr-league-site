@@ -414,12 +414,29 @@ async function refreshTally(
     ? await db.from('tracks').select('name, config').eq('id', ev.track_id).maybeSingle()
     : { data: null }
 
-  const { data: rows } = await db.rpc('race_attendance_tally', { p_event: eventId })
+  // PostgREST on this project answers "Gateway Timeout" to a trivial read now and
+  // then. No retry here — the caller gives this refresh 1.5s in total, and the daily
+  // run redraws the same message from the same data — so a bad read simply fails
+  // closed: check it, and never let it turn into a grid of zero.
+  const { data: rows, error: tallyErr } = await db.rpc('race_attendance_tally', { p_event: eventId })
+  if (tallyErr) {
+    // A failed read is not an empty grid. The answer is already saved; leave the
+    // staff message as it was and let the next good refresh or the daily run redraw it.
+    console.error(`discord-interactions: could not read the tally — ${tallyErr.message}; leaving the staff message untouched`)
+    return
+  }
   const all = (rows ?? []) as {
     driver_name: string; class_id: string | null; car_number: string | null
     car: string | null; discord_user_id: string | null; answer: boolean | null
     off_grid: boolean
   }[]
+  if (all.length === 0) {
+    // The post row exists (checked above), which only happens once drivers are seated,
+    // and the caller just committed an answer for a seated driver — so an empty tally
+    // here is a read that lied, not a grid of zero. Never rewrite the staff view to zeros on it.
+    console.error('discord-interactions: tally read came back empty under a live attendance post; leaving the staff message untouched')
+    return
+  }
 
   // Split the grid from the strays BEFORE counting. An off-grid answer has no class,
   // no car and no number, so folding it into "Racing" would both inflate the count

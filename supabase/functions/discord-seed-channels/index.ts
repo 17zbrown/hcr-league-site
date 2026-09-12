@@ -250,6 +250,20 @@ async function discord<T>(
 }
 
 interface Channel { id: string; name?: string | null; type: number; parent_id?: string | null }
+/**
+ * PostgREST on this project kills a thread now and then and answers "Gateway
+ * Timeout" to a trivial read — roughly one run in four on 12 Sep 2026. One retry
+ * after a short pause is the difference between a lost run and a normal one;
+ * anything more persistent is reported and the run ends with nothing changed.
+ */
+async function readTwice<F extends () => PromiseLike<{ error: { message: string } | null }>>(
+  read: F,
+): Promise<Awaited<ReturnType<F>>> {
+  const first = (await read()) as Awaited<ReturnType<F>>
+  if (!first.error || !/timeout|timed out|57014|502|503|504/i.test(first.error.message)) return first
+  await new Promise((r) => setTimeout(r, 1500))
+  return (await read()) as Awaited<ReturnType<F>>
+}
 
 function isServiceRoleJwt(token: string): boolean {
   const parts = token.split('.')
@@ -290,15 +304,26 @@ Deno.serve(async (req) => {
     }
 
     const db = createClient(url, service)
-    const { data: cfg } = await db.from('discord_config').select('*').eq('id', 1).maybeSingle()
+    const { data: cfg, error: cfgErr } = await readTwice(() => db.from('discord_config').select('*').eq('id', 1).maybeSingle())
+    if (cfgErr) return json({ error: `Could not read the Discord config — ${cfgErr.message}. Nothing was changed.` }, 500)
     if (!cfg?.enabled) return json({ skipped: 'Discord integration is disabled in config.' })
     const guildId = String(cfg.guild_id ?? '').trim()
     if (!guildId) return json({ skipped: 'No Discord server is configured yet.' })
     if (!botToken) return json({ error: 'DISCORD_BOT_TOKEN secret is not set.' }, 400)
 
     // Read the links rather than hardcode them, so a rulebook that moves stays right.
-    const { data: ls } = await db.from('league_settings')
-      .select('rulebook_url, broadcast_url, discord_url').limit(1).maybeSingle()
+    //
+    // Every database read below is load-bearing for an EDIT of a published post,
+    // not only for a first post. A timed-out settings read used to come back as
+    // "no settings", and the pinned #rulebook message was rewritten to say the
+    // rulebook had not been linked yet — wrong copy over right copy, on absent
+    // data. A read that fails ends the run with nothing changed.
+    const { data: ls, error: lsErr } = await readTwice(() => db.from('league_settings')
+      .select('rulebook_url, broadcast_url, discord_url').limit(1).maybeSingle())
+    if (lsErr) return json({ error: `Could not read league_settings — ${lsErr.message}. Nothing was changed.` }, 500)
+    // The settings row always exists once the site is configured, so an empty
+    // answer on a live run means the read lied, not that the links are blank.
+    if (!ls && !dryRun) return json({ error: 'league_settings came back empty, so every link would be rewritten as missing. Nothing was changed.' }, 500)
     const links: Links = {
       rulebook: String(ls?.rulebook_url ?? '').trim(),
       twitch: String(ls?.broadcast_url ?? '').trim(),
@@ -307,6 +332,15 @@ Deno.serve(async (req) => {
     const warnings: string[] = []
     if (!links.rulebook) warnings.push('league_settings.rulebook_url is empty, so #rulebook says the rulebook has not been linked yet. Set it on the site and re-run.')
 
+    // This read is the only thing standing between "edit the pinned post" and
+    // "post a second one". Treating a timeout as an empty table is exactly the
+    // repost the header says never happens, so it fails closed too.
+    const { data: existingRows, error: notesErr } = await readTwice(() =>
+      db.from('discord_channel_notes').select('channel_id, message_id'))
+    if (notesErr) return json({ error: `Could not read discord_channel_notes — ${notesErr.message}. Without it every channel would be reposted instead of edited. Nothing was changed.` }, 500)
+    const existing = new Map(((existingRows ?? []) as { channel_id: string; message_id: string }[])
+      .map((r) => [String(r.channel_id), String(r.message_id)]))
+
     const chRes = await discord<Channel[]>(`/guilds/${guildId}/channels`, 'GET', botToken)
     if (!chRes.ok) return json({ error: `Could not read the server's channels — ${chRes.message}` }, 502)
     const channels = (chRes.data ?? []).filter((c) => c && SNOWFLAKE.test(String(c.id)))
@@ -314,15 +348,21 @@ Deno.serve(async (req) => {
       channels.filter((c) => c.type === CHAN_CATEGORY).map((c) => [String(c.id), String(c.name ?? '')]),
     )
 
-    const { data: existingRows } = await db.from('discord_channel_notes').select('channel_id, message_id')
-    const existing = new Map(((existingRows ?? []) as { channel_id: string; message_id: string }[])
-      .map((r) => [String(r.channel_id), String(r.message_id)]))
-
     const CONTENT = notes(links)
     const posted: string[] = []
     const updated: string[] = []
     const planned: string[] = []
     const unmatched: string[] = []
+
+    // A posted message with no row is the orphan the NEXT run trips over, so a
+    // failed upsert is reported rather than swallowed.
+    const remember = async (ch: Channel, messageId: string) => {
+      const { error } = await db.from('discord_channel_notes').upsert({
+        channel_id: String(ch.id), channel_name: String(ch.name ?? ''),
+        message_id: messageId, updated_at: new Date().toISOString(),
+      })
+      if (error) warnings.push(`Could not record the pinned post for #${ch.name} (${error.message}) — the next run will post a second copy unless the table is fixed.`)
+    }
 
     for (const ch of channels) {
       // Text-like channels only. A forum has no message list to post into, and a
@@ -357,7 +397,10 @@ Deno.serve(async (req) => {
 
       if (known) {
         const patch = await discord(`/channels/${ch.id}/messages/${known}`, 'PATCH', botToken, { embeds: [embed] })
-        if (patch.ok) { updated.push(key); continue }
+        if (patch.ok) {
+          updated.push(key)
+          continue
+        }
         // The pinned post was deleted by hand. Fall through and make a new one
         // rather than failing — the row is about to be overwritten anyway.
         if (patch.status !== 404) { warnings.push(`Could not update the pinned post in #${ch.name} — ${patch.message}`); continue }
@@ -372,10 +415,7 @@ Deno.serve(async (req) => {
       const pin = await discord(`/channels/${ch.id}/pins/${messageId}`, 'PUT', botToken)
       if (!pin.ok) warnings.push(`Posted in #${ch.name} but could not pin it — ${pin.message}`)
 
-      await db.from('discord_channel_notes').upsert({
-        channel_id: String(ch.id), channel_name: String(ch.name ?? ''),
-        message_id: messageId, updated_at: new Date().toISOString(),
-      })
+      await remember(ch, messageId)
       posted.push(key)
     }
 

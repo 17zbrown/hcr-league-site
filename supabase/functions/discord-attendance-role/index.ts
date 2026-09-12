@@ -106,6 +106,20 @@ async function api<T>(path: string, method: string, token: string, body?: unknow
   return { ok: true, data: (parsed ?? null) as T }
 }
 
+// PostgREST has been answering trivial reads with a Gateway Timeout roughly one
+// run in four (12 Sep). A read that comes back empty on a timeout looks exactly
+// like "no rows", and this function acts on "no rows" by taking the role off
+// everyone — so a transient read is given one more chance, and the caller still
+// checks `error` afterwards.
+async function readTwice<F extends () => PromiseLike<{ error: { message: string } | null }>>(
+  read: F,
+): Promise<Awaited<ReturnType<F>>> {
+  const first = (await read()) as Awaited<ReturnType<F>>
+  if (!first.error || !/timeout|timed out|57014|502|503|504/i.test(first.error.message)) return first
+  await new Promise((r) => setTimeout(r, 1500))
+  return (await read()) as Awaited<ReturnType<F>>
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   if (req.method !== 'POST') return json({ error: 'POST only' }, 405)
@@ -135,8 +149,9 @@ Deno.serve(async (req) => {
     }
 
     const db = createClient(url, service)
-    const { data: cfg } = await db.from('discord_config')
-      .select('enabled, guild_id, role_attendance_pending').eq('id', 1).maybeSingle()
+    const { data: cfg, error: cfgErr } = await readTwice(() => db.from('discord_config')
+      .select('enabled, guild_id, role_attendance_pending').eq('id', 1).maybeSingle())
+    if (cfgErr) return json({ error: `Could not read the Discord config — ${cfgErr.message}. Nothing was changed.` }, 500)
     if (!cfg?.enabled) return json({ skipped: 'Discord integration is disabled in config.' })
     const guildId = String(cfg.guild_id ?? '').trim()
     if (!SNOWFLAKE.test(guildId)) return json({ skipped: 'No Discord server is configured.' })
@@ -175,12 +190,16 @@ Deno.serve(async (req) => {
     // post rather than the event means a drive opened early with {"force": true} is
     // serviced from the moment it exists, not from its nominal Wednesday.
     const nowIso = new Date().toISOString()
-    const { data: openRows } = await db
+    const { data: openRows, error: openErr } = await readTwice(() => db
       .from('race_attendance_posts')
       .select('event_id, events!inner(id, round, name, date, status)')
       .gt('events.date', nowIso)
       .neq('events.status', 'complete')
-      .limit(1)
+      .limit(1))
+    // Fail closed. An empty answer here is indistinguishable from "no drive is open",
+    // and acting on it strips the role from every silent driver. Nothing below may
+    // write to Discord until this read has actually succeeded.
+    if (openErr) return json({ error: `Could not read the open attendance post — ${openErr.message}. Nothing was changed.` }, 500)
     const open = (openRows ?? [])[0] as
       { event_id: string; events?: { round?: number; name?: string } } | undefined
 
@@ -188,9 +207,9 @@ Deno.serve(async (req) => {
     let label = 'no open attendance post'
     if (open?.event_id) {
       label = `Round ${open.events?.round} — ${open.events?.name}`
-      const { data: tallyRows, error: tErr } = await db
-        .rpc('race_attendance_tally', { p_event: open.event_id })
-      if (tErr) return json({ error: `Could not read the tally — ${tErr.message}` }, 500)
+      const { data: tallyRows, error: tErr } = await readTwice(() => db
+        .rpc('race_attendance_tally', { p_event: open.event_id }))
+      if (tErr) return json({ error: `Could not read the tally — ${tErr.message}. Nothing was changed.` }, 500)
       should = new Set(
         ((tallyRows ?? []) as TallyRow[])
           .filter((r) => !r.off_grid && r.answer === null && !!r.discord_user_id)
@@ -201,13 +220,16 @@ Deno.serve(async (req) => {
     // --- take the public post down once the flag has flown ------------------------
     const cleared: string[] = []
     {
-      const { data: stale } = await db
+      const { data: stale, error: staleErr } = await readTwice(() => db
         .from('race_attendance_posts')
         .select('event_id, channel_id, message_id, reminder_message_id, events!inner(round, name, date)')
         .is('cleared_at', null)
         .not('message_id', 'is', null)
         .lte('events.date', nowIso)
-        .limit(5)
+        .limit(5))
+      // A failure here only postpones a clear to the next run, but the run should
+      // say so rather than report an empty `cleared` as if it had looked.
+      if (staleErr) warnings.push(`Could not read spent posts — ${staleErr.message}; nothing was cleared this run.`)
 
       for (const row of (stale ?? []) as Array<{
         event_id: string; channel_id: string | null

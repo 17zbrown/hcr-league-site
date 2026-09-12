@@ -33,6 +33,20 @@ const CORS = {
 const json = (b: unknown, s = 200) =>
   new Response(JSON.stringify(b), { status: s, headers: { ...CORS, 'Content-Type': 'application/json' } })
 
+/**
+ * PostgREST on this project kills a thread now and then and answers "Gateway
+ * Timeout" to a trivial read. One retry after a short pause turns most of those
+ * into a normal run; a second failure is reported and that row is left alone.
+ */
+async function readTwice<F extends () => PromiseLike<{ error: { message: string } | null }>>(
+  read: F,
+): Promise<Awaited<ReturnType<F>>> {
+  const first = (await read()) as Awaited<ReturnType<F>>
+  if (!first.error || !/timeout|timed out|57014|502|503|504/i.test(first.error.message)) return first
+  await new Promise((r) => setTimeout(r, 1500))
+  return (await read()) as Awaited<ReturnType<F>>
+}
+
 /** base64(sha256(password + lowercase(email))) — iRacing's documented password encoding. */
 async function encodePassword(email: string, password: string): Promise<string> {
   const data = new TextEncoder().encode(password + email.toLowerCase())
@@ -96,13 +110,17 @@ Deno.serve(async (req) => {
     const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
     // Race week only: events in the current season starting within the next 7 days.
-    const { data: events, error: evErr } = await db
+    // This read gates the whole daily run and there is no second cron slot, so a
+    // PostgREST timeout gets one retry — the same treatment as the per-row read.
+    const windowStart = new Date().toISOString()
+    const windowEnd = new Date(Date.now() + 7 * 86400_000).toISOString()
+    const { data: events, error: evErr } = await readTwice(() => db
       .from('events')
       .select('id, round, date, seasons!inner(is_current)')
       .eq('seasons.is_current', true)
       .neq('status', 'complete')
-      .gte('date', new Date().toISOString())
-      .lte('date', new Date(Date.now() + 7 * 86400_000).toISOString())
+      .gte('date', windowStart)
+      .lte('date', windowEnd))
     if (evErr) return json({ error: `Could not read events — ${evErr.message}` }, 500)
     if (!events?.length) {
       return json({ ok: true, updated: 0, message: 'No race inside the next 7 days, so there is nothing to refresh.' })
@@ -158,7 +176,13 @@ Deno.serve(async (req) => {
       if (typeof w.precip_option === 'number') patch.precip = w.precip_option
       if (Object.keys(patch).length === 0) { skipped.push(`R${ev.round}: weather payload had no recognisable fields`); continue }
 
-      const { data: existing } = await db.from('weather').select('id').eq('event_id', ev.id).order('sort').limit(1)
+      // This read decides UPDATE versus INSERT, so it must be a real answer. An
+      // unchecked timeout used to read as "no row" and insert a second forecast
+      // beside the one race control wrote — the header's "never deletes" promise
+      // is worth nothing if the original stops being the only row.
+      const { data: existing, error: exErr } = await readTwice(() => db
+        .from('weather').select('id').eq('event_id', ev.id).order('sort').limit(1))
+      if (exErr) { skipped.push(`R${ev.round}: could not read the stored forecast — ${exErr.message}; nothing was written`); continue }
       if (existing?.length) {
         const { error } = await db.from('weather').update(patch).eq('id', existing[0].id)
         if (error) { skipped.push(`R${ev.round}: ${error.message}`); continue }
